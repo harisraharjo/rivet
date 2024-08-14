@@ -13,6 +13,10 @@ pub trait Mem<T = u8> {
     fn write(&mut self, address: usize, value: T) -> Result<(), MemoryError>;
 }
 
+pub trait Load {
+    fn load_program(&mut self, program: &[u8], start_address: usize);
+}
+
 // pub trait Memory {
 //     fn read(&self, address: usize) -> Result<u8, MemoryError>;
 //     fn write(&mut self, address: usize, value: u8) -> Result<(), MemoryError>;
@@ -45,7 +49,8 @@ impl Mem<u8> for LinearMemory {
     }
 
     fn write(&mut self, address: usize, value: u8) -> Result<(), MemoryError> {
-        todo!()
+        self.0[address] = value;
+        Ok(())
     }
 }
 
@@ -56,7 +61,9 @@ impl Mem<u16> for LinearMemory {
     }
 
     fn write(&mut self, address: usize, value: u16) -> Result<(), MemoryError> {
-        todo!()
+        let bytes = value.to_le_bytes();
+        self.0[address..address + 2].copy_from_slice(&bytes);
+        Ok(())
     }
 }
 
@@ -67,6 +74,15 @@ impl Mem<u32> for LinearMemory {
     }
 
     fn write(&mut self, address: usize, value: u32) -> Result<(), MemoryError> {
-        todo!()
+        let bytes = value.to_le_bytes();
+        self.0[address..address + 4].copy_from_slice(&bytes);
+        Ok(())
+    }
+}
+
+impl Load for LinearMemory {
+    fn load_program(&mut self, program: &[u8], start_address: usize) {
+        let end_address = start_address + program.len();
+        self.0[start_address..end_address].copy_from_slice(program);
     }
 }

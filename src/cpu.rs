@@ -1,8 +1,26 @@
 use crate::register::Register;
 
 #[derive(Default, Debug)]
+pub struct Registers([u32; Register::count()]);
+
+impl Registers {
+    // fn new() -> Registers {
+    //     Registers{  }
+    // }
+
+    pub fn get(&self, register: Register) -> u32 {
+        self.0[register as usize]
+    }
+
+    pub fn set(&mut self, register: Register, value: u32) -> Result<(), ()> {
+        self.0[register as usize] = value;
+        Ok(())
+    }
+}
+
+#[derive(Default, Debug)]
 pub struct CPU {
-    registers: [u32; Register::count()],
+    pub registers: Registers,
     pc: u32,
     flags: u32,
 }
@@ -14,14 +32,5 @@ impl CPU {
             pc: 0,
             flags: 0,
         }
-    }
-
-    pub fn get(&self, register: Register) -> u32 {
-        self.registers[register as usize]
-    }
-
-    pub fn set(&mut self, register: Register, value: u32) -> Result<(), ()> {
-        self.registers[register as usize] = value;
-        Ok(())
     }
 }
