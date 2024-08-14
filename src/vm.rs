@@ -1,21 +1,21 @@
 use crate::{
+    cpu::CPU,
     memory::LinearMemory,
     register::{
         instruction::{InstructionHandler, Opcode},
         pc::ProgramCounter,
-        Registers,
     },
 };
 
 pub struct VM {
-    registers: Registers,
+    cpu: CPU,
     memory: LinearMemory,
 }
 
 impl VM {
     pub fn new(memory_allocation: usize) -> Self {
         Self {
-            registers: Registers::new(),
+            cpu: CPU::new(),
             memory: LinearMemory::new(memory_allocation),
         }
     }

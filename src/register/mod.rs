@@ -2,41 +2,41 @@ pub mod instruction;
 pub mod pc;
 
 pub enum Register {
-    ZERO,
+    Zero,
     R1,
     R2,
     R3,
     R4,
     R5,
     R6,
-    PC,
-    // Stack Pointer
+    /// Stack Pointer
     SP,
+    /// Base Pointer
     BP,
+    /// Return Address
+    RA,
 }
 
-#[derive(Default, Debug)]
-pub struct Registers {
-    gprs: [u32; 8],
-    pc: u32,
-    flags: u32,
+impl Register {
+    // TODO: Create me a macro
+    pub const fn count() -> usize {
+        10
+    }
 }
 
-impl Registers {
-    pub fn new() -> Registers {
-        Registers {
-            gprs: Default::default(),
-            pc: 0,
-            flags: 0,
+impl From<u32> for Register {
+    fn from(value: u32) -> Self {
+        match value {
+            1 => Register::R1,
+            2 => Register::R2,
+            3 => Register::R3,
+            4 => Register::R4,
+            5 => Register::R5,
+            6 => Register::R6,
+            7 => Register::BP,
+            8 => Register::SP,
+            9 => Register::RA,
+            _ => Register::Zero,
         }
-    }
-
-    pub fn get(&self, register: Register) -> u32 {
-        self.gprs[register as usize]
-    }
-
-    pub fn set(&mut self, register: Register, value: u32) -> Result<(), ()> {
-        self.gprs[register as usize] = value;
-        Ok(())
     }
 }

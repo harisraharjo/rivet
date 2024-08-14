@@ -8,36 +8,25 @@ pub enum MemoryError {
     InternalMapperWithMessage(u32, String),
 }
 
-pub trait Memory {
-    fn read(&self, addr: u32) -> Result<u8, MemoryError>;
-    fn write(&mut self, addr: u32, value: u8) -> Result<(), MemoryError>;
-
-    fn read2(&mut self, addr: u32) -> Result<u16, MemoryError> {
-        let x0 = self.read(addr)?;
-        let x1 = self.read(addr + 1)?;
-        Ok((x0 as u16) | ((x1 as u16) << 8))
-    }
-
-    fn write2(&mut self, addr: u32, value: u16) -> Result<(), MemoryError> {
-        let lower = value & 0xff;
-        let upper = (value & 0xff00) >> 8;
-        self.write(addr, lower as u8)?;
-        self.write(addr + 1, upper as u8)
-    }
-
-    fn copy(&mut self, from: u32, to: u32, n: usize) -> Result<bool, ()> {
-        // for i in 0..n {
-        //     if let Some(bit) = self.read(from + (i as u16)) {
-        //         if self.write(to + (i as u16), bit).is_err() {
-        //             return Ok(false);
-        //         }
-        //     } else {
-        //         return Ok(false);
-        //     }
-        // }
-        todo!()
-    }
+pub trait Mem<T = u8> {
+    fn read(&self, address: usize) -> Result<T, MemoryError>;
+    fn write(&mut self, address: usize, value: T) -> Result<(), MemoryError>;
 }
+
+// pub trait Memory {
+//     fn read(&self, address: usize) -> Result<u8, MemoryError>;
+//     fn write(&mut self, address: usize, value: u8) -> Result<(), MemoryError>;
+
+//     fn read2(&mut self, address: usize) -> Result<u16, MemoryError>;
+
+//     fn write2(&mut self, address: usize, value: u16) -> Result<(), MemoryError>;
+
+//     fn read3(&mut self, address: usize) -> Result<u32, MemoryError>;
+
+//     fn write3(&mut self, address: usize, value: u32) -> Result<(), MemoryError>;
+
+//     fn copy(&mut self, from: u32, to: u32, n: usize) -> Result<bool, ()>;
+// }
 
 pub struct LinearMemory(Vec<u8>);
 impl LinearMemory {
@@ -47,5 +36,37 @@ impl LinearMemory {
 
     pub fn size(&self) -> usize {
         self.0.len()
+    }
+}
+
+impl Mem<u8> for LinearMemory {
+    fn read(&self, address: usize) -> Result<u8, MemoryError> {
+        Ok(self.0[address])
+    }
+
+    fn write(&mut self, address: usize, value: u8) -> Result<(), MemoryError> {
+        todo!()
+    }
+}
+
+impl Mem<u16> for LinearMemory {
+    fn read(&self, address: usize) -> Result<u16, MemoryError> {
+        let bytes = &self.0[address..address + 2];
+        Ok(u16::from_le_bytes([bytes[0], bytes[1]]))
+    }
+
+    fn write(&mut self, address: usize, value: u16) -> Result<(), MemoryError> {
+        todo!()
+    }
+}
+
+impl Mem<u32> for LinearMemory {
+    fn read(&self, address: usize) -> Result<u32, MemoryError> {
+        let bytes = &self.0[address..address + 4];
+        Ok(u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
+    }
+
+    fn write(&mut self, address: usize, value: u32) -> Result<(), MemoryError> {
+        todo!()
     }
 }
