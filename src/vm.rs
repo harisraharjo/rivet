@@ -1,9 +1,9 @@
 use crate::{
     cpu::CPU,
-    memory::LinearMemory,
+    memory::{LinearMemory, Mem},
     register::{
-        instruction::{InstructionHandler, Opcode},
-        pc::ProgramCounter,
+        instruction::{Instruction, InstructionHandler},
+        ProgramCounter,
     },
 };
 
@@ -21,10 +21,9 @@ impl VM {
     }
 
     pub fn run(&mut self) -> Result<(), ()> {
-        let mut pc = ProgramCounter::new();
-        while pc.count() < self.memory.size() {
-            let opcode = self.fetch(pc.count() as u8);
-            pc.increment();
+        while self.cpu.pc.value() < self.memory.size() {
+            let opcode = self.fetch().unwrap();
+            self.cpu.pc.increment();
             self.decode(opcode)?
         }
 
@@ -32,26 +31,41 @@ impl VM {
     }
 }
 
-impl InstructionHandler for VM {
+impl VM {
+    fn fetch(&self) -> Result<Instruction, ()> {
+        let memory: u32 = self.memory.read(self.cpu.pc.value()).unwrap();
+        Ok(memory.into())
+    }
+
     //inlined bcs of hot loop (https://nnethercote.github.io/perf-book/inlining.html)
     #[inline(always)]
-    fn decode(&self, opcode: Opcode) -> Result<(), ()> {
+    fn decode(&self, opcode: Instruction) -> Result<(), ()> {
         match opcode {
-            Opcode::HLT => {
-                println!("HLT encountered");
-                Ok(())
-            }
-            Opcode::LOAD => {
-                todo!()
-            }
-            Opcode::ADD => todo!(),
-            Opcode::SUB => todo!(),
-            Opcode::MUL => todo!(),
-            Opcode::DIV => todo!(),
-            Opcode::IGL => {
-                println!("Unrecognized opcode. Terminating...");
-                Ok(())
-            }
+            Instruction::Nop => todo!(),
+            Instruction::Load { dest, src } => todo!(),
+            Instruction::Store { src, dest } => todo!(),
+            Instruction::Move { dest, src } => todo!(),
+            Instruction::Push { src } => todo!(),
+            Instruction::Pop { dest } => todo!(),
+            Instruction::Add { dest, src1, src2 } => todo!(),
+            Instruction::Sub { dest, src1, src2 } => todo!(),
+            Instruction::Mul { dest, src1, src2 } => todo!(),
+            Instruction::Div { dest, src1, src2 } => todo!(),
+            Instruction::And { dest, src1, src2 } => todo!(),
+            Instruction::Or { dest, src1, src2 } => todo!(),
+            Instruction::Xor { dest, src1, src2 } => todo!(),
+            Instruction::Shl { dest, src, shift } => todo!(),
+            Instruction::Shr { dest, src, shift } => todo!(),
+            Instruction::Cmp { left, right } => todo!(),
+            Instruction::Jmp { target } => todo!(),
+            Instruction::Je { target } => todo!(),
+            Instruction::Jne { target } => todo!(),
+            Instruction::Jg { target } => todo!(),
+            Instruction::Jl { target } => todo!(),
+            Instruction::Call { target } => todo!(),
+            Instruction::Ret => todo!(),
+            Instruction::Syscall { number } => todo!(),
+            Instruction::Halt => todo!(),
         }
     }
 }

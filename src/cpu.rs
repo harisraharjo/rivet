@@ -1,4 +1,4 @@
-use crate::register::Register;
+use crate::register::{ProgramCounter, Register};
 
 #[derive(Default, Debug)]
 pub struct Registers([u32; Register::count()]);
@@ -18,10 +18,12 @@ impl Registers {
     }
 }
 
+pub trait PC {}
+
 #[derive(Default, Debug)]
 pub struct CPU {
     pub registers: Registers,
-    pc: u32,
+    pub pc: ProgramCounter,
     flags: u32,
 }
 
@@ -29,7 +31,7 @@ impl CPU {
     pub fn new() -> CPU {
         CPU {
             registers: Default::default(),
-            pc: 0,
+            pc: ProgramCounter::new(),
             flags: 0,
         }
     }

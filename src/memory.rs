@@ -17,21 +17,6 @@ pub trait Load {
     fn load_program(&mut self, program: &[u8], start_address: usize);
 }
 
-// pub trait Memory {
-//     fn read(&self, address: usize) -> Result<u8, MemoryError>;
-//     fn write(&mut self, address: usize, value: u8) -> Result<(), MemoryError>;
-
-//     fn read2(&mut self, address: usize) -> Result<u16, MemoryError>;
-
-//     fn write2(&mut self, address: usize, value: u16) -> Result<(), MemoryError>;
-
-//     fn read3(&mut self, address: usize) -> Result<u32, MemoryError>;
-
-//     fn write3(&mut self, address: usize, value: u32) -> Result<(), MemoryError>;
-
-//     fn copy(&mut self, from: u32, to: u32, n: usize) -> Result<bool, ()>;
-// }
-
 pub struct LinearMemory(Vec<u8>);
 impl LinearMemory {
     pub fn new(size: usize) -> LinearMemory {
@@ -86,3 +71,18 @@ impl Load for LinearMemory {
         self.0[start_address..end_address].copy_from_slice(program);
     }
 }
+
+// pub trait Memory {
+//     fn read(&self, address: usize) -> Result<u8, MemoryError>;
+//     fn write(&mut self, address: usize, value: u8) -> Result<(), MemoryError>;
+
+//     fn read2(&mut self, address: usize) -> Result<u16, MemoryError>;
+
+//     fn write2(&mut self, address: usize, value: u16) -> Result<(), MemoryError>;
+
+//     fn read3(&mut self, address: usize) -> Result<u32, MemoryError>;
+
+//     fn write3(&mut self, address: usize, value: u32) -> Result<(), MemoryError>;
+
+//     fn copy(&mut self, from: u32, to: u32, n: usize) -> Result<bool, ()>;
+// }

@@ -1,14 +1,14 @@
 pub mod instruction;
-pub mod pc;
 
+#[derive(Debug)]
 pub enum Register {
     Zero,
-    R1,
-    R2,
-    R3,
-    R4,
-    R5,
-    R6,
+    X1,
+    X2,
+    X3,
+    X4,
+    X5,
+    X6,
     /// Stack Pointer
     SP,
     /// Base Pointer
@@ -27,16 +27,35 @@ impl Register {
 impl From<u32> for Register {
     fn from(value: u32) -> Self {
         match value {
-            1 => Register::R1,
-            2 => Register::R2,
-            3 => Register::R3,
-            4 => Register::R4,
-            5 => Register::R5,
-            6 => Register::R6,
+            1 => Register::X1,
+            2 => Register::X2,
+            3 => Register::X3,
+            4 => Register::X4,
+            5 => Register::X5,
+            6 => Register::X6,
             7 => Register::BP,
             8 => Register::SP,
             9 => Register::RA,
             _ => Register::Zero,
         }
+    }
+}
+
+#[derive(Default, Debug)]
+pub struct ProgramCounter(usize);
+
+impl ProgramCounter {
+    pub fn new() -> ProgramCounter {
+        ProgramCounter(0)
+    }
+
+    #[inline(always)]
+    pub fn increment(&mut self) {
+        self.0 += 4
+    }
+
+    #[inline(always)]
+    pub fn value(&self) -> usize {
+        self.0
     }
 }
