@@ -93,8 +93,6 @@ impl Load for LinearMemory {
     }
 }
 
-/// (start, size, memory)
-// type Region<T> = (usize, usize, T);
 pub struct Region<T, B = u8>
 where
     T: Memory<B>,
