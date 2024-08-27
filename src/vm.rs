@@ -1,6 +1,6 @@
 use crate::{
     cpu::CPU,
-    memory::{LinearMemory, Mem},
+    memory::{LinearMemory, Memory},
     register::{
         instruction::{Instruction, InstructionHandler},
         ProgramCounter,

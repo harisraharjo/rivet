@@ -1,3 +1,7 @@
+use std::{fmt::Display, marker::PhantomData};
+
+use log::debug;
+
 #[derive(Debug)]
 pub enum MemoryError {
     OutOfBounds(u32),
@@ -6,9 +10,26 @@ pub enum MemoryError {
     InvalidMap(u32, usize),
     InternalMapperError(u32),
     InternalMapperWithMessage(u32, String),
+    ReadOnly,
 }
 
-pub trait Mem<T = u8> {
+impl Display for MemoryError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MemoryError::OutOfBounds(a) => write!(f, "out of bounds: {:X}", a),
+            MemoryError::NoMap(a) => write!(f, "no mapping: {:X}", a),
+            MemoryError::InvalidMap(a, i) => write!(f, "invalid mapping index: {:X}, {}", a, i),
+            MemoryError::AddressTranslation(a, e) => write!(f, "translation @{:X}: {}", a, e),
+            MemoryError::InternalMapperError(a) => write!(f, "internal mapper error @{:X}", a),
+            MemoryError::InternalMapperWithMessage(a, s) => {
+                write!(f, "internal mapper error @{:X}: {s}", a)
+            }
+            MemoryError::ReadOnly => write!(f, "this memory is read only"),
+        }
+    }
+}
+
+pub trait Memory<T = u8> {
     fn read(&self, address: usize) -> Result<T, MemoryError>;
     fn write(&mut self, address: usize, value: T) -> Result<(), MemoryError>;
 }
@@ -28,7 +49,7 @@ impl LinearMemory {
     }
 }
 
-impl Mem<u8> for LinearMemory {
+impl Memory<u8> for LinearMemory {
     fn read(&self, address: usize) -> Result<u8, MemoryError> {
         Ok(self.0[address])
     }
@@ -39,7 +60,7 @@ impl Mem<u8> for LinearMemory {
     }
 }
 
-impl Mem<u16> for LinearMemory {
+impl Memory<u16> for LinearMemory {
     fn read(&self, address: usize) -> Result<u16, MemoryError> {
         let bytes = &self.0[address..address + 2];
         Ok(u16::from_le_bytes([bytes[0], bytes[1]]))
@@ -52,7 +73,7 @@ impl Mem<u16> for LinearMemory {
     }
 }
 
-impl Mem<u32> for LinearMemory {
+impl Memory<u32> for LinearMemory {
     fn read(&self, address: usize) -> Result<u32, MemoryError> {
         let bytes = &self.0[address..address + 4];
         Ok(u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
@@ -72,17 +93,130 @@ impl Load for LinearMemory {
     }
 }
 
-// pub trait Memory {
-//     fn read(&self, address: usize) -> Result<u8, MemoryError>;
-//     fn write(&mut self, address: usize, value: u8) -> Result<(), MemoryError>;
+/// (start, size, memory)
+// type Region<T> = (usize, usize, T);
+pub struct Region<T, B = u8>
+where
+    T: Memory<B>,
+{
+    start: usize,
+    size: usize,
+    memory: T,
+    __: PhantomData<B>,
+}
 
-//     fn read2(&mut self, address: usize) -> Result<u16, MemoryError>;
+impl<B, T: Memory<B>> Region<T, B> {
+    pub fn new(start: usize, size: usize, memory: T) -> Region<T, B> {
+        Region {
+            start,
+            size,
+            memory,
+            __: PhantomData,
+        }
+    }
 
-//     fn write2(&mut self, address: usize, value: u16) -> Result<(), MemoryError>;
+    /// Check if the address is valid
+    pub fn is_valid(&self, address: usize) -> bool {
+        debug!(
+            "start: {0}. address: {address}. size: {1}",
+            self.start, self.size
+        );
 
-//     fn read3(&mut self, address: usize) -> Result<u32, MemoryError>;
+        self.start <= address && address < (self.size + self.start)
+    }
 
-//     fn write3(&mut self, address: usize, value: u32) -> Result<(), MemoryError>;
+    pub fn offset(&self, address: usize) -> usize {
+        address - self.start
+    }
+}
 
-//     fn copy(&mut self, from: u32, to: u32, n: usize) -> Result<bool, ()>;
-// }
+pub struct LocalAddress {
+    offset: usize,
+    memory_index: usize,
+}
+
+#[derive(Default)]
+pub struct MemoryManager<T, B = u8>
+where
+    T: Memory<B>,
+{
+    regions: Vec<Region<T, B>>,
+}
+
+impl<T> MemoryManager<T>
+where
+    T: Memory,
+{
+    pub fn new(start: usize, size: usize, memory: T) -> MemoryManager<T> {
+        MemoryManager {
+            regions: vec![Region::new(start, size, memory)],
+        }
+    }
+
+    pub fn register(&mut self, start: usize, size: usize, memory: T) {
+        self.regions.push(Region::new(start, size, memory));
+    }
+
+    /// Converts a virtual address into LocalAddress
+    pub fn translate(&self, address: usize) -> Result<LocalAddress, MemoryError> {
+        //could be sorted and use binary search
+        match self
+            .regions
+            .iter()
+            .enumerate()
+            .find(move |(_, region)| region.is_valid(address))
+        {
+            Some((i, region)) => {
+                let offset = region.offset(address);
+                Ok(LocalAddress {
+                    offset,
+                    memory_index: i,
+                })
+            }
+            None => Err(MemoryError::NoMap(address as u32)), // panic!("Invalid memory access: {:#08x}", address);
+        }
+    }
+}
+
+impl<T, B> Memory<B> for MemoryManager<T>
+where
+    T: Memory<B> + Memory,
+{
+    fn read(&self, address: usize) -> Result<B, MemoryError> {
+        let local = self.translate(address)?;
+        self.regions[local.memory_index].memory.read(local.offset)
+    }
+
+    fn write(&mut self, address: usize, value: B) -> Result<(), MemoryError> {
+        let local = self.translate(address)?;
+        self.regions[local.memory_index]
+            .memory
+            .write(local.offset, value)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_memory_translation() {
+        let memory_manager = MemoryManager::new(0x3000, 0x2000, LinearMemory::new(0x2000));
+        // memory_manager.register(1, 2, LinearMemory::new(1024 * 5));
+
+        // memory_manager.register(0x1000, 0x1000);  // 4KB chunk starting at 0x1000
+        // memory_manager.register(0x3000, 0x2000);  // 8KB chunk starting at 0x3000
+        // memory_manager.register(0x6000, 0x1000);
+
+        // memory_manager.translate(0x1500); // Returns the first chunk with offset 0x500
+        // memory_manager.translate(0x4000); // Returns the second chunk with offset 0x1000
+        // memory_manager.translate(0x6100); // Returns the third chunk with offset 0x100
+        // memory_manager.translate(0x2000); // Returns None (unmapped address)
+
+        match memory_manager.translate(0x4000) {
+            Ok(local) => {
+                assert_eq!(local.offset, 0x1000)
+            }
+            Err(e) => eprintln!("{e}"),
+        }
+    }
+}
