@@ -2,5 +2,6 @@
 resolver = "2"
 members = [
     "vm",
-    "macros"
+    "macros",
+    "macros/macros_derive"
 ]
