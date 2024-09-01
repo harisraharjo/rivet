@@ -1,6 +1,6 @@
 pub(crate) fn extract_enum_variants_count(ast: &mut syn::DeriveInput) -> usize {
     if let syn::Data::Enum(enum_data) = &mut ast.data {
-        return enum_data.variants.iter().count();
+        return enum_data.variants.len();
     }
 
     0

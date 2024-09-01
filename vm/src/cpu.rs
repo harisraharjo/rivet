@@ -18,8 +18,6 @@ impl Registers {
     }
 }
 
-pub trait PC {}
-
 #[derive(Default, Debug)]
 pub struct CPU {
     pub registers: Registers,

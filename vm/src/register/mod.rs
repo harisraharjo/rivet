@@ -41,6 +41,40 @@ impl From<u32> for Register {
     }
 }
 
+impl From<u8> for Register {
+    fn from(value: u8) -> Self {
+        match value {
+            1 => Register::X1,
+            2 => Register::X2,
+            3 => Register::X3,
+            4 => Register::X4,
+            5 => Register::X5,
+            6 => Register::X6,
+            7 => Register::BP,
+            8 => Register::SP,
+            9 => Register::RA,
+            _ => Register::Zero,
+        }
+    }
+}
+
+impl From<u16> for Register {
+    fn from(value: u16) -> Self {
+        match value {
+            1 => Register::X1,
+            2 => Register::X2,
+            3 => Register::X3,
+            4 => Register::X4,
+            5 => Register::X5,
+            6 => Register::X6,
+            7 => Register::BP,
+            8 => Register::SP,
+            9 => Register::RA,
+            _ => Register::Zero,
+        }
+    }
+}
+
 #[derive(Default, Debug)]
 pub struct ProgramCounter(usize);
 

@@ -2,26 +2,52 @@ use macros::VMInstruction;
 
 use super::Register;
 
-// #[derive(Debug)]
-// pub enum Opcode {
-//     /// HALT
-//     HLT,
-//     /// Illegal
-//     IGL,
-//     NOP,
-//     LOAD,
-//     ADD,
-//     SUB,
-//     MUL,
-//     DIV,
+// struct Opcode;
+// impl Opcode {
+//     fn new() -> Opcode {
+//         Opcode{  }
+//     }
 // }
 
 #[derive(Debug)]
 pub enum Operand {
     Register(Register),
-    Immediate(i32),
+    Immediate(u32),
     Address(u32),
     LabelRef(u32), // For jump/call targets
+}
+
+impl From<u32> for Operand {
+    fn from(value: u32) -> Self {
+        match value {
+            0 => Self::Register(value.into()),
+            1 => Self::Immediate(value),
+            2 => Self::Address(value),
+            _ => Self::LabelRef(0),
+        }
+    }
+}
+
+impl From<u16> for Operand {
+    fn from(value: u16) -> Self {
+        match value {
+            0 => Self::Register(value.into()),
+            1 => Self::Immediate(value.into()),
+            2 => Self::Address(value.into()),
+            _ => Self::LabelRef(0),
+        }
+    }
+}
+
+impl From<u8> for Operand {
+    fn from(value: u8) -> Self {
+        match value {
+            0 => Self::Register(value.into()),
+            1 => Self::Immediate(value.into()),
+            2 => Self::Address(value.into()),
+            _ => Self::LabelRef(0),
+        }
+    }
 }
 
 #[derive(Debug, VMInstruction)]
@@ -96,14 +122,14 @@ pub enum Instruction {
     Cmp { left: Operand, right: Operand },
     #[opcode(0xff)]
     Jmp { target: Operand },
-    #[opcode(0xff)]
-    Je { target: Operand },
-    #[opcode(0xff)]
-    Jne { target: Operand },
-    #[opcode(0xff)]
-    Jg { target: Operand },
-    #[opcode(0xff)]
-    Jl { target: Operand },
+    // #[opcode(0xff)]
+    // Je { target: Operand },
+    // #[opcode(0xff)]
+    // Jne { target: Operand },
+    // #[opcode(0xff)]
+    // Jg { target: Operand },
+    // #[opcode(0xff)]
+    // Jl { target: Operand },
     #[opcode(0xff)]
     Call { target: Operand },
     #[opcode(0xff)]
@@ -114,31 +140,11 @@ pub enum Instruction {
     Halt,
 }
 
-impl Instruction {}
+// pub trait InstructionHandler {
+//     fn fetch(&self, memory: u8) -> Instruction;
 
-// impl From<u32> for Instruction {
-//     fn from(value: u32) -> Self {
-//         todo!()
-// match value {
-//     0 => Self::gen(Instruction::Add {
-//         dest: todo!(),
-//         src1: todo!(),
-//         src2: todo!(),
-//     }),
-//     _ => Self::gen(Instruction::Add {
-//         dest: todo!(),
-//         src1: todo!(),
-//         src2: todo!(),
-//     }),
+//     fn decode(&self, opcode: Instruction) -> Result<(), ()>;
 // }
-//     }
-// }
-
-pub trait InstructionHandler {
-    fn fetch(&self, memory: u8) -> Instruction;
-
-    fn decode(&self, opcode: Instruction) -> Result<(), ()>;
-}
 
 #[cfg(test)]
 mod test {

@@ -1,10 +1,7 @@
 use crate::{
     cpu::CPU,
     memory::{LinearMemory, Memory},
-    register::{
-        instruction::{Instruction, InstructionHandler},
-        ProgramCounter,
-    },
+    register::instruction::Instruction,
 };
 
 pub struct VM {
