@@ -1,4 +1,12 @@
+use std::ops::{BitAnd, Shr};
+
+use macros::EnumCount;
+
 pub mod instruction;
+
+enum Testa {
+    F1,
+}
 
 #[derive(Debug)]
 pub enum Register {
@@ -18,9 +26,38 @@ pub enum Register {
 }
 
 impl Register {
-    // TODO: Create me a macro
-    pub const fn count() -> usize {
-        10
+    // pub fn mask<const N: u8>(&self, i: usize) -> i32 {
+    //     let xx = match N {
+    //         0 => ,
+    //         1 =>
+    //     };
+    //     1
+    // }
+}
+
+impl BitAnd<u32> for Register {
+    type Output = u32;
+
+    fn bitand(self, rhs: u32) -> Self::Output {
+        self as u32 & rhs
+    }
+}
+
+impl From<Register> for u32 {
+    fn from(value: Register) -> Self {
+        match value {
+            Register::Zero => todo!(),
+            Register::X1 => todo!(),
+            Register::X2 => todo!(),
+            Register::X3 => todo!(),
+            Register::X4 => todo!(),
+            Register::X5 => todo!(),
+            Register::X6 => todo!(),
+            Register::SP => todo!(),
+            Register::BP => todo!(),
+            Register::RA => todo!(),
+            // Register::Test(a) => todo!(),
+        }
     }
 }
 

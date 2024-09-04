@@ -1,13 +1,8 @@
+use std::ops::{BitAnd, Shr};
+
 use macros::VMInstruction;
 
 use super::Register;
-
-// struct Opcode;
-// impl Opcode {
-//     fn new() -> Opcode {
-//         Opcode{  }
-//     }
-// }
 
 #[derive(Debug)]
 pub enum Operand {
@@ -15,6 +10,19 @@ pub enum Operand {
     Immediate(u32),
     Address(u32),
     LabelRef(u32), // For jump/call targets
+}
+
+impl BitAnd<u32> for Operand {
+    type Output = u32;
+
+    fn bitand(self, rhs: u32) -> Self::Output {
+        match self {
+            Operand::Register(data) => data & rhs,
+            Operand::Immediate(data) => data & rhs,
+            Operand::Address(data) => data & rhs,
+            Operand::LabelRef(data) => data & rhs,
+        }
+    }
 }
 
 impl From<u32> for Operand {
@@ -54,64 +62,69 @@ impl From<u8> for Operand {
 pub enum Instruction {
     #[opcode(0xff)]
     Nop,
-    #[opcode(0x0)]
-    Load { dest: Register, src: Operand },
-    #[opcode(0xff)]
-    Store { src: Register, dest: Operand },
+    // ---Binary Operators---
+    #[opcode(0x1)]
+    Add {
+        dest: Register,
+        src1: Operand,
+        src2: Operand,
+    },
+    #[opcode(0x2)]
+    Sub {
+        dest: Register,
+        src1: Operand,
+        src2: Operand,
+    },
+    #[opcode(0x3)]
+    Mul {
+        dest: Register,
+        src1: Operand,
+        src2: Operand,
+    },
+    #[opcode(0x4)]
+    And {
+        dest: Register,
+        src1: Operand,
+        src2: Operand,
+    },
+    #[opcode(0x5)]
+    Or {
+        dest: Register,
+        src1: Operand,
+        src2: Operand,
+    },
+    #[opcode(0x6)]
+    Xor {
+        dest: Register,
+        src1: Operand,
+        src2: Operand,
+    },
+    // #[opcode(0xff)]
+    // Div {
+    //     dest: Register,
+    //     src1: Operand,
+    //     src2: Operand,
+    // },
+
+    // ---Load and Store---
+    #[opcode(0xc)]
+    LoadWord { dest: Register, src: Operand },
+    #[opcode(0xd)]
+    StoreWord { src: Register, dest: Operand },
     #[opcode(0xff)]
     Move { dest: Register, src: Operand },
     #[opcode(0xff)]
     Push { src: Operand },
     #[opcode(0xff)]
     Pop { dest: Register },
-    #[opcode(0xff)]
-    Add {
-        dest: Register,
-        src1: Operand,
-        src2: Operand,
-    },
-    #[opcode(0xff)]
-    Sub {
-        dest: Register,
-        src1: Operand,
-        src2: Operand,
-    },
-    #[opcode(0xff)]
-    Mul {
-        dest: Register,
-        src1: Operand,
-        src2: Operand,
-    },
-    #[opcode(0xff)]
-    Div {
-        dest: Register,
-        src1: Operand,
-        src2: Operand,
-    },
-    #[opcode(0xff)]
-    And {
-        dest: Register,
-        src1: Operand,
-        src2: Operand,
-    },
-    #[opcode(0xff)]
-    Or {
-        dest: Register,
-        src1: Operand,
-        src2: Operand,
-    },
-    #[opcode(0xff)]
-    Xor {
-        dest: Register,
-        src1: Operand,
-        src2: Operand,
-    },
+    /// Shift Left
     #[opcode(0xff)]
     Shl {
         dest: Register,
         src: Operand,
         shift: Operand,
     },
+    /// Shift Right
     #[opcode(0xff)]
     Shr {
         dest: Register,
@@ -150,12 +163,49 @@ pub enum Instruction {
 mod test {
     use super::*;
     #[test]
-    fn instruction_opcode() {
+    fn test_opcode() {
         let nop = Instruction::Nop;
         let halt = Instruction::Halt;
-        let op1 = nop.opcode();
-        let op2 = halt.opcode();
-        println!("{op1}");
-        println!("{op2}");
+        // let op1 = nop.opcode();
+        // let op2 = halt.opcode();
+        // println!("{op1}");
+        // println!("{op2}");
+    }
+
+    #[test]
+    fn test_encodings() {
+        let ops: Vec<Instruction> = vec![
+            Instruction::Add {
+                dest: todo!(),
+                src1: todo!(),
+                src2: todo!(),
+            },
+            Instruction::Sub {
+                dest: todo!(),
+                src1: todo!(),
+                src2: todo!(),
+            },
+            Instruction::Mul {
+                dest: todo!(),
+                src1: todo!(),
+                src2: todo!(),
+            },
+            Instruction::And {
+                dest: todo!(),
+                src1: todo!(),
+                src2: todo!(),
+            },
+            Instruction::Or {
+                dest: todo!(),
+                src1: todo!(),
+                src2: todo!(),
+            },
+        ];
+
+        // let encoded: Vec<_> = ops.iter().map(|x| x.encode_u16()).collect();
+        // for (l, r) in ops.iter().zip(encoded.iter()) {
+        //     assert_eq!(*l, Instruction::try_from(*r)?);
+        // }
+        // Ok(())
     }
 }
