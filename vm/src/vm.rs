@@ -1,7 +1,7 @@
 use crate::{
     cpu::CPU,
     memory::{LinearMemory, Memory},
-    register::instruction::Instruction,
+    register::instruction::{DecodeError, Instruction},
 };
 
 pub struct VM {
@@ -29,9 +29,9 @@ impl VM {
 }
 
 impl VM {
-    fn fetch(&self) -> Result<Instruction, ()> {
+    fn fetch(&self) -> Result<Instruction, DecodeError> {
         let memory: u32 = self.memory.read(self.cpu.pc.value()).unwrap();
-        Ok(memory.into())
+        memory.try_into()
     }
 
     //inlined bcs of hot loop (https://nnethercote.github.io/perf-book/inlining.html)
@@ -39,15 +39,15 @@ impl VM {
     fn decode(&self, opcode: Instruction) -> Result<(), ()> {
         match opcode {
             Instruction::Nop => todo!(),
-            Instruction::Load { dest, src } => todo!(),
-            Instruction::Store { src, dest } => todo!(),
+            Instruction::LoadWord { dest, src } => todo!(),
+            Instruction::StoreWord { src, dest } => todo!(),
             Instruction::Move { dest, src } => todo!(),
             Instruction::Push { src } => todo!(),
             Instruction::Pop { dest } => todo!(),
             Instruction::Add { dest, src1, src2 } => todo!(),
             Instruction::Sub { dest, src1, src2 } => todo!(),
             Instruction::Mul { dest, src1, src2 } => todo!(),
-            Instruction::Div { dest, src1, src2 } => todo!(),
+            // Instruction::Div { dest, src1, src2 } => todo!(),
             Instruction::And { dest, src1, src2 } => todo!(),
             Instruction::Or { dest, src1, src2 } => todo!(),
             Instruction::Xor { dest, src1, src2 } => todo!(),
@@ -55,10 +55,10 @@ impl VM {
             Instruction::Shr { dest, src, shift } => todo!(),
             Instruction::Cmp { left, right } => todo!(),
             Instruction::Jmp { target } => todo!(),
-            Instruction::Je { target } => todo!(),
-            Instruction::Jne { target } => todo!(),
-            Instruction::Jg { target } => todo!(),
-            Instruction::Jl { target } => todo!(),
+            // Instruction::Je { target } => todo!(),
+            // Instruction::Jne { target } => todo!(),
+            // Instruction::Jg { target } => todo!(),
+            // Instruction::Jl { target } => todo!(),
             Instruction::Call { target } => todo!(),
             Instruction::Ret => todo!(),
             Instruction::Syscall { number } => todo!(),
