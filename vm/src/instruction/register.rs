@@ -1,28 +1,28 @@
-use std::ops::{BitAnd, Shr};
+use std::ops::BitAnd;
 
 use macros::EnumCount;
 
-pub mod instruction;
-
-enum Testa {
-    F1,
-}
-
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, EnumCount)]
+#[repr(u8)]
 pub enum Register {
     Zero,
-    X1,
-    X2,
-    X3,
-    X4,
-    X5,
-    X6,
-    /// Stack Pointer
-    SP,
-    /// Base Pointer
-    BP,
-    /// Return Address
-    RA,
+    X1,  //RA
+    X2,  //SP
+    X3,  //GP
+    X4,  //TP
+    X5,  //t0 => temprorary/alternate return address
+    X6,  // t1
+    X7,  // t2
+    X8,  //s0 => Saved register / frame pointer
+    X9,  // s1,
+    X10, //a0 => function argument / return value
+    X11, //a1
+    X12, //a2
+    X13, //a3
+    X14, //t3
+    X15, //t4
+         // /// Base Pointer
+         // BP,
 }
 
 impl Register {
@@ -35,11 +35,11 @@ impl Register {
     // }
 }
 
-impl BitAnd<u32> for Register {
+impl BitAnd<u32> for &Register {
     type Output = u32;
 
     fn bitand(self, rhs: u32) -> Self::Output {
-        self as u32 & rhs
+        (*self as u32) & rhs
     }
 }
 
@@ -53,9 +53,15 @@ impl From<Register> for u32 {
             Register::X4 => todo!(),
             Register::X5 => todo!(),
             Register::X6 => todo!(),
-            Register::SP => todo!(),
-            Register::BP => todo!(),
-            Register::RA => todo!(),
+            Register::X7 => todo!(),
+            Register::X8 => todo!(),
+            Register::X9 => todo!(),
+            Register::X10 => todo!(),
+            Register::X11 => todo!(),
+            Register::X12 => todo!(),
+            Register::X13 => todo!(),
+            Register::X14 => todo!(),
+            Register::X15 => todo!(),
             // Register::Test(a) => todo!(),
         }
     }
@@ -70,9 +76,6 @@ impl From<u32> for Register {
             4 => Register::X4,
             5 => Register::X5,
             6 => Register::X6,
-            7 => Register::BP,
-            8 => Register::SP,
-            9 => Register::RA,
             _ => Register::Zero,
         }
     }
@@ -87,26 +90,6 @@ impl From<u8> for Register {
             4 => Register::X4,
             5 => Register::X5,
             6 => Register::X6,
-            7 => Register::BP,
-            8 => Register::SP,
-            9 => Register::RA,
-            _ => Register::Zero,
-        }
-    }
-}
-
-impl From<u16> for Register {
-    fn from(value: u16) -> Self {
-        match value {
-            1 => Register::X1,
-            2 => Register::X2,
-            3 => Register::X3,
-            4 => Register::X4,
-            5 => Register::X5,
-            6 => Register::X6,
-            7 => Register::BP,
-            8 => Register::SP,
-            9 => Register::RA,
             _ => Register::Zero,
         }
     }

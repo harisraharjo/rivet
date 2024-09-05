@@ -1,6 +1,6 @@
 use macros::EnumCount;
 
-use crate::register::{ProgramCounter, Register};
+use crate::instruction::register::{ProgramCounter, Register};
 
 #[derive(Default, Debug)]
 pub struct Registers([u32; Register::VARIANT_COUNT]);

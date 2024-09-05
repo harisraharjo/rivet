@@ -1,7 +1,7 @@
 use crate::{
     cpu::CPU,
+    instruction::{DecodeError, Instruction},
     memory::{LinearMemory, Memory},
-    register::instruction::{DecodeError, Instruction},
 };
 
 pub struct VM {
@@ -42,8 +42,6 @@ impl VM {
             Instruction::LoadWord { dest, src } => todo!(),
             Instruction::StoreWord { src, dest } => todo!(),
             Instruction::Move { dest, src } => todo!(),
-            Instruction::Push { src } => todo!(),
-            Instruction::Pop { dest } => todo!(),
             Instruction::Add { dest, src1, src2 } => todo!(),
             Instruction::Sub { dest, src1, src2 } => todo!(),
             Instruction::Mul { dest, src1, src2 } => todo!(),
@@ -53,16 +51,15 @@ impl VM {
             Instruction::Xor { dest, src1, src2 } => todo!(),
             Instruction::Shl { dest, src, shift } => todo!(),
             Instruction::Shr { dest, src, shift } => todo!(),
-            Instruction::Cmp { left, right } => todo!(),
-            Instruction::Jmp { target } => todo!(),
+
             // Instruction::Je { target } => todo!(),
             // Instruction::Jne { target } => todo!(),
             // Instruction::Jg { target } => todo!(),
             // Instruction::Jl { target } => todo!(),
-            Instruction::Call { target } => todo!(),
-            Instruction::Ret => todo!(),
             Instruction::Syscall { number } => todo!(),
             Instruction::Halt => todo!(),
+            Instruction::AddI { dest, src1, src2 } => todo!(),
+            Instruction::Jal { dest, src, shift } => todo!(),
         }
     }
 }

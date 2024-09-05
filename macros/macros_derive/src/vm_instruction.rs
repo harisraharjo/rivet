@@ -62,7 +62,7 @@ fn generate_operands<const IS_ENCODE: bool>(
                 if IS_ENCODE {
                     quote::quote!((#field_name & 0xFF) << 16)
                 } else {
-                    quote::quote!((#field_name >> 16) & 0xFFFF)
+                    quote::quote!((#field_name >> 16) & 0xFF)
                 }
             }
             _ => {
@@ -183,7 +183,6 @@ pub(crate) fn opcode_derive_macro2(
                     };
 
                     //decode
-                    // let opcode: u32 = opcode.unwrap().into();
                     let decoded_result = quote::quote_spanned! {
                         variant_span =>
                         #opcode => Ok(Self::#variant_name #raw_decoded_field_value ),
@@ -205,7 +204,8 @@ pub(crate) fn opcode_derive_macro2(
     Ok(quote::quote! {
         #[derive(Debug)]
         pub enum DecodeError {
-            Message(String)
+            // Message(&'static str),
+            UnknownOpcode
         }
 
         impl #impl_g TryFrom<u32> for #enum_name #type_g #where_c {
@@ -215,17 +215,18 @@ pub(crate) fn opcode_derive_macro2(
                 let opcode = value as u8;
                 match opcode {
                     #(#decoded_variants)*
-                    _ => Err(DecodeError::Message(String::from("Unknown opcode"))),
+                    _ => Err(DecodeError::UnknownOpcode),
                 }
             }
         }
 
-        impl #impl_g From<#enum_name> for u32 #type_g #where_c {
-            fn from(value: #enum_name) -> Self {
-                match value {
+        impl #impl_g From<&#enum_name> for u32 #type_g #where_c {
+            fn from(value: &#enum_name) -> Self {
+                let result = match value {
                     #(#encoded_variants)*
-                    // _ => Err(DecodeError::Message(String::from("Unknown opcode"))),
-                }
+                };
+
+                result
             }
         }
 
