@@ -10,7 +10,7 @@ pub enum Register {
     X2,  //SP
     X3,  //GP
     X4,  //TP
-    X5,  //t0 => temprorary/alternate return address
+    X5,  //t0 => temporary/alternate return address
     X6,  // t1
     X7,  // t2
     X8,  //s0 => Saved register / frame pointer
@@ -70,30 +70,39 @@ impl From<Register> for u32 {
 impl From<u32> for Register {
     fn from(value: u32) -> Self {
         match value {
+            0 => Register::Zero,
             1 => Register::X1,
             2 => Register::X2,
             3 => Register::X3,
             4 => Register::X4,
             5 => Register::X5,
             6 => Register::X6,
-            _ => Register::Zero,
+            7 => Register::X7,
+            8 => Register::X8,
+            9 => Register::X9,
+            10 => Register::X10,
+            11 => Register::X11,
+            12 => Register::X12,
+            13 => Register::X13,
+            14 => Register::X14,
+            _ => Register::X15,
         }
     }
 }
 
-impl From<u8> for Register {
-    fn from(value: u8) -> Self {
-        match value {
-            1 => Register::X1,
-            2 => Register::X2,
-            3 => Register::X3,
-            4 => Register::X4,
-            5 => Register::X5,
-            6 => Register::X6,
-            _ => Register::Zero,
-        }
-    }
-}
+// impl From<u8> for Register {
+//     fn from(value: u8) -> Self {
+//         match value {
+//             1 => Register::X1,
+//             2 => Register::X2,
+//             3 => Register::X3,
+//             4 => Register::X4,
+//             5 => Register::X5,
+//             6 => Register::X6,
+//             _ => Register::Zero,
+//         }
+//     }
+// }
 
 #[derive(Default, Debug)]
 pub struct ProgramCounter(usize);

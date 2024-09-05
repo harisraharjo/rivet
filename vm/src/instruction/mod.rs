@@ -99,21 +99,13 @@ pub enum Instruction {
     // #[opcode(0xff)]
     // Cmp { left: Register, right: Register },
     // #[opcode(0xff)]
-    // Jmp { target: Register },
-    // #[opcode(0xff)]
-    // Je { target: Register },
-    // #[opcode(0xff)]
-    // Jne { target: Register },
-    // #[opcode(0xff)]
-    // Jg { target: Register },
-    // #[opcode(0xff)]
-    // Jl { target: Register },
-    // #[opcode(0xff)]
     // Call { target: Register },
     // #[opcode(0xff)]
     // Ret,
-    #[opcode(0xff)]
-    Syscall { number: u32 },
+    #[opcode(0x1f)]
+    Syscall { number: Register },
+    // #[opcode(0xff)]
+    // Syscall { number: u32 },
     #[opcode(0x0)]
     Halt,
 }
@@ -126,8 +118,6 @@ pub enum Instruction {
 
 #[cfg(test)]
 mod test {
-    use std::mem::transmute;
-
     use super::*;
     use register::*;
     #[test]
@@ -147,69 +137,50 @@ mod test {
 
     #[test]
     fn test_encodings() -> Result<(), DecodeError> {
-        println!("TEST ENCODE START");
         let ops: Vec<Instruction> = vec![
             Instruction::Add {
                 dest: Register::X2,
                 src1: Register::X3,
                 src2: Register::X4,
             },
-            // Instruction::Sub {
-            //     dest: Register::BP,
-            //     src1: Operand::Register(Register::X2),
-            //     src2: Operand::Register(Register::X5),
-            // },
-            // Instruction::Mul {
-            //     dest: Register::BP,
-            //     src1: Operand::Register(Register::X3),
-            //     src2: Operand::Register(Register::X1),
-            // },
-            // Instruction::And {
-            //     dest: Register::BP,
-            //     src1: Operand::Register(Register::X6),
-            //     src2: Operand::Register(Register::X3),
-            // },
-            // Instruction::Or {
-            //     dest: Register::BP,
-            //     src1: Operand::Register(Register::X4),
-            //     src2: Operand::Register(Register::X6),
-            // },
+            Instruction::LoadWord {
+                dest: Register::X4,
+                src: Register::X5,
+            },
+            Instruction::Nop,
+            Instruction::Halt,
+            Instruction::Syscall {
+                number: Register::X6,
+            },
         ];
         // if (ins & 0x8000) == 0 {
 
-        println!("{}", 0xff);
-        println!("{}", 0xfff);
-        let dest_val: u8 = unsafe { transmute(Register::X2) };
-        let src1_val: u8 = unsafe { transmute(Register::X3) };
-        let src2_val: u8 = unsafe { transmute(Register::X4) };
+        // println!("{}", 0xff);
+        // println!("{}", 0xfff);
+        // let dest_val: u8 = unsafe { transmute(Register::X2) };
+        // let src1_val: u8 = unsafe { transmute(Register::X3) };
+        // let src2_val: u8 = unsafe { transmute(Register::X4) };
 
-        let encoded: u32 = (1u8 as u32)
-            | ((dest_val as u32) << 8)
-            | ((src1_val as u32) << 16)
-            | ((src2_val as u32) << 24);
-        println!("MANUAL ENCODING u32: {:?}", encoded);
+        // let encoded: u32 = (1u8 as u32)
+        //     | ((dest_val as u32) << 8)
+        //     | ((src1_val as u32) << 16)
+        //     | ((src2_val as u32) << 24);
+        // println!("MANUAL ENCODING u32: {:?}", encoded);
 
-        let dest = unsafe { transmute::<u8, Register>((encoded >> 8) as u8) };
-        let src1 = unsafe { transmute::<u8, Register>((encoded >> 16) as u8) };
-        let src2 = unsafe { transmute::<u8, Register>((encoded >> 24) as u8) };
+        // let dest = unsafe { transmute::<u8, Register>((encoded >> 8) as u8) };
+        // let src1 = unsafe { transmute::<u8, Register>((encoded >> 16) as u8) };
+        // let src2 = unsafe { transmute::<u8, Register>((encoded >> 24) as u8) };
 
-        let result = Instruction::Add { dest, src1, src2 };
-        // let result = Instruction::try_from(result).unwrap();
+        // let result = Instruction::Add { dest, src1, src2 };
+        // // let result = Instruction::try_from(result).unwrap();
 
-        println!("MANUAL ENCODING Instruction: {:?}", result);
+        // println!("MANUAL ENCODING Instruction: {:?}", result);
 
-        let encoded: Vec<u32> = ops
-            .iter()
-            .map(|x| {
-                let ff = x;
-                ff.into()
-            })
-            .collect();
-        for (l, r) in ops.iter().zip(encoded.iter()) {
+        let encoded: Vec<u32> = ops.iter().map(|x| x.into()).collect();
+        for (i, (l, r)) in ops.iter().zip(encoded.iter()).enumerate() {
+            println!("{i} l: {:?}, r: {1}", l, r);
             let decoded = Instruction::try_from(*r)?;
-            // println!("{:?}", l);
-            println!("{:?}", r);
-            // println!("{:?}", decoded);
+            println!("{:?}", decoded);
             assert_eq!(*l, decoded);
         }
         Ok(())
