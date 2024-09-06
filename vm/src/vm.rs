@@ -58,7 +58,7 @@ impl VM {
             // Instruction::Jl { target } => todo!(),
             Instruction::Syscall { number } => todo!(),
             Instruction::Halt => todo!(),
-            Instruction::AddI { dest, src1, src2 } => todo!(),
+            Instruction::AddI { dest, src } => todo!(),
             Instruction::Jal { dest, src, shift } => todo!(),
         }
     }

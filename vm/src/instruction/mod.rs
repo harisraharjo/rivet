@@ -2,6 +2,7 @@ pub mod operand;
 pub mod register;
 
 use macros::VMInstruction;
+use operand::Imm16;
 use register::Register;
 // #[derive(Debug, PartialEq, Eq)]
 // pub enum Operand {
@@ -52,12 +53,9 @@ pub enum Instruction {
         src1: Register,
         src2: Register,
     },
+    // --- Imm ---
     #[opcode(0x13)]
-    AddI {
-        dest: Register,
-        src1: Register,
-        src2: Register,
-    },
+    AddI { dest: Register, src: Imm16 },
     // #[opcode(0xff)]
     // Div {
     //     dest: Register,
@@ -67,9 +65,9 @@ pub enum Instruction {
 
     // ---Load and Store---
     #[opcode(0xc)]
-    LoadWord { dest: Register, src: Register },
+    LoadWord { dest: Register, src: Imm16 },
     #[opcode(0xd)]
-    StoreWord { src: Register, dest: Register },
+    StoreWord { dest: Register, src: Register },
     #[opcode(0xff)]
     Move { dest: Register, src: Register },
     // #[opcode(0xff)]
@@ -102,7 +100,7 @@ pub enum Instruction {
     // Call { target: Register },
     // #[opcode(0xff)]
     // Ret,
-    #[opcode(0x1f)]
+    #[opcode(0x73)]
     Syscall { number: Register },
     // #[opcode(0xff)]
     // Syscall { number: u32 },
@@ -145,12 +143,16 @@ mod test {
             },
             Instruction::LoadWord {
                 dest: Register::X4,
-                src: Register::X5,
+                src: Imm16(500),
+            },
+            Instruction::StoreWord {
+                dest: Register::X4,
+                src: Register::X9,
             },
             Instruction::Nop,
             Instruction::Halt,
             Instruction::Syscall {
-                number: Register::X6,
+                number: Register::X7,
             },
         ];
         // if (ins & 0x8000) == 0 {
@@ -180,7 +182,7 @@ mod test {
         for (i, (l, r)) in ops.iter().zip(encoded.iter()).enumerate() {
             println!("{i} l: {:?}, r: {1}", l, r);
             let decoded = Instruction::try_from(*r)?;
-            println!("{:?}", decoded);
+            println!("Decoded: {:?}", decoded);
             assert_eq!(*l, decoded);
         }
         Ok(())
