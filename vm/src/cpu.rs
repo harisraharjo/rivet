@@ -14,9 +14,9 @@ impl Registers {
         self.0[register as usize]
     }
 
-    pub fn set(&mut self, register: Register, value: u32) -> Result<(), ()> {
+    pub fn set(&mut self, register: Register, value: u32) {
         self.0[register as usize] = value;
-        Ok(())
+        // Ok(())
     }
 }
 

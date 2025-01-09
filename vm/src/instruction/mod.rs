@@ -2,22 +2,15 @@ pub mod operand;
 pub mod register;
 
 use macros::VMInstruction;
-use operand::Imm16;
+use operand::{Imm16, Imm8};
 use register::Register;
-// #[derive(Debug, PartialEq, Eq)]
-// pub enum Operand {
-//     Register(Register),
-//     Immediate(i32),
-//     Address(u32),
-//     LabelRef(u32), // For jump/call targets
-// }
 
 #[derive(Debug, PartialEq, Eq, VMInstruction)]
 pub enum Instruction {
     #[opcode(0xff)]
     Nop,
     // ---Binary Operators---
-    #[opcode(0x1)]
+    #[opcode(0x1)] //8 bits
     Add {
         dest: Register,
         src1: Register,
@@ -53,59 +46,59 @@ pub enum Instruction {
         src1: Register,
         src2: Register,
     },
-    // --- Imm ---
-    #[opcode(0x13)]
-    AddI { dest: Register, src: Imm16 },
-    // #[opcode(0xff)]
-    // Div {
-    //     dest: Register,
-    //     src1: Register,
-    //     src2: Register,
-    // },
-
-    // ---Load and Store---
-    #[opcode(0xc)]
-    LoadWord { dest: Register, src: Imm16 },
-    #[opcode(0xd)]
-    StoreWord { dest: Register, src: Register },
-    #[opcode(0xff)]
-    Move { dest: Register, src: Register },
-    // #[opcode(0xff)]
-    // Push { src: Register },
-    // #[opcode(0xff)]
-    // Pop { dest: Register },
     /// Shift Left
-    #[opcode(0xff)]
+    #[opcode(0x7)]
     Shl {
         dest: Register,
         src: Register,
         shift: Register,
     },
-    /// Shift Right
-    #[opcode(0xff)]
+    /// Shift Right Logical
+    #[opcode(0x8)]
     Shr {
         dest: Register,
         src: Register,
         shift: Register,
     },
-    #[opcode(0xff)]
-    Jal {
+    /// Shift Right Arith
+    #[opcode(0x9)]
+    ShrA {
         dest: Register,
         src: Register,
         shift: Register,
     },
+    // --- Imm ---
+    #[opcode(0x13)]
+    AddI { dest: Register, src: Imm16 },
+    #[opcode(0xc)]
+    LoadWord {
+        dest: Register,
+        src: Register,
+        offset: Imm8,
+    },
+    #[opcode(0xd)]
+    StoreWord {
+        dest: Register,
+        src: Register,
+        offset: Imm8,
+    },
+    // #[opcode(0xe)]
+    // LoadByte {
+    //     dest: Register,
+    //     src: Register,
+    //     offset: Imm8,
+    // },
     // #[opcode(0xff)]
-    // Cmp { left: Register, right: Register },
-    // #[opcode(0xff)]
-    // Call { target: Register },
-    // #[opcode(0xff)]
-    // Ret,
+    // Jal {
+    //     dest: Register,
+    //     // offset:
+    // },
     #[opcode(0x73)]
     Syscall { number: Register },
     // #[opcode(0xff)]
     // Syscall { number: u32 },
-    #[opcode(0x0)]
-    Halt,
+    // #[opcode(0x0)]
+    // Halt,
 }
 
 // pub trait InstructionHandler {
@@ -118,19 +111,12 @@ pub enum Instruction {
 mod test {
     use super::*;
     use register::*;
+
     #[test]
     fn test_opcode() {
         let op1 = u32::from(&Instruction::Nop) as u8;
-        let op2 = u32::from(&Instruction::Halt) as u8;
-        // let op3 = u32::from(&Instruction::Add {
-        //     dest: Register::BP,
-        //     src1: Register::Register(Register::X1),
-        //     src2: Operand::Register(Register::X4),
-        // }) as u8;
 
         assert_eq!(op1.to_le_bytes(), 0xff_u8.to_le_bytes());
-        assert_eq!(op2.to_le_bytes(), 0x0_u8.to_le_bytes());
-        // assert_eq!(op3.to_le_bytes(), 0x1_u8.to_le_bytes());
     }
 
     #[test]
@@ -143,14 +129,15 @@ mod test {
             },
             Instruction::LoadWord {
                 dest: Register::X4,
-                src: Imm16(500),
+                src: Register::X10,
+                offset: Imm8(240),
             },
             Instruction::StoreWord {
                 dest: Register::X4,
                 src: Register::X9,
+                offset: Imm8(255),
             },
             Instruction::Nop,
-            Instruction::Halt,
             Instruction::Syscall {
                 number: Register::X7,
             },
@@ -177,6 +164,11 @@ mod test {
         // // let result = Instruction::try_from(result).unwrap();
 
         // println!("MANUAL ENCODING Instruction: {:?}", result);
+
+        // let a1 = 10 & 11;
+        // let a2 = 11 & 10;
+        // println!("A1: {a1}");
+        // println!("A2: {a2}");
 
         let encoded: Vec<u32> = ops.iter().map(|x| x.into()).collect();
         for (i, (l, r)) in ops.iter().zip(encoded.iter()).enumerate() {

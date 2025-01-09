@@ -1,4 +1,4 @@
-use std::ops::BitAnd;
+use std::ops::{BitAnd, Shl, Shr};
 
 use macros::EnumCount;
 
@@ -21,8 +21,6 @@ pub enum Register {
     X13, //a3
     X14, //t3
     X15, //t4
-         // /// Base Pointer
-         // BP,
 }
 
 impl Register {
@@ -70,7 +68,6 @@ impl From<Register> for u32 {
 impl From<u32> for Register {
     fn from(value: u32) -> Self {
         match value {
-            0 => Register::Zero,
             1 => Register::X1,
             2 => Register::X2,
             3 => Register::X3,
@@ -85,24 +82,35 @@ impl From<u32> for Register {
             12 => Register::X12,
             13 => Register::X13,
             14 => Register::X14,
-            _ => Register::X15,
+            15 => Register::X15,
+            _ => Register::Zero,
         }
     }
 }
 
-// impl From<u8> for Register {
-//     fn from(value: u8) -> Self {
-//         match value {
-//             1 => Register::X1,
-//             2 => Register::X2,
-//             3 => Register::X3,
-//             4 => Register::X4,
-//             5 => Register::X5,
-//             6 => Register::X6,
-//             _ => Register::Zero,
-//         }
-//     }
-// }
+impl Shl<Register> for u32 {
+    type Output = Self;
+
+    fn shl(self, rhs: Register) -> Self::Output {
+        self << (rhs as u32)
+    }
+}
+
+impl Shr<Register> for u32 {
+    type Output = Self;
+
+    fn shr(self, rhs: Register) -> Self::Output {
+        self >> (rhs as u32)
+    }
+}
+
+impl Shr<Register> for i32 {
+    type Output = Self;
+
+    fn shr(self, rhs: Register) -> Self::Output {
+        self >> (rhs as i32)
+    }
+}
 
 #[derive(Default, Debug)]
 pub struct ProgramCounter(usize);
