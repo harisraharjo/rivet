@@ -2,13 +2,14 @@ pub mod operand;
 pub mod register;
 
 use macros::VMInstruction;
-use operand::{Imm16, Imm8};
 use register::Register;
 
 #[derive(Debug, PartialEq, Eq, VMInstruction)]
 pub enum Instruction {
     #[opcode(0xff)]
-    Nop,
+    Li { dest: Register, value: u16 },
+    // #[opcode(0xff)]
+    // Nop,
     // ---Binary Operators---
     #[opcode(0x1)] //8 bits
     Add {
@@ -69,24 +70,24 @@ pub enum Instruction {
     },
     // --- Imm ---
     #[opcode(0x13)]
-    AddI { dest: Register, src: Imm16 },
-    #[opcode(0xc)]
-    LoadWord {
-        dest: Register,
-        src: Register,
-        offset: Imm8,
-    },
-    #[opcode(0xd)]
-    StoreWord {
-        dest: Register,
-        src: Register,
-        offset: Imm8,
-    },
+    AddI { dest: Register, src: u16 },
+    // #[opcode(0xc)]
+    // LoadWord {
+    //     dest: Register,
+    //     src: Register,
+    //     offset: u8,
+    // },
+    // #[opcode(0xd)]
+    // StoreWord {
+    //     dest: Register,
+    //     src: Register,
+    //     offset: u8,
+    // },
     // #[opcode(0xe)]
     // LoadByte {
     //     dest: Register,
     //     src: Register,
-    //     offset: Imm8,
+    //     offset: u8,
     // },
     // #[opcode(0xff)]
     // Jal {
@@ -113,31 +114,42 @@ mod test {
     use register::*;
 
     #[test]
-    fn test_opcode() {
-        let op1 = u32::from(&Instruction::Nop) as u8;
+    fn t_opcode() {
+        let op1 = u32::from(&Instruction::Li {
+            dest: Register::Zero,
+            value: 150,
+        }) as u8;
 
         assert_eq!(op1.to_le_bytes(), 0xff_u8.to_le_bytes());
     }
 
     #[test]
-    fn test_encodings() -> Result<(), DecodeError> {
+    fn t_overflow_todo() {
+        println!("TODO: TEST OVERFLOW IN THE ASSEMBLER");
+    }
+
+    #[test]
+    fn t_encode_decode() -> Result<(), DecodeError> {
         let ops: Vec<Instruction> = vec![
             Instruction::Add {
                 dest: Register::X2,
                 src1: Register::X3,
                 src2: Register::X4,
             },
-            Instruction::LoadWord {
-                dest: Register::X4,
-                src: Register::X10,
-                offset: Imm8(240),
+            // Instruction::LoadWord {
+            //     dest: Register::X4,
+            //     src: Register::X10,
+            //     offset: 213,
+            // },
+            // Instruction::StoreWord {
+            //     dest: Register::X4,
+            //     src: Register::X9,
+            //     offset: 255,
+            // },
+            Instruction::Li {
+                dest: Register::X6,
+                value: 150,
             },
-            Instruction::StoreWord {
-                dest: Register::X4,
-                src: Register::X9,
-                offset: Imm8(255),
-            },
-            Instruction::Nop,
             Instruction::Syscall {
                 number: Register::X7,
             },

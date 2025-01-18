@@ -12,55 +12,55 @@ use std::ops::{Add, BitAnd};
 //     }
 // }
 
-#[derive(Debug, PartialEq, Eq)]
-pub struct Imm16(pub(super) u16);
+// #[derive(Debug, PartialEq, Eq)]
+// pub struct Imm16(pub(super) u16);
 
-impl From<u32> for Imm16 {
-    fn from(value: u32) -> Self {
-        Self(value as u16)
-    }
-}
+// impl From<u32> for Imm16 {
+//     fn from(value: u32) -> Self {
+//         Self(value as u16)
+//     }
+// }
 
-impl BitAnd<u32> for &Imm16 {
-    type Output = u32;
+// impl BitAnd<u32> for &Imm16 {
+//     type Output = u32;
 
-    fn bitand(self, rhs: u32) -> Self::Output {
-        (self.0 as u32) & rhs
-    }
-}
+//     fn bitand(self, rhs: u32) -> Self::Output {
+//         (self.0 as u32) & rhs
+//     }
+// }
 
-impl Add<u32> for Imm16 {
-    type Output = u32;
+// impl Add<u32> for Imm16 {
+//     type Output = u32;
 
-    fn add(self, rhs: u32) -> Self::Output {
-        (self.0 as u32) + rhs
-    }
-}
+//     fn add(self, rhs: u32) -> Self::Output {
+//         (self.0 as u32) + rhs
+//     }
+// }
 
-#[derive(Debug, PartialEq, Eq)]
-pub struct Imm8(pub(super) u8);
+// #[derive(Debug, PartialEq, Eq)]
+// pub struct Imm8(pub(super) u8);
 
-impl From<u32> for Imm8 {
-    fn from(value: u32) -> Self {
-        Self(value as u8)
-    }
-}
+// impl From<u32> for Imm8 {
+//     fn from(value: u32) -> Self {
+//         Self(value as u8)
+//     }
+// }
 
-impl BitAnd<u32> for &Imm8 {
-    type Output = u32;
+// impl BitAnd<u32> for &Imm8 {
+//     type Output = u32;
 
-    fn bitand(self, rhs: u32) -> Self::Output {
-        (self.0 as u32) & rhs
-    }
-}
+//     fn bitand(self, rhs: u32) -> Self::Output {
+//         (self.0 as u32) & rhs
+//     }
+// }
 
-impl Add<u32> for Imm8 {
-    type Output = u32;
+// impl Add<u32> for Imm8 {
+//     type Output = u32;
 
-    fn add(self, rhs: u32) -> Self::Output {
-        (self.0 as u32) + rhs
-    }
-}
+//     fn add(self, rhs: u32) -> Self::Output {
+//         (self.0 as u32) + rhs
+//     }
+// }
 
 pub struct Address;
 pub struct LabelRef;

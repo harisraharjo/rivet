@@ -1,32 +1,24 @@
-use std::{fmt::Display, marker::PhantomData};
+use std::marker::PhantomData;
+use thiserror::Error;
 
 use log::debug;
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum MemoryError {
+    #[error("out of bounds: `{0}`")]
     OutOfBounds(u32),
+    #[error("out of bounds: `{0}`")]
     AddressTranslation(u32, Box<MemoryError>),
+    #[error("no mapping: `{0}`")]
     NoMap(u32),
+    #[error("invalid mapping index: `{0}`")]
     InvalidMap(u32, usize),
+    #[error("out of bounds: `{0}`")]
     InternalMapperError(u32),
+    #[error("internal mapper error @ `{0}`")]
     InternalMapperWithMessage(u32, String),
+    #[error("this memory is read only")]
     ReadOnly,
-}
-
-impl Display for MemoryError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            MemoryError::OutOfBounds(a) => write!(f, "out of bounds: {:X}", a),
-            MemoryError::NoMap(a) => write!(f, "no mapping: {:X}", a),
-            MemoryError::InvalidMap(a, i) => write!(f, "invalid mapping index: {:X}, {}", a, i),
-            MemoryError::AddressTranslation(a, e) => write!(f, "translation @{:X}: {}", a, e),
-            MemoryError::InternalMapperError(a) => write!(f, "internal mapper error @{:X}", a),
-            MemoryError::InternalMapperWithMessage(a, s) => {
-                write!(f, "internal mapper error @{:X}: {s}", a)
-            }
-            MemoryError::ReadOnly => write!(f, "this memory is read only"),
-        }
-    }
 }
 
 pub trait Memory<T = u8> {
@@ -34,8 +26,14 @@ pub trait Memory<T = u8> {
     fn write(&mut self, address: usize, value: T) -> Result<(), MemoryError>;
 }
 
-pub trait Load {
+pub trait Load: Memory<u8> {
     fn load_program(&mut self, program: &[u8], start_address: usize);
+    fn load_from_vec(&mut self, from: &[u8], addr: u32) -> Result<(), MemoryError> {
+        for (i, b) in from.iter().enumerate() {
+            self.write((addr as usize) + i, *b)?
+        }
+        Ok(())
+    }
 }
 
 pub struct LinearMemory(Vec<u8>);
@@ -47,6 +45,8 @@ impl LinearMemory {
     pub fn size(&self) -> usize {
         self.0.len()
     }
+
+    // pub
 }
 
 impl Memory<u8> for LinearMemory {

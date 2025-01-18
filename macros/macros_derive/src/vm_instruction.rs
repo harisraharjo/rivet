@@ -1,5 +1,3 @@
-use quote::ToTokens;
-
 fn extract_opcodes<T>(
     variants: &syn::punctuated::Punctuated<syn::Variant, syn::token::Comma>,
 ) -> impl Iterator<Item = Option<T>> + '_
@@ -77,12 +75,21 @@ fn generate_operands<const IS_ENCODE: bool>(
     }
 }
 
+type EField = (syn::Ident, String);
 fn extract_variant_fields(
     fields: &syn::Fields,
-) -> Option<(impl Iterator<Item = syn::Ident> + '_, usize)> {
+) -> Option<(impl Iterator<Item = EField> + '_, usize)> {
     match fields {
         syn::Fields::Named(f) => {
-            let f_ = f.named.iter().map(|f| f.ident.to_owned().unwrap());
+            let f_ = f.named.iter().map(|f| {
+                let name = f.ident.to_owned().unwrap();
+                let mut ty = String::new();
+                if let syn::Type::Path(type_path) = &f.ty {
+                    ty = type_path.path.segments.last().unwrap().ident.to_string();
+                }
+
+                (name, ty)
+            });
             Some((f_, f.named.len()))
         }
         syn::Fields::Unit => None,
@@ -96,7 +103,7 @@ fn extract_variant_data(
     Item = (
         &syn::Ident,
         proc_macro2::Span,
-        Option<(impl Iterator<Item = syn::Ident> + '_, usize)>,
+        Option<(impl Iterator<Item = EField> + '_, usize)>,
     ),
 > {
     variants.iter().map(|v| {
@@ -109,8 +116,10 @@ fn extract_variant_data(
     })
 }
 
+const PRIMITIVES_INT: [&str; 3] = ["u8", "u16", "u32"];
+
 fn generate_field_and_values(
-    field_name_iter: impl Iterator<Item = syn::Ident>,
+    field_name_iter: impl Iterator<Item = EField>,
     n: usize,
 ) -> (
     proc_macro2::TokenStream,
@@ -121,18 +130,27 @@ fn generate_field_and_values(
     let mut decoded_field_value = quote::quote!();
     let mut field_names = quote::quote!();
 
-    for (i, field_name) in field_name_iter.enumerate() {
+    for (i, (field_name, ty)) in field_name_iter.enumerate() {
         field_names.extend(quote::quote! {
             #field_name,
         });
 
-        let bit_mask = generate_operands::<true>(n, i, &field_name.to_token_stream());
+        let mut prefix = quote::quote!(#field_name);
+        let suffix = if PRIMITIVES_INT.contains(&ty.as_str()) {
+            prefix = quote::quote!(*#field_name as u32);
+            let ty: proc_macro2::TokenStream = ty.parse().unwrap();
+            quote::quote!( as #ty,)
+        } else {
+            quote::quote!(.into(),)
+        };
+
+        let bit_mask = generate_operands::<true>(n, i, &prefix);
         encoded_field_value.extend(quote::quote! {
             result |= #bit_mask;
         });
 
         let bit_mask = generate_operands::<false>(n, i, &quote::quote!(value));
-        decoded_field_value.extend(quote::quote!(#field_name: (#bit_mask).into(),));
+        decoded_field_value.extend(quote::quote!(#field_name: (#bit_mask)#suffix));
     }
 
     (
