@@ -6,21 +6,23 @@ use macros::EnumCount;
 #[repr(u8)]
 pub enum Register {
     Zero,
-    X1,  //RA
-    X2,  //SP
-    X3,  //GP
-    X4,  //TP
-    X5,  //t0 => temporary/alternate return address
-    X6,  // t1
-    X7,  // t2
-    X8,  //s0 => Saved register / frame pointer
-    X9,  // s1,
-    X10, //a0 => function argument / return value
-    X11, //a1
-    X12, //a2
-    X13, //a3
-    X14, //t3
-    X15, //t4
+    RA, //RA
+    SP, //SP
+    GP, //GP
+    TP, //TP
+    T0, //t0 => temporary/alternate return address
+    T1, // t1
+    T2, // t2
+    T3, //t3
+    S0, //s0 => Saved register / frame pointer
+    S1, // s1
+    S2, // s2
+    S3, // s3
+    A0, //a0 => function argument / return value
+    A1, //a1
+    A2, //a2
+    A3, //a3
+    A7, //syscall
 }
 
 impl Register {
@@ -45,22 +47,23 @@ impl From<Register> for u32 {
     fn from(value: Register) -> Self {
         match value {
             Register::Zero => todo!(),
-            Register::X1 => todo!(),
-            Register::X2 => todo!(),
-            Register::X3 => todo!(),
-            Register::X4 => todo!(),
-            Register::X5 => todo!(),
-            Register::X6 => todo!(),
-            Register::X7 => todo!(),
-            Register::X8 => todo!(),
-            Register::X9 => todo!(),
-            Register::X10 => todo!(),
-            Register::X11 => todo!(),
-            Register::X12 => todo!(),
-            Register::X13 => todo!(),
-            Register::X14 => todo!(),
-            Register::X15 => todo!(),
-            // Register::Test(a) => todo!(),
+            Register::RA => todo!(),
+            Register::SP => todo!(),
+            Register::GP => todo!(),
+            Register::TP => todo!(),
+            Register::T0 => todo!(),
+            Register::T1 => todo!(),
+            Register::T2 => todo!(),
+            Register::T3 => todo!(),
+            Register::S0 => todo!(),
+            Register::S1 => todo!(),
+            Register::S2 => todo!(),
+            Register::S3 => todo!(),
+            Register::A0 => todo!(),
+            Register::A1 => todo!(),
+            Register::A2 => todo!(),
+            Register::A3 => todo!(),
+            Register::A7 => todo!(),
         }
     }
 }
@@ -68,21 +71,23 @@ impl From<Register> for u32 {
 impl From<u32> for Register {
     fn from(value: u32) -> Self {
         match value {
-            1 => Register::X1,
-            2 => Register::X2,
-            3 => Register::X3,
-            4 => Register::X4,
-            5 => Register::X5,
-            6 => Register::X6,
-            7 => Register::X7,
-            8 => Register::X8,
-            9 => Register::X9,
-            10 => Register::X10,
-            11 => Register::X11,
-            12 => Register::X12,
-            13 => Register::X13,
-            14 => Register::X14,
-            15 => Register::X15,
+            1 => Register::RA,
+            2 => Register::SP,
+            3 => Register::GP,
+            4 => Register::TP,
+            5 => Register::T0,
+            6 => Register::T1,
+            7 => Register::T2,
+            8 => Register::T3,
+            9 => Register::S0,
+            10 => Register::S1,
+            11 => Register::S2,
+            12 => Register::S3,
+            13 => Register::A0,
+            14 => Register::A1,
+            15 => Register::A2,
+            16 => Register::A3,
+            17 => Register::A7,
             _ => Register::Zero,
         }
     }
@@ -128,5 +133,10 @@ impl ProgramCounter {
     #[inline(always)]
     pub fn value(&self) -> usize {
         self.0
+    }
+
+    #[inline(always)]
+    pub fn reset(&mut self) {
+        self.0 = 0;
     }
 }

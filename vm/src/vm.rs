@@ -19,6 +19,14 @@ impl VM {
         }
     }
 
+    pub fn reset(&mut self) {
+        // let _ = self.memory.zero_all();
+        // self.cpu.registers.reset();
+        // self.flags = 0;
+        // self.halt = false;
+        self.cpu.pc.reset();
+    }
+
     pub fn run(&mut self) -> Result<(), ()> {
         while self.cpu.pc.value() < self.memory.size() {
             self.step()?;
@@ -34,41 +42,41 @@ impl VM {
     }
 
     #[cfg(test)]
-    pub fn test_run(&mut self, program: &[Instruction]) -> Result<(), Box<dyn std::error::Error>> {
-        use crate::instruction::*;
+    pub fn test_run(&mut self, program: &[Instruction]) -> Result<(), ()> {
+        // use crate::instruction::*;
         use crate::memory::Load;
 
         let program_words: Vec<u32> = program.iter().map(|x| x.into()).collect();
         unsafe {
             let program_bytes = program_words.align_to::<u8>().1;
-            self.memory
-                .load_from_vec(program_bytes, 0)
-                .map_err(Box::new)?;
+            self.memory.load_from_vec(program_bytes, 0).unwrap()
+            // .map_err(Box::new)?;
             // https://rust-lang.github.io/rust-clippy/master/index.html#redundant_closure
         }
 
-        //  if r == Register::Zero {
-        //     return;
-        // };
-        self.cpu.registers.set(register::Register::X2, 1024 * 3);
+        // self.cpu.registers.set(register::Register::X2, 1024 * 3);
 
-        while !self.halt {
-            self.step().map_err(|_| "error terminating..")?;
+        while self.cpu.pc.value() < self.memory.size() && !self.halt {
+            println!(
+                "current pc: {0} ... memory: {1}",
+                self.cpu.pc.value(),
+                self.memory.size()
+            );
+            self.step()?;
         }
+        // TODO: FIX THE MEMORY. IT Won't stop the while loop
+        // TODO: ADD HALT INSTRUCTION OR JUST USE WHILE LOOP NO HALT ex: while !halt
+        println!("QUIT PROGRAM");
+
         Ok(())
     }
-}
-
-struct TTest {
-    a: u32,
 }
 
 impl VM {
     fn fetch(&self) -> Result<Instruction, DecodeError> {
         let memory: u32 = self.memory.read(self.cpu.pc.value()).unwrap();
-        let TTest { a } = &TTest { a: 11 };
+        println!("Memory Data: {memory}");
 
-        let gg = a & 0xFF;
         memory.try_into()
     }
 
@@ -77,14 +85,13 @@ impl VM {
     fn decode_execute(&mut self, opcode: Instruction) -> Result<(), ()> {
         match opcode {
             Instruction::Li { dest, value } => {
-                let mut ff = 41u32;
-                ff |= ((10u16 as u32) & 0xFF) << 16;
-                self.cpu.registers.set(dest, value.into());
+                self.cpu.registers.set(dest, value as u32);
                 Ok(())
             }
             Instruction::Add { dest, src1, src2 } => {
                 let r0 = self.cpu.registers.get(src1);
                 let r1 = self.cpu.registers.get(src2);
+
                 let (value, overflow) = r0.overflowing_add(r1);
                 self.cpu.registers.set(dest, value);
 
@@ -162,12 +169,10 @@ impl VM {
                 self.cpu.registers.set(dest, (base >> shift) as u32);
                 Ok(())
             }
-            // Instruction::Jal { dest, src, shift } => todo!(),
-            Instruction::Syscall { number } => todo!(),
-            // Instruction::Halt => {
-            //     self.halt = true;
-            //     Ok(())
-            // }
+            Instruction::Syscall { src1, src2, src3 } => {
+                self.halt = true;
+                Ok(())
+            }
         }
     }
 }
@@ -179,10 +184,6 @@ mod test {
 
     use super::*;
     use crate::instruction::*;
-
-    // fn run_program_code(vm: &mut VM, program: &[Instruction]) -> Result<(), String> {
-    //
-    // }
 
     const CASES: [(u16, u16); 10] = [
         (1, 1),
@@ -200,19 +201,35 @@ mod test {
     #[test]
     fn t_run() {
         for (a, b) in CASES {
-            let mut vm = VM::new(1024);
+            let mut vm = VM::new(1024 * 1024);
+            // vm.reset();
+
             let program = &[
-                Add {
-                    dest: todo!(),
-                    src1: todo!(),
-                    src2: todo!(),
+                Li {
+                    dest: Register::T1,
+                    value: a,
                 },
-                // Imm(Register::X2, Register::X2),
-                // Add(Register::X2, Register::X2, Register::X2),
-                // System(Zero, Zero, Nibble::new_checked(SIGHALT).unwrap()),
+                Li {
+                    dest: Register::T2,
+                    value: b,
+                },
+                Add {
+                    dest: Register::T3,
+                    src1: Register::T2,
+                    src2: Register::T1,
+                },
+                Syscall {
+                    src1: Register::Zero,
+                    src2: Register::Zero,
+                    src3: Register::Zero,
+                }, // System(Zero, Zero, Nibble::new_checked(SIGHALT).unwrap()),
             ];
-            // vm.test_run(program)
+
+            vm.test_run(program).unwrap();
+            let result = vm.cpu.registers.get(Register::T3);
+            let expc = a + b;
+            println!("Result {result}. Expected: {expc}");
+            assert_eq!(vm.cpu.registers.get(Register::T3), expc as u32);
         }
-        // vm.run();
     }
 }

@@ -18,6 +18,10 @@ impl Registers {
         self.0[register as usize] = value;
         // Ok(())
     }
+
+    pub fn reset(&mut self) {
+        self.0 = [0; Register::VARIANT_COUNT];
+    }
 }
 
 #[derive(Default, Debug)]

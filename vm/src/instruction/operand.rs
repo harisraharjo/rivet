@@ -1,10 +1,8 @@
-use std::ops::{Add, BitAnd};
-
 // pub trait Operand {}
 
 // use bitvec::{array::BitArray, order::Lsb0};
 // #[derive(Debug)]
-/// 24 bits Operand
+
 // struct Op24(BitArray<[u8; 3], Lsb0>);
 // impl Op24 {
 //     pub fn new() -> Op24 {
@@ -62,12 +60,12 @@ use std::ops::{Add, BitAnd};
 //     }
 // }
 
-pub struct Address;
-pub struct LabelRef;
+// pub struct Address;
+// pub struct LabelRef;
 
-#[derive(Debug)]
-pub struct Op7;
-#[derive(Debug)]
-pub struct Op5;
-#[derive(Debug, PartialEq, Eq)]
-pub struct Literal12;
+// #[derive(Debug)]
+// pub struct Op7;
+// #[derive(Debug)]
+// pub struct Op5;
+// #[derive(Debug, PartialEq, Eq)]
+// pub struct Literal12;

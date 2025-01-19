@@ -94,8 +94,15 @@ pub enum Instruction {
     //     dest: Register,
     //     // offset:
     // },
+    // TODO: Exit, halt, shutdown
+    // pub const SIGHALT: u8 = 0xf;
+    // #[opcode(0X5D)]
     #[opcode(0x73)]
-    Syscall { number: Register },
+    Syscall {
+        src1: Register,
+        src2: Register,
+        src3: Register,
+    },
     // #[opcode(0xff)]
     // Syscall { number: u32 },
     // #[opcode(0x0)]
@@ -132,9 +139,9 @@ mod test {
     fn t_encode_decode() -> Result<(), DecodeError> {
         let ops: Vec<Instruction> = vec![
             Instruction::Add {
-                dest: Register::X2,
-                src1: Register::X3,
-                src2: Register::X4,
+                dest: Register::A0,
+                src1: Register::A1,
+                src2: Register::A2,
             },
             // Instruction::LoadWord {
             //     dest: Register::X4,
@@ -147,11 +154,13 @@ mod test {
             //     offset: 255,
             // },
             Instruction::Li {
-                dest: Register::X6,
+                dest: Register::T0,
                 value: 150,
             },
             Instruction::Syscall {
-                number: Register::X7,
+                src1: Register::A1,
+                src2: Register::A2,
+                src3: Register::A3,
             },
         ];
         // if (ins & 0x8000) == 0 {
