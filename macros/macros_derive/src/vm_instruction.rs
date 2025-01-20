@@ -51,21 +51,21 @@ fn generate_operands<const IS_ENCODE: bool>(
         3 => match i {
             0 => {
                 if IS_ENCODE {
-                    quote::quote!((#field_name & 0xFF) << 8)
+                    quote::quote!(#field_name << 8)
                 } else {
                     quote::quote!((#field_name >> 8) & 0xFF)
                 }
             }
             1 => {
                 if IS_ENCODE {
-                    quote::quote!((#field_name & 0xFF) << 16)
+                    quote::quote!(#field_name << 16)
                 } else {
                     quote::quote!((#field_name >> 16) & 0xFF)
                 }
             }
             _ => {
                 if IS_ENCODE {
-                    quote::quote!((#field_name & 0xFF) << 24)
+                    quote::quote!(#field_name << 24)
                 } else {
                     quote::quote!((#field_name >> 24) & 0xFF )
                 }
@@ -240,11 +240,9 @@ pub(crate) fn opcode_derive_macro2(
 
         impl #impl_g From<&#enum_name> for u32 #type_g #where_c {
             fn from(value: &#enum_name) -> Self {
-                let result = match value {
+                match value {
                     #(#encoded_variants)*
-                };
-
-                result
+                }
             }
         }
 

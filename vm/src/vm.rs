@@ -21,9 +21,9 @@ impl VM {
 
     pub fn reset(&mut self) {
         // let _ = self.memory.zero_all();
-        // self.cpu.registers.reset();
         // self.flags = 0;
-        // self.halt = false;
+        self.cpu.registers.reset();
+        self.halt = false;
         self.cpu.pc.reset();
     }
 
@@ -43,7 +43,7 @@ impl VM {
 
     #[cfg(test)]
     pub fn test_run(&mut self, program: &[Instruction]) -> Result<(), ()> {
-        // use crate::instruction::*;
+        use crate::instruction::*;
         use crate::memory::Load;
 
         let program_words: Vec<u32> = program.iter().map(|x| x.into()).collect();
@@ -54,7 +54,9 @@ impl VM {
             // https://rust-lang.github.io/rust-clippy/master/index.html#redundant_closure
         }
 
-        // self.cpu.registers.set(register::Register::X2, 1024 * 3);
+        self.cpu
+            .registers
+            .set(register::Register::SP, self.memory.size() as u32);
 
         while self.cpu.pc.value() < self.memory.size() && !self.halt {
             println!(
@@ -64,8 +66,7 @@ impl VM {
             );
             self.step()?;
         }
-        // TODO: FIX THE MEMORY. IT Won't stop the while loop
-        // TODO: ADD HALT INSTRUCTION OR JUST USE WHILE LOOP NO HALT ex: while !halt
+
         println!("QUIT PROGRAM");
 
         Ok(())
@@ -200,10 +201,8 @@ mod test {
 
     #[test]
     fn t_run() {
+        let mut vm = VM::new(1024 * 1024);
         for (a, b) in CASES {
-            let mut vm = VM::new(1024 * 1024);
-            // vm.reset();
-
             let program = &[
                 Li {
                     dest: Register::T1,
@@ -222,7 +221,7 @@ mod test {
                     src1: Register::Zero,
                     src2: Register::Zero,
                     src3: Register::Zero,
-                }, // System(Zero, Zero, Nibble::new_checked(SIGHALT).unwrap()),
+                },
             ];
 
             vm.test_run(program).unwrap();
@@ -230,6 +229,7 @@ mod test {
             let expc = a + b;
             println!("Result {result}. Expected: {expc}");
             assert_eq!(vm.cpu.registers.get(Register::T3), expc as u32);
+            vm.reset();
         }
     }
 }

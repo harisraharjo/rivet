@@ -10,18 +10,21 @@ pub enum Register {
     SP, //SP
     GP, //GP
     TP, //TP
-    T0, //t0 => temporary/alternate return address
-    T1, // t1
-    T2, // t2
-    T3, //t3
-    S0, //s0 => Saved register / frame pointer
-    S1, // s1
-    S2, // s2
-    S3, // s3
-    A0, //a0 => function argument / return value
-    A1, //a1
-    A2, //a2
-    A3, //a3
+    /// temporary values
+    T0, // alternate return address
+    T1,
+    T2,
+    T3,
+    /// saved values
+    S0, //frame pointer
+    S1,
+    S2,
+    S3,
+    /// Argument register (function args & return values)
+    A0, //return value
+    A1,
+    A2,
+    A3,
     A7, //syscall
 }
 
@@ -40,6 +43,46 @@ impl BitAnd<u32> for &Register {
 
     fn bitand(self, rhs: u32) -> Self::Output {
         (*self as u32) & rhs
+    }
+}
+
+impl Shl<u32> for &Register {
+    type Output = u32;
+
+    fn shl(self, rhs: u32) -> Self::Output {
+        (*self as u32) << rhs
+    }
+}
+
+impl Shr<u32> for &Register {
+    type Output = u32;
+
+    fn shr(self, rhs: u32) -> Self::Output {
+        (*self as u32) >> rhs
+    }
+}
+
+impl Shl<Register> for u32 {
+    type Output = Self;
+
+    fn shl(self, rhs: Register) -> Self::Output {
+        self << (rhs as u32)
+    }
+}
+
+impl Shr<Register> for u32 {
+    type Output = Self;
+
+    fn shr(self, rhs: Register) -> Self::Output {
+        self >> (rhs as u32)
+    }
+}
+
+impl Shr<Register> for i32 {
+    type Output = Self;
+
+    fn shr(self, rhs: Register) -> Self::Output {
+        self >> (rhs as i32)
     }
 }
 
@@ -90,30 +133,6 @@ impl From<u32> for Register {
             17 => Register::A7,
             _ => Register::Zero,
         }
-    }
-}
-
-impl Shl<Register> for u32 {
-    type Output = Self;
-
-    fn shl(self, rhs: Register) -> Self::Output {
-        self << (rhs as u32)
-    }
-}
-
-impl Shr<Register> for u32 {
-    type Output = Self;
-
-    fn shr(self, rhs: Register) -> Self::Output {
-        self >> (rhs as u32)
-    }
-}
-
-impl Shr<Register> for i32 {
-    type Output = Self;
-
-    fn shr(self, rhs: Register) -> Self::Output {
-        self >> (rhs as i32)
     }
 }
 

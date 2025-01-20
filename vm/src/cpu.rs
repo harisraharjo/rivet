@@ -6,10 +6,6 @@ use crate::instruction::register::{ProgramCounter, Register};
 pub struct Registers([u32; Register::VARIANT_COUNT]);
 
 impl Registers {
-    // fn new() -> Registers {
-    //     Registers{  }
-    // }
-
     pub fn get(&self, register: Register) -> u32 {
         self.0[register as usize]
     }
