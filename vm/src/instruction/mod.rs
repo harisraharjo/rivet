@@ -70,19 +70,23 @@ pub enum Instruction {
     },
     // --- Imm ---
     #[opcode(0x13)]
-    AddI { dest: Register, src: u16 },
-    // #[opcode(0xc)]
-    // LoadWord {
-    //     dest: Register,
-    //     src: Register,
-    //     offset: u8,
-    // },
-    // #[opcode(0xd)]
-    // StoreWord {
-    //     dest: Register,
-    //     src: Register,
-    //     offset: u8,
-    // },
+    AddI {
+        dest: Register,
+        src: Register,
+        value: u16,
+    },
+    #[opcode(0xc)]
+    LoadWord {
+        dest: Register,
+        src: Register,
+        offset: u8,
+    },
+    #[opcode(0xd)]
+    StoreWord {
+        dest: Register,
+        src: Register,
+        offset: u8,
+    },
     // #[opcode(0xe)]
     // LoadByte {
     //     dest: Register,

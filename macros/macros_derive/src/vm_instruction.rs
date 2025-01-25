@@ -65,7 +65,13 @@ fn generate_operands<const IS_ENCODE: bool>(
             }
             _ => {
                 if IS_ENCODE {
-                    quote::quote!(#field_name << 24)
+                    // quote::quote! {
+                    //     #field_name << 24
+                    // }
+                    // let mut f = field_name.to_owned();
+                    // f.extend(quote::quote! { << 24});
+                    quote::quote! {#field_name << 24}
+                    // f
                 } else {
                     quote::quote!((#field_name >> 24) & 0xFF )
                 }
@@ -137,9 +143,11 @@ fn generate_field_and_values(
 
         let mut prefix = quote::quote!(#field_name);
         let suffix = if PRIMITIVES_INT.contains(&ty.as_str()) {
-            prefix = quote::quote!(*#field_name as u32);
+            prefix = quote::quote! {
+                (*#field_name as u32)
+            };
             let ty: proc_macro2::TokenStream = ty.parse().unwrap();
-            quote::quote!( as #ty,)
+            quote::quote!(as #ty,)
         } else {
             quote::quote!(.into(),)
         };
@@ -150,7 +158,9 @@ fn generate_field_and_values(
         });
 
         let bit_mask = generate_operands::<false>(n, i, &quote::quote!(value));
-        decoded_field_value.extend(quote::quote!(#field_name: (#bit_mask)#suffix));
+        decoded_field_value.extend(quote::quote! {
+            #field_name: (#bit_mask) #suffix
+        });
     }
 
     (
@@ -230,6 +240,7 @@ pub(crate) fn opcode_derive_macro2(
             type Error = DecodeError;
 
             fn try_from(value: u32) -> Result<Self, Self::Error> {
+                println!("Decoding [u32] to instruction");
                 let opcode = value as u8;
                 match opcode {
                     #(#decoded_variants)*
