@@ -1,5 +1,7 @@
 // use std::{marker::PhantomData, ops::Range};
 
+use std::ops::Not;
+
 use thiserror::Error;
 
 // use log::debug;
@@ -25,16 +27,14 @@ pub enum MemoryError {
 pub trait ReadWrite<T> {
     fn read(&self, address: usize) -> Result<T, MemoryError>;
     fn write(&mut self, address: usize, value: T) -> Result<(), MemoryError>;
+    // fn bulk_write(&self, address: usize, value: T) -> i32 {
+    //     let bytes = value.to_le_bytes();
+    //     self.0[address..address + 4].copy_from_slice(&bytes);
+    // }
 }
 
-pub trait Load: ReadWrite<u8> {
-    fn load_program(&mut self, program: &[u8], start_address: usize);
-    fn load_from_vec(&mut self, program: &[u8], addr: u32) -> Result<(), MemoryError> {
-        for (i, b) in program.iter().enumerate() {
-            self.write((addr as usize) + i, *b)?
-        }
-        Ok(())
-    }
+pub trait Addressable: ReadWrite<u8> {
+    fn is_empty(&self) -> bool;
 }
 
 pub struct LinearMemory(Vec<u8>);
@@ -85,24 +85,53 @@ impl ReadWrite<u32> for LinearMemory {
     }
 }
 
-impl Load for LinearMemory {
-    fn load_program(&mut self, program: &[u8], start_address: usize) {
-        let end_address = start_address + program.len();
-        self.0[start_address..end_address].copy_from_slice(program);
+impl Addressable for LinearMemory {
+    fn is_empty(&self) -> bool {
+        self.0[0] == 0
     }
 }
 
+#[derive(Debug, Clone, Copy)]
 enum Permission {
     R,
     W,
     X,
 }
 
-enum Region {
-    Code,
-    Data,
-    Stack,
-    Heap,
+#[derive(Default, Debug)]
+struct Permissions([bool; 3]);
+
+impl Permissions {
+    fn new(permissions: &[Permission]) -> Permissions {
+        let mut perm: [bool; 3] = [false, false, false];
+        for p in permissions {
+            perm[*p as usize] = true
+        }
+
+        Permissions(perm)
+    }
+
+    fn enable(&mut self, permission: Permission) {
+        self.0[permission as usize] = true;
+    }
+
+    fn disable(&mut self, permission: Permission) {
+        self.0[permission as usize] = false;
+    }
+}
+
+#[derive(Default, Debug)]
+struct RegionRange(u32, u32);
+impl RegionRange {
+    fn new(start: u32, end: u32) -> RegionRange {
+        RegionRange(start, end)
+    }
+}
+
+#[derive(Debug)]
+struct Region {
+    permissions: Permissions,
+    range: RegionRange,
 }
 
 impl Region {
@@ -115,24 +144,6 @@ impl Region {
 
     //     // self.start <= address && address < (self.size + self.start)
     // }
-
-    pub const fn range(&self) -> (u32, u32) {
-        match self {
-            Region::Code => (0x0000_0000, 0x0000_1000),
-            Region::Data => (0x0000_1000, 0x4000_0000),
-            Region::Heap => (0x4000_0000, 0x8000_0000),
-            Region::Stack => (0x8000_0000, 0xFFFF_FFFF),
-        }
-    }
-
-    pub const fn permissions(&self) -> &[Permission] {
-        match self {
-            Region::Data => &[Permission::R, Permission::X],
-            Region::Code => &[Permission::R, Permission::X],
-            Region::Heap => &[Permission::R, Permission::X, Permission::W],
-            Region::Stack => &[Permission::R, Permission::X, Permission::W],
-        }
-    }
 
     // pub fn offset(&self, address: usize) -> usize {
     //     address - self.start
@@ -148,14 +159,37 @@ pub struct Regions {
 }
 
 impl Regions {
-    fn new() -> Regions {
+    pub fn new() -> Regions {
+        let rx = [Permission::R, Permission::X];
+        let rwx = [Permission::R, Permission::X, Permission::W];
+
         Regions {
-            code: Region::Code,
-            data: Region::Data,
-            heap: Region::Heap,
-            stack: Region::Stack,
+            code: Region {
+                permissions: Permissions::new(&rx),
+                range: RegionRange::new(0x0000_0000, 0x0000_1000),
+            },
+            data: Region {
+                permissions: Permissions::new(&rx),
+                range: RegionRange::new(0x0000_1000, 0x4000_0000),
+            },
+            heap: Region {
+                permissions: Permissions::new(&rwx),
+                range: RegionRange::new(0x4000_0000, 0x8000_0000),
+            },
+            stack: Region {
+                permissions: Permissions::new(&rwx),
+                range: RegionRange::new(0x8000_0000, 0xFFFF_FFFF),
+            },
         }
     }
+
+    // fn valid(&self) -> i32 {
+    //     let f = 0xFFFFF000;
+    //     // 4294963200
+    //     // 4294967295
+    //     let fg= u32::MAX;
+    //     1
+    // }
 }
 
 #[derive(Debug)]
@@ -169,12 +203,36 @@ pub struct MemoryManager<M> {
     regions: Regions,
 }
 
-impl<M> MemoryManager<M> {
+impl<M> MemoryManager<M>
+where
+    M: Addressable,
+{
     pub fn new(memory: M) -> MemoryManager<M> {
         MemoryManager {
             memory,
             regions: Regions::new(),
         }
+    }
+
+    fn load_program(&mut self, program: &[u32], start_address: usize) {
+        self.regions.code.permissions.disable(Permission::W);
+        let end_address = start_address + program.len();
+        // TODO: FIX ME
+        // self.0[start_address..end_address].copy_from_slice(program);
+    }
+
+    #[cfg(test)]
+    pub fn load_program_test<T>(&mut self, program: &[T], addr: u32)
+    where
+        M: ReadWrite<T>,
+        T: Copy,
+    {
+        self.regions.code.permissions.enable(Permission::W);
+        for (i, b) in program.iter().enumerate() {
+            let addr = addr + ((i as u32) * 4);
+            self.memory.write(addr as usize, *b).unwrap();
+        }
+        self.regions.code.permissions.disable(Permission::W);
     }
 
     /// Validate address and alignment, return buffer offset
@@ -190,17 +248,19 @@ impl<M> MemoryManager<M> {
             return Err("Unaligned access");
         }
 
-        let r = self.regions.code.range();
+        let r = &self.regions.code.range;
         println!("Code segment start: {}, end: {}", r.0, r.1);
         // Code segment (read-only)
         if vaddr >= r.0 && vaddr + size <= r.1 {
-            if is_write {
+            let sz = self.memory.is_empty();
+            println!("Size: {sz}");
+            if is_write && !sz {
                 return Err("Write to code segment");
             }
             return Ok(vaddr as usize);
         }
 
-        let r = self.regions.code.range();
+        let r = &self.regions.data.range;
         println!("Data segment start: {}, end: {}", r.0, r.1);
         // Data segment (read-only)
         if vaddr >= r.0 && vaddr + size <= r.1 {
@@ -210,14 +270,14 @@ impl<M> MemoryManager<M> {
             return Ok(vaddr as usize);
         }
 
-        let r = self.regions.heap.range();
+        let r = &self.regions.heap.range;
         println!("Heap segment start: {}, end: {}", r.0, r.1);
         // Heap segment (read/write)
         if vaddr >= r.0 && vaddr + size <= r.1 {
             return Ok(vaddr as usize);
         }
 
-        let r = self.regions.stack.range();
+        let r = &self.regions.stack.range;
         println!("Stack segment start: {}, end: {}", r.0, r.1);
         // Stack segment (read/write, grows downward)
         if vaddr <= r.0 && vaddr >= r.1 {
@@ -270,22 +330,6 @@ impl<M> MemoryManager<M> {
     //     }
     // }
 
-    #[cfg(test)]
-    pub fn load_from_vec_delete_me_later<T>(
-        &mut self,
-        program: &[T],
-        addr: u32,
-    ) -> Result<(), MemoryError>
-    where
-        T: Copy,
-        M: ReadWrite<T>,
-    {
-        for (i, b) in program.iter().enumerate() {
-            self.memory.write((addr as usize) + i, *b)?
-        }
-        Ok(())
-    }
-
     // Inherent `read` method
     // fn read<T>(&self, address: usize) -> Result<T, MemoryError>
     // where
@@ -299,57 +343,6 @@ impl<M> MemoryManager<M> {
     // let ff = ReadWrite::<T>::read(&self.regions[local.memory_index].memory, local.offset);
     // }
 }
-
-// impl<M> ReadWrite<u8> for MemoryManager<M>
-// where
-//     M: Addressable + ReadWrite,
-// {
-//     fn read(&self, address: usize) -> Result<u8, MemoryError> {
-//         // let local = self.translate(address)?;
-
-//         // //         const IO_BASE_ADDRESS: usize = 0x1000; // Base address for memory-mapped I/O
-//         // // const IO_SIZE: usize = 0x1000; // Size of the I/O region (4 KB)
-
-//         //         // Regular memory
-//         //             let physical_address = self.translate(address);
-//         //             let bytes = [
-//         //                 self.physical_memory[physical_address],
-//         //                 self.physical_memory[physical_address + 1],
-//         //                 self.physical_memory[physical_address + 2],
-//         //                 self.physical_memory[physical_address + 3],
-//         //             ];
-//         //             u32::from_le_bytes(bytes)
-
-//         // self.regions[local.memory_index].memory.read(local.offset)
-//         self.memory.read(address)
-//     }
-
-//     fn write(&mut self, address: usize, value: u8) -> Result<(), MemoryError> {
-//         // let local = self.translate(address)?;
-//         // self.regions[local.memory_index]
-//         //     .memory
-//         //     .write(local.offset, value)
-//         self.memory.write(address, value)
-//     }
-// }
-
-// impl<M> ReadWrite<u32> for MemoryManager<M>
-// where
-//     M: Addressable + ReadWrite + ReadWrite<u32>,
-// {
-//     fn read(&self, address: usize) -> Result<u32, MemoryError> {
-//         // let local = self.translate(address)?;
-//         // println!("virtual: {address}, local: {:#?}", local);
-//         // self.regions[local.memory_index].memory.read(local.offset)
-
-//         self.memory.read(address)
-//         // ReadWrite::<u32>::read(&self.regions[local.memory_index].memory, local.offset)
-//     }
-
-//     fn write(&mut self, address: usize, value: u32) -> Result<(), MemoryError> {
-//         todo!()
-//     }
-// }
 
 #[cfg(test)]
 mod tests {

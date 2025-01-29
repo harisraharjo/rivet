@@ -1,83 +1,49 @@
-fn extract_opcodes<T>(
+fn extract_isa(
     variants: &syn::punctuated::Punctuated<syn::Variant, syn::token::Comma>,
-) -> impl Iterator<Item = Option<T>> + '_
-where
-    T: std::str::FromStr,
-    T::Err: std::fmt::Display,
+) -> impl Iterator<Item = Vec<u32>> + '_
+// where
+//     T: std::str::FromStr,
+//     T::Err: std::fmt::Display,
 {
-    variants
+    let bits = variants
         .into_iter()
-        .map(|v| v.attrs.iter().filter(|attr| attr.path().is_ident("opcode")))
+        .map(|v| v.attrs.iter().filter(|attr| attr.path().is_ident("isa")))
         .map(|attr| {
-            attr.map(|attr| {
-                let value: syn::LitInt = attr.parse_args().unwrap();
-                value.base10_parse().unwrap()
-            })
-            .next()
-        })
+            let mut data = Vec::<u32>::new();
+
+            attr.for_each(|attr| {
+                let args = attr.parse_args_with(
+                syn::punctuated::Punctuated::<syn::LitInt, syn::Token![,]>::parse_terminated
+            ).unwrap();
+
+                for lit in args {
+                    let value: u32 = lit.base10_parse().unwrap();
+                    data.push(value);
+                }
+            });
+
+            data
+        });
+
+    bits
 }
 
 type EncodedValue = proc_macro2::TokenStream;
 fn generate_operands<const IS_ENCODE: bool>(
-    n: usize,
-    i: usize,
+    field_bits: &(&u32, u32),
     field_name: &proc_macro2::TokenStream,
 ) -> EncodedValue {
-    match n {
-        // 24 bit
-        1 => {
-            if IS_ENCODE {
-                quote::quote!((#field_name & 0xFFFFFF) << 8 )
-            } else {
-                quote::quote!((#field_name >> 8) & 0xFFFFFF)
-            }
-        }
-        2 => {
-            if i < 1 {
-                return if IS_ENCODE {
-                    quote::quote!((#field_name & 0xFF) << 8)
-                } else {
-                    quote::quote!((#field_name >> 8) & 0xFF)
-                };
-            }
+    let bit = *field_bits.0;
+    let bit_mask: proc_macro2::TokenStream =
+        format!("0b{}", "1".repeat(bit as usize)).parse().unwrap();
+    // eprintln!("BITMASK: {bit_mask}");
 
-            if IS_ENCODE {
-                quote::quote!((#field_name & 0xFFFF) << 16 )
-            } else {
-                quote::quote!((#field_name >> 16) & 0xFFFF)
-            }
-        }
+    let acc_bits = field_bits.1;
 
-        3 => match i {
-            0 => {
-                if IS_ENCODE {
-                    quote::quote!(#field_name << 8)
-                } else {
-                    quote::quote!((#field_name >> 8) & 0xFF)
-                }
-            }
-            1 => {
-                if IS_ENCODE {
-                    quote::quote!(#field_name << 16)
-                } else {
-                    quote::quote!((#field_name >> 16) & 0xFF)
-                }
-            }
-            _ => {
-                if IS_ENCODE {
-                    // quote::quote! {
-                    //     #field_name << 24
-                    // }
-                    // let mut f = field_name.to_owned();
-                    // f.extend(quote::quote! { << 24});
-                    quote::quote! {#field_name << 24}
-                    // f
-                } else {
-                    quote::quote!((#field_name >> 24) & 0xFF )
-                }
-            }
-        },
-        _ => panic!("Max 3 operands"),
+    if IS_ENCODE {
+        quote::quote!((#field_name & #bit_mask) << #acc_bits )
+    } else {
+        quote::quote!((#field_name >> #acc_bits) & #bit_mask )
     }
 }
 
@@ -122,11 +88,11 @@ fn extract_variant_data(
     })
 }
 
-const PRIMITIVES_INT: [&str; 3] = ["u8", "u16", "u32"];
+const PRIMITIVES_INT: [&str; 5] = ["u8", "u16", "i16", "u32", "i32"];
 
-fn generate_field_and_values(
-    field_name_iter: impl Iterator<Item = EField>,
-    n: usize,
+fn generate_fields(
+    fields_iter: impl Iterator<Item = EField>,
+    isa: Vec<u32>,
 ) -> (
     proc_macro2::TokenStream,
     proc_macro2::TokenStream,
@@ -136,7 +102,12 @@ fn generate_field_and_values(
     let mut decoded_field_value = quote::quote!();
     let mut field_names = quote::quote!();
 
-    for (i, (field_name, ty)) in field_name_iter.enumerate() {
+    let isa_iter = isa.iter().scan(0u32, |state, x| {
+        *state += x;
+        Some(*state)
+    });
+
+    for (field_bits, (field_name, ty)) in isa[1..].iter().zip(isa_iter).zip(fields_iter) {
         field_names.extend(quote::quote! {
             #field_name,
         });
@@ -152,12 +123,12 @@ fn generate_field_and_values(
             quote::quote!(.into(),)
         };
 
-        let bit_mask = generate_operands::<true>(n, i, &prefix);
+        let bit_mask = generate_operands::<true>(&field_bits, &prefix);
         encoded_field_value.extend(quote::quote! {
             result |= #bit_mask;
         });
 
-        let bit_mask = generate_operands::<false>(n, i, &quote::quote!(value));
+        let bit_mask = generate_operands::<false>(&field_bits, &quote::quote!(value));
         decoded_field_value.extend(quote::quote! {
             #field_name: (#bit_mask) #suffix
         });
@@ -174,24 +145,26 @@ fn generate_field_and_values(
     )
 }
 
-pub(crate) fn opcode_derive_macro2(
-    input: proc_macro2::TokenStream,
-) -> deluxe::Result<proc_macro2::TokenStream> {
+pub(crate) fn isa2(input: proc_macro2::TokenStream) -> deluxe::Result<proc_macro2::TokenStream> {
     // parse
     let mut ast: syn::DeriveInput = syn::parse2(input)?;
     let enum_name = &ast.ident;
     let (impl_g, type_g, where_c) = ast.generics.split_for_impl();
+
     let (encoded_variants, decoded_variants) = match &mut ast.data {
         syn::Data::Enum(syn::DataEnum { variants, .. }) => {
-            let variant_opcode_iter = extract_opcodes::<u8>(variants);
+            let variant_isa_iter = extract_isa(variants);
             let variant_data_iter = extract_variant_data(variants);
 
             let (encoded, decoded): (Vec<_>, Vec<_>) = variant_data_iter
-                .zip(variant_opcode_iter)
-                .map(|((variant_name, variant_span, fields), opcode)| {
+                .zip(variant_isa_iter)
+                .map(|((variant_name, variant_span, fields), mut isa)| {
+                    let opcode = isa[0] as u8;
+                    isa[0] = 8; //change opcode value to bits it occupy
+
                     let (fields, raw_encoded_field_value, raw_decoded_field_value) =
-                        if let Some((field_name_iter, length)) = fields {
-                            generate_field_and_values(field_name_iter, length)
+                        if let Some((field_iter, _)) = fields {
+                            generate_fields(field_iter, isa)
                         } else {
                             (quote::quote!(), quote::quote!(), quote::quote!())
                         };
@@ -199,7 +172,7 @@ pub(crate) fn opcode_derive_macro2(
                     // encode
                     let encoded_field_value = quote::quote! {
                         {
-                            let mut  result: u32 = #opcode as u32;
+                            let mut result = #opcode as u32;
                             #raw_encoded_field_value
                             result
                         }
@@ -240,7 +213,6 @@ pub(crate) fn opcode_derive_macro2(
             type Error = DecodeError;
 
             fn try_from(value: u32) -> Result<Self, Self::Error> {
-                println!("Decoding [u32] to instruction");
                 let opcode = value as u8;
                 match opcode {
                     #(#decoded_variants)*
@@ -256,15 +228,6 @@ pub(crate) fn opcode_derive_macro2(
                 }
             }
         }
-
-        // impl #impl_g VMInstruction for #enum_name #type_g #where_c {
-        //     fn opcode(&self) -> u8 {
-        //         match self {
-        //             #(#encoded_variant)*
-        //         }
-        //     }
-        // }
-
 
     })
 }

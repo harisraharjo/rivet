@@ -6,110 +6,108 @@ use register::Register;
 
 #[derive(Debug, PartialEq, Eq, VMInstruction)]
 pub enum Instruction {
-    #[opcode(0xff)]
-    Li { dest: Register, value: u16 },
-    // #[opcode(0xff)]
-    // Nop,
+    #[isa(0xff, 5, 19)]
+    Li { dest: Register, value: u32 },
     // ---Binary Operators---
-    #[opcode(0x1)] //8 bits
+    #[isa(0x1, 5, 5, 5)]
     Add {
         dest: Register,
         src1: Register,
         src2: Register,
     },
-    #[opcode(0x2)]
+    #[isa(0x2, 5, 5, 5)]
     Sub {
         dest: Register,
         src1: Register,
         src2: Register,
     },
-    #[opcode(0x3)]
+    #[isa(0x3, 5, 5, 5)]
     Mul {
         dest: Register,
         src1: Register,
         src2: Register,
     },
-    #[opcode(0x4)]
+    #[isa(0x4, 5, 5, 5)]
     And {
         dest: Register,
         src1: Register,
         src2: Register,
     },
-    #[opcode(0x5)]
+    #[isa(0x5, 5, 5, 5)]
     Or {
         dest: Register,
         src1: Register,
         src2: Register,
     },
-    #[opcode(0x6)]
+    #[isa(0x6, 5, 5, 5)]
     Xor {
         dest: Register,
         src1: Register,
         src2: Register,
     },
     /// Shift Left
-    #[opcode(0x7)]
+    #[isa(0x7, 5, 5, 5)]
     Shl {
         dest: Register,
         src: Register,
         shift: Register,
     },
     /// Shift Right Logical
-    #[opcode(0x8)]
+    #[isa(0x8, 5, 5, 5)]
     Shr {
         dest: Register,
         src: Register,
         shift: Register,
     },
     /// Shift Right Arith
-    #[opcode(0x9)]
+    #[isa(0x9, 5, 5, 5)]
     ShrA {
         dest: Register,
         src: Register,
         shift: Register,
     },
     // --- Imm ---
-    #[opcode(0x13)]
+    #[isa(0x13, 5, 5, 14)]
     AddI {
         dest: Register,
         src: Register,
         value: u16,
     },
-    #[opcode(0xc)]
+    #[isa(0xc, 5, 5, 14)]
     LoadWord {
         dest: Register,
         src: Register,
-        offset: u8,
+        offset: u16,
     },
-    #[opcode(0xd)]
+    #[isa(0xd, 5, 5, 14)]
     StoreWord {
         dest: Register,
         src: Register,
-        offset: u8,
+        offset: u16,
     },
-    // #[opcode(0xe)]
+    // #[isa(0xe,5,5,5)]
     // LoadByte {
     //     dest: Register,
     //     src: Register,
     //     offset: u8,
     // },
-    // #[opcode(0xff)]
+    // #[isa(0xff,5,5,5)]
     // Jal {
     //     dest: Register,
     //     // offset:
     // },
     // TODO: Exit, halt, shutdown
     // pub const SIGHALT: u8 = 0xf;
-    // #[opcode(0X5D)]
-    #[opcode(0x73)]
+    // #[isa(0X5D,5,5,5)]
+    #[isa(0x73, 5, 5, 5)]
     Syscall {
         src1: Register,
         src2: Register,
         src3: Register,
     },
-    // #[opcode(0xff)]
+    // #[isa(0xff,5,5,5)]
     // Syscall { number: u32 },
-    // #[opcode(0x0)]
+    // #[isa(0x0,5,5,5)]
     // Halt,
 }
 
@@ -136,7 +134,7 @@ mod test {
 
     #[test]
     fn t_overflow_todo() {
-        println!("TODO: TEST OVERFLOW IN THE ASSEMBLER");
+        // TODO: TEST OVERFLOW IN THE ASSEMBLER NOT HERE
     }
 
     #[test]
@@ -160,6 +158,11 @@ mod test {
             Instruction::Li {
                 dest: Register::T0,
                 value: 150,
+            },
+            Instruction::AddI {
+                dest: Register::A0,
+                src: Register::A1,
+                value: 13,
             },
             Instruction::Syscall {
                 src1: Register::A1,
@@ -197,7 +200,7 @@ mod test {
 
         let encoded: Vec<u32> = ops.iter().map(|x| x.into()).collect();
         for (i, (l, r)) in ops.iter().zip(encoded.iter()).enumerate() {
-            println!("{i} l: {:?}, r: {1}", l, r);
+            println!("{i} instruction: {:?}, memory representation: {1}", l, r);
             let decoded = Instruction::try_from(*r)?;
             println!("Decoded: {:?}", decoded);
             assert_eq!(*l, decoded);

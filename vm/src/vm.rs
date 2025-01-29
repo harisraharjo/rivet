@@ -3,7 +3,7 @@ use bitvec::store::BitStore;
 use crate::{
     cpu::CPU,
     instruction::{register::Register, DecodeError, Instruction},
-    memory::{LinearMemory, Load, MemoryError, MemoryManager, ReadWrite},
+    memory::{Addressable, LinearMemory, MemoryError, MemoryManager, ReadWrite},
 };
 
 pub struct VM<M> {
@@ -15,7 +15,7 @@ pub struct VM<M> {
 
 impl<M> VM<M>
 where
-    M: Load + ReadWrite<u32>,
+    M: Addressable + ReadWrite<u32>,
 {
     pub fn new(memory_allocation: usize, memory: M) -> Self {
         Self {
@@ -52,16 +52,27 @@ where
     }
 
     #[cfg(test)]
-    pub fn test_run(&mut self, program: &[Instruction]) -> Result<(), ()> {
-        use crate::instruction::*;
-        use crate::memory::Load;
+    pub fn load_from_vec<T>(&mut self, program: &[T], addr: u32) -> Result<(), MemoryError>
+    where
+        T: Copy,
+        M: ReadWrite<T>,
+    {
+        for (i, b) in program.iter().enumerate() {
+            let addr = addr + ((i as u32) * 4);
+            self.memory.write(addr, *b)?
+        }
+        Ok(())
+    }
 
-        let program_words: Vec<u32> = program.iter().map(|x| x.into()).collect();
+    #[cfg(test)]
+    pub fn test_run(&mut self, program: &[Instruction]) -> Result<(), ()> {
+        let program_words: Vec<u32> = program
+            .iter()
+            .map(|instruction| instruction.into())
+            .collect();
         unsafe {
-            let program_bytes = program_words.align_to::<u8>().1;
-            self.memory
-                .load_from_vec_delete_me_later(program_bytes, 0)
-                .unwrap();
+            // let program_bytes = program_words.align_to::<u8>().1;
+            self.memory.load_program_test(&program_words, 0);
             // .map_err(Box::new)?;
         }
 
@@ -83,7 +94,7 @@ where
 
 impl<M> VM<M>
 where
-    M: Load + ReadWrite<u32>,
+    M: Addressable + ReadWrite<u32>,
 {
     fn fetch(&self) -> Result<Instruction, DecodeError> {
         println!("Fetching..");
@@ -214,24 +225,20 @@ mod test {
     ];
 
     #[test]
-    fn t_run() {
+    fn t_arith() {
         let size = 1024 * 1024;
-        let linear_mem1 = LinearMemory::new(size);
+        let linear_mem = LinearMemory::new(size);
 
-        let mut vm = VM::new(size, linear_mem1);
-
-        // vec![Region::new(start, size, memory)]
-
-        // vm.memory.register(0x100001, size, linear_mem2);
+        let mut vm = VM::new(size, linear_mem);
         for (a, b) in CASES {
             let program = &[
                 Li {
                     dest: Register::T1,
-                    value: a,
+                    value: a as u32,
                 },
                 Li {
                     dest: Register::T2,
-                    value: b,
+                    value: b as u32,
                 },
                 Add {
                     dest: Register::T3,
@@ -249,5 +256,43 @@ mod test {
             assert_eq!(vm.cpu.registers.get(Register::T3), (a + b) as u32);
             vm.reset();
         }
+    }
+
+    #[test]
+    fn t_load_store() -> Result<(), DecodeError> {
+        let size = 1024 * 1024;
+        let linear_mem = LinearMemory::new(size);
+        let mut vm = VM::new(size, linear_mem);
+
+        // for (a, b) in CASES {
+        //     let program = &[
+        //         Li {
+        //             dest: Register::T1,
+        //             value: a as u32,
+        //         },
+        //         Li {
+        //             dest: Register::T2,
+        //             value: b as u32,
+        //         },
+        //         Add {
+        //             dest: Register::T3,
+        //             src1: Register::T2,
+        //             src2: Register::T1,
+        //         },
+        //         Syscall {
+        //             src1: Register::Zero,
+        //             src2: Register::Zero,
+        //             src3: Register::Zero,
+        //         },
+        //     ];
+
+        //     vm.test_run(program).unwrap();
+        //     assert_eq!(vm.cpu.registers.get(Register::T3), (a + b) as u32);
+        //     vm.reset();
+        // }
+
+        // let store = Instruction::StoreWord { dest: Register::A0, src: Register::A1, offset: () }
+
+        Ok(())
     }
 }
