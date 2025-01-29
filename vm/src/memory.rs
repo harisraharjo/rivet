@@ -1,6 +1,9 @@
 // use std::{marker::PhantomData, ops::Range};
 
-use std::ops::{Index, IndexMut};
+use std::{
+    fmt::Debug,
+    ops::{Index, IndexMut, Range},
+};
 
 use thiserror::Error;
 
@@ -24,7 +27,10 @@ pub enum MemoryError {
     ReadOnly,
 }
 
-pub trait ReadWrite<T> {
+pub trait ReadWrite<T>
+where
+    T: Copy,
+{
     fn read(&self, address: usize) -> Result<T, MemoryError>;
     fn write(&mut self, address: usize, value: T) -> Result<(), MemoryError>;
     // fn bulk_write(&self, address: usize, value: T) -> i32 {
@@ -33,10 +39,14 @@ pub trait ReadWrite<T> {
     // }
 }
 
-pub trait Addressable: ReadWrite<u8> {
+pub trait Addressable: ReadWrite<u8> + ReadWrite<u32> + Index<Range<usize>>
+where
+    Self::Output: Debug,
+{
     fn is_empty(&self) -> bool;
 }
 
+#[derive(Debug)]
 pub struct LinearMemory(Vec<u8>);
 impl LinearMemory {
     pub fn new(size: usize) -> LinearMemory {
@@ -46,6 +56,12 @@ impl LinearMemory {
     pub fn size(&self) -> usize {
         self.0.len()
     }
+
+    // #[inline(always)]
+    // fn bulk_write<const BYTES: usize>(&mut self, address: usize, value: &[u8]) {
+    //     self.bulk_write::<2>(address, &value.to_le_bytes());
+    //     self.0[address..address + BYTES].copy_from_slice(value);
+    // }
 }
 
 impl ReadWrite<u8> for LinearMemory {
@@ -75,6 +91,7 @@ impl ReadWrite<u16> for LinearMemory {
 impl ReadWrite<u32> for LinearMemory {
     fn read(&self, address: usize) -> Result<u32, MemoryError> {
         let bytes = &self.0[address..address + 4];
+
         Ok(u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
     }
 
@@ -82,6 +99,14 @@ impl ReadWrite<u32> for LinearMemory {
         let bytes = value.to_le_bytes();
         self.0[address..address + 4].copy_from_slice(&bytes);
         Ok(())
+    }
+}
+
+impl Index<Range<usize>> for LinearMemory {
+    type Output = [u8];
+
+    fn index(&self, index: Range<usize>) -> &Self::Output {
+        &self.0[index]
     }
 }
 
@@ -118,19 +143,11 @@ impl Permissions {
     fn disable(&mut self, permission: Permission) {
         self.0[permission as usize] = false;
     }
+
+    fn status(&self, permission: Permission) -> bool {
+        self.0[permission as usize]
+    }
 }
-
-// impl Index<Permission> for Permissions {
-//     type Output = * bool;
-
-//     fn index(&self, permission: Permission) -> &Self::Output {
-//         match permission {
-//             Permission::R => self.0[0],
-//             Permission::W => self.0[1],
-//             Permission::X => self.0[2],
-//         }
-//     }
-// }
 
 #[derive(Debug)]
 enum RegionType {
@@ -144,7 +161,25 @@ enum RegionType {
 struct RegionRange(u32, u32);
 impl RegionRange {
     fn new(start: u32, end: u32) -> RegionRange {
-        RegionRange(start, end)
+        RegionRange(start, end + 1)
+    }
+
+    fn start(&self) -> u32 {
+        self.0
+    }
+
+    /// Exclusive
+    fn end(&self) -> u32 {
+        self.1
+    }
+}
+
+impl From<&RegionRange> for Range<usize> {
+    fn from(value: &RegionRange) -> Self {
+        Self {
+            start: value.0 as usize,
+            end: value.1 as usize,
+        }
     }
 }
 
@@ -153,6 +188,7 @@ struct Region {
     permissions: Permissions,
     range: RegionRange,
     t: RegionType,
+    // size: usize
 }
 
 impl Region {
@@ -161,6 +197,7 @@ impl Region {
             permissions,
             range,
             t,
+            // size,
         }
     }
 
@@ -190,7 +227,6 @@ impl Regions {
     //     let f = 0xFFFFF000;
     //     // 4294963200
     //     // 4294967295
-    //     let fg= u32::MAX;
     //     1
     // }
 }
@@ -252,53 +288,54 @@ impl Default for Regions {
 //     memory_Index: usize,
 // }
 
-pub struct MemoryManager<M> {
-    memory: M,
+pub struct MemoryManager {
+    memory: LinearMemory,
     regions: Regions,
 }
 
-impl<M> MemoryManager<M>
-where
-    M: Addressable,
-{
-    pub fn new(memory: M) -> MemoryManager<M> {
+impl MemoryManager {
+    pub fn new(memory_allocation: usize) -> MemoryManager {
         MemoryManager {
-            memory,
+            memory: LinearMemory::new(memory_allocation),
             regions: Regions::default(),
         }
     }
 
-    fn load_program(&mut self, program: &[u32], start_address: usize) {
+    pub fn load_program(&mut self, program: &[u8], start_address: u32) -> Result<(), MemoryError> {
+        // rounding up to the nearest alignment in case the program length is not aligned. //TODO: Decide giving region memory alignment or not
+        let alignment = 4;
+        let end = (program.len() as u32).div_ceil(alignment) * alignment;
+
+        self.regions[RegionType::Code].range = RegionRange::new(0, end);
         self.regions[RegionType::Code]
             .permissions
             .enable(Permission::W);
-        let end_address = start_address + program.len();
+
+        let mut current_address = start_address;
+        // Handle full 4-byte chunks
+        for chunk in program.chunks(4) {
+            if chunk.len() == 4 {
+                // Write full 4 bytes
+                let word = u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+                self.write::<u32>(current_address, word)?;
+                current_address += 4;
+            } else {
+                // TODO: Decide this with padding or not
+                panic!("CHUNK IS NOT 4 BYTES");
+                // Handle the remaining bytes which are less than 4
+                // for &byte in chunk {
+                //     self.write_byte(current_address, byte);
+                // current_address += 1;
+                // }
+            }
+        }
+
         // TODO: FIX ME
         self.regions[RegionType::Code]
             .permissions
             .disable(Permission::W);
-        // self.0[start_address..end_address].copy_from_slice(program);
-    }
 
-    #[cfg(test)]
-    pub fn load_program_test<T>(&mut self, program: &[T], addr: u32)
-    where
-        M: ReadWrite<T>,
-        T: Copy,
-    {
-        self.regions[RegionType::Code].range = RegionRange::new(0, 0x0000_1000);
-        self.regions[RegionType::Code]
-            .permissions
-            .enable(Permission::W);
-
-        for (i, b) in program.iter().enumerate() {
-            let addr = addr + ((i as u32) * 4);
-            self.memory.write(addr as usize, *b).unwrap();
-        }
-
-        self.regions[RegionType::Code]
-            .permissions
-            .disable(Permission::W);
+        Ok(())
     }
 
     /// Validate address and alignment, return buffer offset
@@ -308,26 +345,25 @@ where
         size: u32, // 1, 2, or 4 bytes
         is_write: bool,
     ) -> Result<usize, &'static str> {
-        println!("VALIDATING..");
         // Alignment check (RISC-V requires alignment for LW/SW/LH/SH)
         if vaddr % size != 0 {
             return Err("Unaligned access");
         }
 
         let r = &self.regions[RegionType::Code].range;
-        println!("Code segment start: {}, end: {}", r.0, r.1);
         // Code segment (read-only)
         if vaddr >= r.0 && vaddr + size <= r.1 {
-            let sz = self.memory.is_empty();
-            println!("Size: {sz}");
-            if is_write && !sz {
+            let is_immutable: bool = self.regions[RegionType::Code]
+                .permissions
+                .status(Permission::W);
+
+            if is_write && !is_immutable {
                 return Err("Write to code segment");
             }
             return Ok(vaddr as usize);
         }
 
         let r = &self.regions[RegionType::Data].range;
-        println!("Data segment start: {}, end: {}", r.0, r.1);
         // Data segment (read-only)
         if vaddr >= r.0 && vaddr + size <= r.1 {
             if is_write {
@@ -337,14 +373,12 @@ where
         }
 
         let r = &self.regions[RegionType::Heap].range;
-        println!("Heap segment start: {}, end: {}", r.0, r.1);
         // Heap segment (read/write)
         if vaddr >= r.0 && vaddr + size <= r.1 {
             return Ok(vaddr as usize);
         }
 
         let r = &self.regions[RegionType::Stack].range;
-        println!("Stack segment start: {}, end: {}", r.0, r.1);
         // Stack segment (read/write, grows downward)
         if vaddr <= r.0 && vaddr >= r.1 {
             return Ok(vaddr as usize);
@@ -355,20 +389,26 @@ where
 
     pub fn read<T>(&self, address: u32) -> Result<T, MemoryError>
     where
-        M: ReadWrite<T>,
+        T: Copy,
+        LinearMemory: ReadWrite<T>,
     {
-        // TODO: TIDY ME
+        let a = &self.regions[RegionType::Code].range;
+        let data = &self.memory[a.into()];
+
+        // TODO: TIDY ME.
         let real_addr = self.validate(address, 4, false).unwrap();
-        println!("Memory Data: {real_addr}");
         self.memory.read(real_addr)
     }
 
     pub fn write<T>(&mut self, address: u32, value: T) -> Result<(), MemoryError>
     where
         T: Copy,
-        M: ReadWrite<T>,
+        LinearMemory: ReadWrite<T>,
     {
         let real_addr = self.validate(address, 4, true).unwrap();
+        let a = &self.regions[RegionType::Code].range;
+        let data = &self.memory[a.into()];
+
         self.memory.write(real_addr, value)
     }
 

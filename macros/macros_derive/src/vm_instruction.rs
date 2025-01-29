@@ -1,10 +1,6 @@
 fn extract_isa(
     variants: &syn::punctuated::Punctuated<syn::Variant, syn::token::Comma>,
-) -> impl Iterator<Item = Vec<u32>> + '_
-// where
-//     T: std::str::FromStr,
-//     T::Err: std::fmt::Display,
-{
+) -> impl Iterator<Item = Vec<u32>> + '_ {
     let bits = variants
         .into_iter()
         .map(|v| v.attrs.iter().filter(|attr| attr.path().is_ident("isa")))
@@ -205,7 +201,6 @@ pub(crate) fn isa2(input: proc_macro2::TokenStream) -> deluxe::Result<proc_macro
     Ok(quote::quote! {
         #[derive(Debug)]
         pub enum DecodeError {
-            // Message(&'static str),
             UnknownOpcode
         }
 

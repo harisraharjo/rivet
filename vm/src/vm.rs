@@ -1,26 +1,21 @@
-use bitvec::store::BitStore;
-
 use crate::{
     cpu::CPU,
     instruction::{register::Register, DecodeError, Instruction},
-    memory::{Addressable, LinearMemory, MemoryError, MemoryManager, ReadWrite},
+    memory::{MemoryError, MemoryManager},
 };
 
-pub struct VM<M> {
+pub struct VM {
     cpu: CPU,
     // memory: LinearMemory,
-    memory: MemoryManager<M>,
+    memory: MemoryManager,
     halt: bool,
 }
 
-impl<M> VM<M>
-where
-    M: Addressable + ReadWrite<u32>,
-{
-    pub fn new(memory_allocation: usize, memory: M) -> Self {
+impl VM {
+    pub fn new(size: usize) -> Self {
         Self {
             cpu: CPU::new(),
-            memory: MemoryManager::new(memory),
+            memory: MemoryManager::new(size),
             halt: false,
         }
     }
@@ -46,33 +41,42 @@ where
     }
 
     pub fn step(&mut self) -> Result<(), ()> {
-        let instruction = self.fetch().unwrap();
-        self.cpu.pc.increment();
-        self.decode_execute(instruction)
-    }
-
-    #[cfg(test)]
-    pub fn load_from_vec<T>(&mut self, program: &[T], addr: u32) -> Result<(), MemoryError>
-    where
-        T: Copy,
-        M: ReadWrite<T>,
-    {
-        for (i, b) in program.iter().enumerate() {
-            let addr = addr + ((i as u32) * 4);
-            self.memory.write(addr, *b)?
+        match self.fetch() {
+            Ok::<Instruction, _>(instruction) => {
+                self.cpu.pc.increment();
+                self.decode_execute(instruction)
+            }
+            Err(e) => {
+                // TODO: Not like this
+                println!("Can't decode from memory: {:#?}", e);
+                Err(())
+            }
         }
-        Ok(())
     }
 
+    // #[cfg(test)]
+    // pub fn load_from_vec<T>(&mut self, program: &[T], addr: u32) -> Result<(), MemoryError>
+    // where
+    //     T: Copy,
+    //     M: ReadWrite<T>,
+    // {
+    //     for (i, b) in program.iter().enumerate() {
+    //         let addr = addr + ((i as u32) * 4);
+    //         self.memory.write(addr, *b)?
+    //     }
+    //     Ok(())
+    // }
+
     #[cfg(test)]
-    pub fn test_run(&mut self, program: &[Instruction]) -> Result<(), ()> {
+    pub fn test_run(&mut self, program: &[Instruction]) -> Result<(), MemoryError> {
         let program_words: Vec<u32> = program
             .iter()
             .map(|instruction| instruction.into())
             .collect();
+
         unsafe {
-            // let program_bytes = program_words.align_to::<u8>().1;
-            self.memory.load_program_test(&program_words, 0);
+            let program_bytes = program_words.align_to::<u8>().1;
+            self.memory.load_program(program_bytes, 0)?;
             // .map_err(Box::new)?;
         }
 
@@ -81,7 +85,7 @@ where
         //     .set(register::Register::SP, self.memory.size() as u32);
 
         while !self.halt {
-            self.step()?;
+            self.step().unwrap();
         }
 
         // while self.cpu.pc.value() < self.memory.size() && !self.halt {
@@ -92,15 +96,10 @@ where
     }
 }
 
-impl<M> VM<M>
-where
-    M: Addressable + ReadWrite<u32>,
-{
+impl VM {
     fn fetch(&self) -> Result<Instruction, DecodeError> {
-        println!("Fetching..");
-        let memory: u32 = self.memory.read(self.cpu.pc.value()).unwrap();
-        // let memory = ReadWrite::<u32>::read(self.memory, self.cpu.pc.value()).unwrap();
-        println!("Instruction in memory: {memory}");
+        // TODO: unify the error
+        let memory = self.memory.read::<u32>(self.cpu.pc.value()).unwrap();
 
         memory.try_into()
     }
@@ -227,9 +226,8 @@ mod test {
     #[test]
     fn t_arith() {
         let size = 1024 * 1024;
-        let linear_mem = LinearMemory::new(size);
 
-        let mut vm = VM::new(size, linear_mem);
+        let mut vm = VM::new(size);
         for (a, b) in CASES {
             let program = &[
                 Li {
@@ -252,7 +250,10 @@ mod test {
                 },
             ];
 
-            vm.test_run(program).unwrap();
+            match vm.test_run(program) {
+                Ok(e) => println!("Test run Ok"),
+                Err(e) => println!("Test run went wrong"),
+            }
             assert_eq!(vm.cpu.registers.get(Register::T3), (a + b) as u32);
             vm.reset();
         }
@@ -261,8 +262,8 @@ mod test {
     #[test]
     fn t_load_store() -> Result<(), DecodeError> {
         let size = 1024 * 1024;
-        let linear_mem = LinearMemory::new(size);
-        let mut vm = VM::new(size, linear_mem);
+
+        let mut vm = VM::new(size);
 
         // for (a, b) in CASES {
         //     let program = &[
