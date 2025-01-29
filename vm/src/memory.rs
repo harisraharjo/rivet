@@ -1,6 +1,6 @@
 // use std::{marker::PhantomData, ops::Range};
 
-use std::ops::Not;
+use std::ops::{Index, IndexMut};
 
 use thiserror::Error;
 
@@ -98,7 +98,7 @@ enum Permission {
     X,
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug, Default)]
 struct Permissions([bool; 3]);
 
 impl Permissions {
@@ -120,6 +120,26 @@ impl Permissions {
     }
 }
 
+// impl Index<Permission> for Permissions {
+//     type Output = * bool;
+
+//     fn index(&self, permission: Permission) -> &Self::Output {
+//         match permission {
+//             Permission::R => self.0[0],
+//             Permission::W => self.0[1],
+//             Permission::X => self.0[2],
+//         }
+//     }
+// }
+
+#[derive(Debug)]
+enum RegionType {
+    Code,
+    Data,
+    Heap,
+    Stack,
+}
+
 #[derive(Default, Debug)]
 struct RegionRange(u32, u32);
 impl RegionRange {
@@ -132,9 +152,18 @@ impl RegionRange {
 struct Region {
     permissions: Permissions,
     range: RegionRange,
+    t: RegionType,
 }
 
 impl Region {
+    fn new(permissions: Permissions, range: RegionRange, t: RegionType) -> Region {
+        Region {
+            permissions,
+            range,
+            t,
+        }
+    }
+
     // /// Check if the address is valid
     // pub fn is_valid(&self, address: usize) -> bool {
     //     debug!(
@@ -150,39 +179,13 @@ impl Region {
     // }
 }
 
-pub struct Regions {
-    // members: [Region; 4], // Example: code [0x0, 0x1000), heap [0x1000, 0x8000), stack [0x8000, 0xFFFF_FFFF]
-    code: Region,
-    data: Region,
-    heap: Region,
-    stack: Region,
-}
+// code (0x0000_0000, 0x0000_1000)
+// data (0x0000_1000, 0x4000_0000)
+// heap (0x4000_0000, 0x8000_0000)
+// stack  (0x8000_0000, 0xFFFF_FFFF)
+pub struct Regions([Region; 4]);
 
 impl Regions {
-    pub fn new() -> Regions {
-        let rx = [Permission::R, Permission::X];
-        let rwx = [Permission::R, Permission::X, Permission::W];
-
-        Regions {
-            code: Region {
-                permissions: Permissions::new(&rx),
-                range: RegionRange::new(0x0000_0000, 0x0000_1000),
-            },
-            data: Region {
-                permissions: Permissions::new(&rx),
-                range: RegionRange::new(0x0000_1000, 0x4000_0000),
-            },
-            heap: Region {
-                permissions: Permissions::new(&rwx),
-                range: RegionRange::new(0x4000_0000, 0x8000_0000),
-            },
-            stack: Region {
-                permissions: Permissions::new(&rwx),
-                range: RegionRange::new(0x8000_0000, 0xFFFF_FFFF),
-            },
-        }
-    }
-
     // fn valid(&self) -> i32 {
     //     let f = 0xFFFFF000;
     //     // 4294963200
@@ -192,11 +195,62 @@ impl Regions {
     // }
 }
 
-#[derive(Debug)]
-pub struct LocalAddress {
-    offset: usize,
-    memory_index: usize,
+impl Index<RegionType> for Regions {
+    type Output = Region;
+
+    fn index(&self, t: RegionType) -> &Self::Output {
+        match t {
+            RegionType::Code => &self.0[0],
+            RegionType::Data => &self.0[1],
+            RegionType::Heap => &self.0[2],
+            RegionType::Stack => &self.0[3],
+        }
+    }
 }
+
+impl IndexMut<RegionType> for Regions {
+    fn index_mut(&mut self, t: RegionType) -> &mut Self::Output {
+        match t {
+            RegionType::Code => &mut self.0[0],
+            RegionType::Data => &mut self.0[1],
+            RegionType::Heap => &mut self.0[2],
+            RegionType::Stack => &mut self.0[3],
+        }
+    }
+}
+
+impl Default for Regions {
+    fn default() -> Self {
+        Self([
+            Region::new(
+                Permissions::default(),
+                RegionRange::default(),
+                RegionType::Code,
+            ), //(0x0000_0000, 0x0000_1000)
+            Region::new(
+                Permissions::default(),
+                RegionRange::default(),
+                RegionType::Data,
+            ), //(0x0000_1000, 0x4000_0000)
+            Region::new(
+                Permissions::default(),
+                RegionRange::default(),
+                RegionType::Heap,
+            ), //(0x4000_0000, 0x8000_0000)
+            Region::new(
+                Permissions::default(),
+                RegionRange::default(),
+                RegionType::Stack,
+            ), //(0x8000_0000, 0xFFFF_FFFF)
+        ])
+    }
+}
+
+// #[derive(Debug)]
+// pub struct LocalAddress {
+//     offset: usize,
+//     memory_Index: usize,
+// }
 
 pub struct MemoryManager<M> {
     memory: M,
@@ -210,14 +264,19 @@ where
     pub fn new(memory: M) -> MemoryManager<M> {
         MemoryManager {
             memory,
-            regions: Regions::new(),
+            regions: Regions::default(),
         }
     }
 
     fn load_program(&mut self, program: &[u32], start_address: usize) {
-        self.regions.code.permissions.disable(Permission::W);
+        self.regions[RegionType::Code]
+            .permissions
+            .enable(Permission::W);
         let end_address = start_address + program.len();
         // TODO: FIX ME
+        self.regions[RegionType::Code]
+            .permissions
+            .disable(Permission::W);
         // self.0[start_address..end_address].copy_from_slice(program);
     }
 
@@ -227,12 +286,19 @@ where
         M: ReadWrite<T>,
         T: Copy,
     {
-        self.regions.code.permissions.enable(Permission::W);
+        self.regions[RegionType::Code].range = RegionRange::new(0, 0x0000_1000);
+        self.regions[RegionType::Code]
+            .permissions
+            .enable(Permission::W);
+
         for (i, b) in program.iter().enumerate() {
             let addr = addr + ((i as u32) * 4);
             self.memory.write(addr as usize, *b).unwrap();
         }
-        self.regions.code.permissions.disable(Permission::W);
+
+        self.regions[RegionType::Code]
+            .permissions
+            .disable(Permission::W);
     }
 
     /// Validate address and alignment, return buffer offset
@@ -248,7 +314,7 @@ where
             return Err("Unaligned access");
         }
 
-        let r = &self.regions.code.range;
+        let r = &self.regions[RegionType::Code].range;
         println!("Code segment start: {}, end: {}", r.0, r.1);
         // Code segment (read-only)
         if vaddr >= r.0 && vaddr + size <= r.1 {
@@ -260,7 +326,7 @@ where
             return Ok(vaddr as usize);
         }
 
-        let r = &self.regions.data.range;
+        let r = &self.regions[RegionType::Data].range;
         println!("Data segment start: {}, end: {}", r.0, r.1);
         // Data segment (read-only)
         if vaddr >= r.0 && vaddr + size <= r.1 {
@@ -270,14 +336,14 @@ where
             return Ok(vaddr as usize);
         }
 
-        let r = &self.regions.heap.range;
+        let r = &self.regions[RegionType::Heap].range;
         println!("Heap segment start: {}, end: {}", r.0, r.1);
         // Heap segment (read/write)
         if vaddr >= r.0 && vaddr + size <= r.1 {
             return Ok(vaddr as usize);
         }
 
-        let r = &self.regions.stack.range;
+        let r = &self.regions[RegionType::Stack].range;
         println!("Stack segment start: {}, end: {}", r.0, r.1);
         // Stack segment (read/write, grows downward)
         if vaddr <= r.0 && vaddr >= r.1 {
@@ -307,7 +373,7 @@ where
     }
 
     // pub fn register(&mut self, start: usize, size: usize, memory: M) {
-    //     self.regions.push(Region::new(start, size, memory));
+    //     self.regions.push(Region::new(start, size, memory));,
     // }
 
     // /// Converts a virtual address into LocalAddress
