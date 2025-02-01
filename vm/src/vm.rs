@@ -109,7 +109,7 @@ impl VM {
     fn decode_execute(&mut self, opcode: Instruction) -> Result<(), ()> {
         match opcode {
             Instruction::Li { dest, value } => {
-                self.cpu.registers.set(dest, value as u32);
+                self.cpu.registers.set(dest, value.into());
                 // let opo = 33u32.get_bit(3);
                 Ok(())
             }
@@ -157,17 +157,14 @@ impl VM {
                 Ok(())
             }
             Instruction::AddI { dest, src, value } => {
-                // TODO: Check me later
-
-                let reg = Register::from(dest as u32);
                 self.cpu
                     .registers
-                    .set(dest, (src as u32) + self.cpu.registers.get(reg));
+                    .set(dest, self.cpu.registers.get(src).wrapping_add(value.into()));
                 Ok(())
             }
             Instruction::LoadWord { dest, src, offset } => {
                 let base = self.cpu.registers.get(src);
-                let addr = offset as u32 + base;
+                let addr = u32::from(offset) + base;
                 let w = self.memory.read(addr).unwrap();
                 self.cpu.registers.set(dest, w);
                 Ok(())
@@ -175,7 +172,7 @@ impl VM {
             Instruction::StoreWord { dest, src, offset } => {
                 let base = self.cpu.registers.get(src);
                 self.memory
-                    .write(offset as u32 + base, self.cpu.registers.get(dest))
+                    .write(u32::from(offset) + base, self.cpu.registers.get(dest))
                     .unwrap();
                 Ok(())
             }
@@ -208,17 +205,17 @@ mod test {
     use Instruction::*;
 
     use super::*;
-    use crate::instruction::*;
+    use crate::instruction::{operand::Immediate, *};
 
-    const CASES: [(u16, u16); 10] = [
+    const CASES: [(i16, i16); 10] = [
         (1, 1),
         (2, 2),
-        (12, 1),
-        (2, 4),
-        (32, 33),
-        (111, 112),
-        (1000, 52),
-        (201, 97),
+        (12, -1),
+        (-2, 4),
+        (-32, -33),
+        (111, -112),
+        (-1000, 52),
+        (-201, -97),
         (333, 333),
         (300, 20),
     ];
@@ -231,19 +228,18 @@ mod test {
         for (a, b) in CASES {
             let program = &[
                 // Li {
-                //     dest: Register::T1,
-                //     value: a as u32,
-                // },
-                // Li {
                 //     dest: Register::T2,
-                //     value: b as u32,
+                //     value: Immediate::new(a as i32),
                 // },
+                AddI {
+                    dest: Register::T2,
+                    src: Register::Zero,
+                    value: Immediate::new(a as i32),
+                },
                 AddI {
                     dest: Register::T3,
                     src: Register::T2,
-                    // TODO: Get back here
-                    value: todo!(),
-                    // src2: Register::T1,
+                    value: Immediate::new(b as i32),
                 },
                 Syscall {
                     src1: Register::Zero,

@@ -28,22 +28,6 @@ pub enum Register {
     A7, //syscall
 }
 
-pub trait Codec {
-    fn decode(src: u32, bit_accumulation: u32, bit_length: u32) -> Self
-    where
-        Self: From<u32>,
-    {
-        ((src >> bit_accumulation) & bit_length).into()
-    }
-
-    fn encode(&self, bit_length: u32, bit_accumulation: u32) -> u32
-    where
-        for<'a> &'a Self: BitAnd<u32, Output = u32> + Shl<u32, Output = u32>,
-    {
-        (self & bit_length) << bit_accumulation
-    }
-}
-
 // pub trait Decode
 // where
 //     Self: From<u32>,
@@ -60,6 +44,7 @@ pub trait Codec {
 //         (self & bit_length) << bit_accumulation
 //     }
 // }
+use crate::instruction::Codec;
 
 impl Codec for Register {}
 
@@ -215,14 +200,12 @@ mod test_super {
     use super::*;
 
     #[test]
-    fn test_register() {
+    fn t_register() {
         let dest = Register::A0;
-        let g = &dest;
-        let gg = g.to_owned();
         let result = dest.encode(0x1F, 8u32);
         assert_eq!(result, 0xD00);
 
-        let result = Register::decode(4286958867, 0x1F, 8u32);
+        let result = Register::decode(4286958867, 8u32, 0x1F);
         assert_eq!(result, dest);
     }
 }

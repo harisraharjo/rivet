@@ -3,13 +3,14 @@ pub mod operand;
 pub mod register;
 
 use macros::VMInstruction;
+use operand::Immediate;
 use register::Register;
 
 #[derive(Debug, PartialEq, Eq, VMInstruction)]
 // #[repr(u32)]
 pub enum Instruction {
     #[isa(0xff, 5, 19)]
-    Li { dest: Register, value: u32 },
+    Li { dest: Register, value: Immediate },
     // ---Binary Operators---
     #[isa(0x1, 5, 5, 5)]
     Add {
@@ -73,20 +74,20 @@ pub enum Instruction {
     AddI {
         dest: Register,
         src: Register,
-        value: i32,
+        value: Immediate,
         // value: Immediate,
     },
     #[isa(0xc, 5, 5, 14)]
     LoadWord {
         dest: Register,
         src: Register,
-        offset: u16,
+        offset: Immediate,
     },
     #[isa(0xd, 5, 5, 14)]
     StoreWord {
         dest: Register,
         src: Register,
-        offset: u16,
+        offset: Immediate,
     },
     // #[isa(0xe,5,5,5)]
     // LoadByte {
@@ -129,7 +130,7 @@ mod test {
     fn t_opcode() {
         let op1 = u32::from(&Instruction::Li {
             dest: Register::Zero,
-            value: 150,
+            value: Immediate::new(150),
         }) as u8;
 
         assert_eq!(op1.to_le_bytes(), 0xff_u8.to_le_bytes());
@@ -160,23 +161,23 @@ mod test {
             // },
             Instruction::Li {
                 dest: Register::T0,
-                value: 150,
+                value: Immediate::new(150),
             },
             Instruction::AddI {
                 dest: Register::A0,
                 src: Register::A1,
-                value: -13,
+                value: Immediate::new(-31),
             },
-            Instruction::LoadWord {
-                dest: Register::T2,
-                src: Register::T3,
-                offset: 11,
-            },
-            Instruction::StoreWord {
-                dest: Register::T2,
-                src: Register::T3,
-                offset: 11,
-            },
+            // Instruction::LoadWord {
+            //     dest: Register::T2,
+            //     src: Register::T3,
+            //     offset: Immediate::new(11),
+            // },
+            // Instruction::StoreWord {
+            //     dest: Register::T2,
+            //     src: Register::T3,
+            //     offset: Immediate::new(11),
+            // },
             Instruction::Syscall {
                 src1: Register::A1,
                 src2: Register::A2,

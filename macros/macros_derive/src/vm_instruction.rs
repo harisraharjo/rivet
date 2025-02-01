@@ -24,34 +24,24 @@ fn extract_isa(
     bits
 }
 
-// toDO: create compile time check for bit length only until 32 inclusive
-fn create_bit_mask(bit_length: u32) -> u32 {
-    (1u32 << bit_length) - 1
-}
+// type EncodedValue = proc_macro2::TokenStream;
+// fn generate_operands<const IS_ENCODE: bool>(
+//     field_bits: &(&u32, u32),
+//     field_name: &proc_macro2::TokenStream,
+// ) -> EncodedValue {
+//     let bit_length = *field_bits.0;
+//     let bit_mask = create_bit_mask(bit_length);
+//     // let bit_mask: proc_macro2::TokenStream =
+//     //     format!("0b{}", "1".repeat(bit_length as usize)).parse().unwrap();
 
-pub trait Codec {
-    fn encode(&self);
-    fn decode(&self);
-}
+//     let acc_bits = field_bits.1;
 
-type EncodedValue = proc_macro2::TokenStream;
-fn generate_operands<const IS_ENCODE: bool>(
-    field_bits: &(&u32, u32),
-    field_name: &proc_macro2::TokenStream,
-) -> EncodedValue {
-    let bit_length = *field_bits.0;
-    let bit_mask = create_bit_mask(bit_length);
-    // let bit_mask: proc_macro2::TokenStream =
-    //     format!("0b{}", "1".repeat(bit_length as usize)).parse().unwrap();
-
-    let acc_bits = field_bits.1;
-
-    if IS_ENCODE {
-        quote::quote!((#field_name & #bit_mask) << #acc_bits)
-    } else {
-        quote::quote!((#field_name >> #acc_bits) & #bit_mask)
-    }
-}
+//     if IS_ENCODE {
+//         quote::quote!((#field_name & #bit_mask) << #acc_bits)
+//     } else {
+//         quote::quote!((#field_name >> #acc_bits) & #bit_mask)
+//     }
+// }
 
 type EField = (syn::Ident, String);
 fn extract_variant_fields(
@@ -95,7 +85,11 @@ fn extract_variant_data(
 }
 
 // TODO: Pad instruction that are not full 32 bit. ex: instructions that only uses registers (8+5+5 = 18 bit used);
-const PRIMITIVES_INT: [&str; 5] = ["u8", "u16", "i16", "u32", "i32"];
+// const PRIMITIVES_INT: [&str; 5] = ["u8", "u16", "i16", "u32", "i32"];
+// toDO: create compile time check for bit length only until 32 inclusive
+fn create_bit_mask(bit_count: u32) -> u32 {
+    (1u32 << bit_count) - 1
+}
 
 fn generate_fields(
     fields_iter: impl Iterator<Item = EField>,
@@ -119,27 +113,35 @@ fn generate_fields(
             #field_name,
         });
 
-        let mut prefix = quote::quote!(#field_name);
-        let suffix = if PRIMITIVES_INT.contains(&ty.as_str()) {
-            prefix = quote::quote! {
-                (*#field_name as u32)
-            };
-            let ty: proc_macro2::TokenStream = ty.parse().unwrap();
-            quote::quote!(as #ty,)
-        } else {
-            quote::quote!(.into(),)
-        };
+        // let mut prefix = quote::quote!(#field_name);
+        // let suffix = if PRIMITIVES_INT.contains(&ty.as_str()) {
+        //     prefix = quote::quote! {
+        //         (*#field_name as u32)
+        //     };
+        let ty: proc_macro2::TokenStream = ty.parse().unwrap();
+        //     quote::quote!(as #ty,)
+        // } else {
+        //     quote::quote!(.into(),)
+        // };
 
-        let bit_mask = generate_operands::<true>(&field_bits, &prefix);
-        eprintln!("Field encoding: from: {field_name} type: {ty} to: {bit_mask}");
+        let bit_length = create_bit_mask(*field_bits.0);
+        let acc_bits = field_bits.1;
+
+        // let bit_mask = generate_operands::<true>(&field_bits, &prefix);
         encoded_field_value.extend(quote::quote! {
-            result |= #bit_mask;
+            result |= #field_name.encode(#bit_length, #acc_bits);
         });
+        // encoded_field_value.extend(quote::quote! {
+        //     result |= #bit_mask;
+        // });
 
-        let bit_mask = generate_operands::<false>(&field_bits, &quote::quote!(value));
+        // let bit_mask = generate_operands::<false>(&field_bits, &quote::quote!(value));
         decoded_field_value.extend(quote::quote! {
-            #field_name: (#bit_mask) #suffix
+            #field_name: #ty::decode(value, #acc_bits, #bit_length),
         });
+        // decoded_field_value.extend(quote::quote! {
+        //     #field_name: (#bit_mask) #suffix
+        // });
     }
 
     (
@@ -170,7 +172,7 @@ pub(crate) fn isa2(input: proc_macro2::TokenStream) -> deluxe::Result<proc_macro
                     let opcode = isa[0] as u8;
                     isa[0] = 8; //change opcode value to bits it occupy
 
-                    let (fields, raw_encoded_field_value, raw_decoded_field_value) =
+                    let (fields_names, raw_encoded_field_value, raw_decoded_field_value) =
                         if let Some((field_iter, _)) = fields {
                             generate_fields(field_iter, isa)
                         } else {
@@ -178,6 +180,7 @@ pub(crate) fn isa2(input: proc_macro2::TokenStream) -> deluxe::Result<proc_macro
                         };
 
                     // encode
+                    // TODO: Here remove result |=
                     let encoded_field_value = quote::quote! {
                         {
                             let mut result = #opcode as u32;
@@ -188,7 +191,7 @@ pub(crate) fn isa2(input: proc_macro2::TokenStream) -> deluxe::Result<proc_macro
 
                     let encode_result = quote::quote_spanned! {
                         variant_span=>
-                        #enum_name::#variant_name #fields => #encoded_field_value,
+                        #enum_name::#variant_name #fields_names => #encoded_field_value,
                     };
 
                     //decode
@@ -233,6 +236,23 @@ pub(crate) fn isa2(input: proc_macro2::TokenStream) -> deluxe::Result<proc_macro
                 match value {
                     #(#encoded_variants)*
                 }
+            }
+        }
+
+        pub trait Codec {
+            fn decode(src: u32, bit_accumulation: u32, bit_length: u32) -> Self
+            where
+                Self: From<u32>,
+            {
+                ((src >> bit_accumulation) & bit_length).into()
+            }
+
+            // use std::ops::{BitAnd, Shl, Shr};
+            fn encode(&self, bit_length: u32, bit_accumulation: u32) -> u32
+            where
+                for<'a> &'a Self: std::ops::BitAnd<u32, Output = u32> + std::ops::Shl<u32, Output = u32>,
+            {
+                (self & bit_length) << bit_accumulation
             }
         }
 

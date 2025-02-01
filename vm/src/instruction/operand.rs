@@ -1,7 +1,5 @@
-use std::ops::{BitAnd, Shl};
-
-use super::register::Codec;
-
+use crate::instruction::Codec;
+use std::ops::{Add, BitAnd, Shl};
 // toDO: create compile time check for bit length only until 32 inclusive
 #[derive(Debug, PartialEq, Eq)]
 pub struct Immediate(i32);
@@ -16,9 +14,21 @@ impl Codec for Immediate {
     }
 }
 
+impl From<Immediate> for i32 {
+    fn from(value: Immediate) -> Self {
+        value.0
+    }
+}
+
 impl From<u32> for Immediate {
     fn from(value: u32) -> Self {
         Immediate(value as i32)
+    }
+}
+
+impl From<Immediate> for u32 {
+    fn from(value: Immediate) -> Self {
+        value.0 as u32
     }
 }
 
@@ -49,18 +59,17 @@ impl Immediate {
 
     // const _A: () = assert!(BIT_LENGTH <= u32::BITS, "N must not exceed u32::BITS");
 
-    // pub fn new<const N: usize>() -> () {
-    // }
+    pub fn new(value: i32) -> Self {
+        Immediate(value)
+    }
 
-    fn convert_twos_complement_to_i32(masked_value: u32, bit_length: u32) -> Self {
+    fn convert_twos_complement_to_i32(masked_value: u32, bit_mask: u32) -> Self {
         // Check if the sign bit is set
-        let sign_bit = 1u32 << (bit_length.trailing_ones() - 1);
+        let sign_bit = 1u32 << (bit_mask.trailing_ones() - 1);
 
         if masked_value & sign_bit != 0 {
             // Negative number: extend sign by converting to two's complement
-            println!("Masked Val2: {masked_value}");
             let positive_counterpart = (sign_bit << 1) - masked_value;
-            println!("Masked Val3: {masked_value}");
             Self(-(positive_counterpart as i32))
         } else {
             // Positive number or zero
@@ -92,7 +101,7 @@ mod test_super {
     use super::*;
 
     #[test]
-    fn test_imm() {
+    fn t_imm() {
         let imm = Immediate(-31);
         let result = imm.encode(0x3FFF, 18);
         assert_eq!(result, 0xFF840000);
