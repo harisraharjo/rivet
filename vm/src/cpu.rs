@@ -1,3 +1,5 @@
+use std::ops::{Index, IndexMut};
+
 use macros::EnumCount;
 
 use crate::instruction::register::{ProgramCounter, Register};
@@ -17,6 +19,20 @@ impl Registers {
 
     pub fn reset(&mut self) {
         self.0 = [0; Register::VARIANT_COUNT];
+    }
+}
+
+impl Index<Register> for Registers {
+    type Output = u32;
+
+    fn index(&self, index: Register) -> &Self::Output {
+        todo!()
+    }
+}
+
+impl IndexMut<Register> for Registers {
+    fn index_mut(&mut self, index: Register) -> &mut Self::Output {
+        todo!()
     }
 }
 

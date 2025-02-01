@@ -28,6 +28,41 @@ pub enum Register {
     A7, //syscall
 }
 
+pub trait Codec {
+    fn decode(src: u32, bit_accumulation: u32, bit_length: u32) -> Self
+    where
+        Self: From<u32>,
+    {
+        ((src >> bit_accumulation) & bit_length).into()
+    }
+
+    fn encode(&self, bit_length: u32, bit_accumulation: u32) -> u32
+    where
+        for<'a> &'a Self: BitAnd<u32, Output = u32> + Shl<u32, Output = u32>,
+    {
+        (self & bit_length) << bit_accumulation
+    }
+}
+
+// pub trait Decode
+// where
+//     Self: From<u32>,
+// {
+//     fn decode(src: u32, bit_accumulation: u32, bit_length: u32) -> Self {
+//         ((src >> bit_accumulation) & bit_length).into()
+//     }
+// }
+// pub trait Encode
+// where
+//     for<'a> &'a Self: BitAnd<u32, Output = u32> + Shl<u32, Output = u32>,
+// {
+//     fn encode(&self, bit_length: u32, bit_accumulation: u32) -> u32 {
+//         (self & bit_length) << bit_accumulation
+//     }
+// }
+
+impl Codec for Register {}
+
 impl From<u8> for Register {
     fn from(value: u8) -> Self {
         match value {
@@ -172,5 +207,22 @@ impl ProgramCounter {
     #[inline(always)]
     pub fn reset(&mut self) {
         self.0 = 0;
+    }
+}
+
+#[cfg(test)]
+mod test_super {
+    use super::*;
+
+    #[test]
+    fn test_register() {
+        let dest = Register::A0;
+        let g = &dest;
+        let gg = g.to_owned();
+        let result = dest.encode(0x1F, 8u32);
+        assert_eq!(result, 0xD00);
+
+        let result = Register::decode(4286958867, 0x1F, 8u32);
+        assert_eq!(result, dest);
     }
 }

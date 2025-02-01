@@ -1,3 +1,4 @@
+mod constants;
 pub mod operand;
 pub mod register;
 
@@ -5,6 +6,7 @@ use macros::VMInstruction;
 use register::Register;
 
 #[derive(Debug, PartialEq, Eq, VMInstruction)]
+// #[repr(u32)]
 pub enum Instruction {
     #[isa(0xff, 5, 19)]
     Li { dest: Register, value: u32 },
@@ -71,7 +73,8 @@ pub enum Instruction {
     AddI {
         dest: Register,
         src: Register,
-        value: u16,
+        value: i32,
+        // value: Immediate,
     },
     #[isa(0xc, 5, 5, 14)]
     LoadWord {
@@ -139,7 +142,7 @@ mod test {
 
     #[test]
     fn t_encode_decode() -> Result<(), DecodeError> {
-        let ops: Vec<Instruction> = vec![
+        let ins: Vec<Instruction> = vec![
             Instruction::Add {
                 dest: Register::A0,
                 src1: Register::A1,
@@ -162,7 +165,17 @@ mod test {
             Instruction::AddI {
                 dest: Register::A0,
                 src: Register::A1,
-                value: 13,
+                value: -13,
+            },
+            Instruction::LoadWord {
+                dest: Register::T2,
+                src: Register::T3,
+                offset: 11,
+            },
+            Instruction::StoreWord {
+                dest: Register::T2,
+                src: Register::T3,
+                offset: 11,
             },
             Instruction::Syscall {
                 src1: Register::A1,
@@ -170,39 +183,12 @@ mod test {
                 src3: Register::A3,
             },
         ];
-        // if (ins & 0x8000) == 0 {
 
-        // println!("{}", 0xff);
-        // println!("{}", 0xfff);
-        // let dest_val: u8 = unsafe { transmute(Register::X2) };
-        // let src1_val: u8 = unsafe { transmute(Register::X3) };
-        // let src2_val: u8 = unsafe { transmute(Register::X4) };
-
-        // let encoded: u32 = (1u8 as u32)
-        //     | ((dest_val as u32) << 8)
-        //     | ((src1_val as u32) << 16)
-        //     | ((src2_val as u32) << 24);
-        // println!("MANUAL ENCODING u32: {:?}", encoded);
-
-        // let dest = unsafe { transmute::<u8, Register>((encoded >> 8) as u8) };
-        // let src1 = unsafe { transmute::<u8, Register>((encoded >> 16) as u8) };
-        // let src2 = unsafe { transmute::<u8, Register>((encoded >> 24) as u8) };
-
-        // let result = Instruction::Add { dest, src1, src2 };
-        // // let result = Instruction::try_from(result).unwrap();
-
-        // println!("MANUAL ENCODING Instruction: {:?}", result);
-
-        // let a1 = 10 & 11;
-        // let a2 = 11 & 10;
-        // println!("A1: {a1}");
-        // println!("A2: {a2}");
-
-        let encoded: Vec<u32> = ops.iter().map(|x| x.into()).collect();
-        for (i, (l, r)) in ops.iter().zip(encoded.iter()).enumerate() {
-            println!("{i} instruction: {:?}, memory representation: {1}", l, r);
+        let encoded: Vec<u32> = ins.iter().map(|x| x.into()).collect();
+        for (l, r) in ins.iter().zip(encoded.iter()) {
+            println!("instruction: {:?}, memory representation: {1}", l, r);
             let decoded = Instruction::try_from(*r)?;
-            println!("Decoded: {:?}", decoded);
+            // println!("Decoded: {:?}", decoded);
             assert_eq!(*l, decoded);
         }
         Ok(())

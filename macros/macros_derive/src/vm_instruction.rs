@@ -24,22 +24,32 @@ fn extract_isa(
     bits
 }
 
+// toDO: create compile time check for bit length only until 32 inclusive
+fn create_bit_mask(bit_length: u32) -> u32 {
+    (1u32 << bit_length) - 1
+}
+
+pub trait Codec {
+    fn encode(&self);
+    fn decode(&self);
+}
+
 type EncodedValue = proc_macro2::TokenStream;
 fn generate_operands<const IS_ENCODE: bool>(
     field_bits: &(&u32, u32),
     field_name: &proc_macro2::TokenStream,
 ) -> EncodedValue {
-    let bit = *field_bits.0;
-    let bit_mask: proc_macro2::TokenStream =
-        format!("0b{}", "1".repeat(bit as usize)).parse().unwrap();
-    // eprintln!("BITMASK: {bit_mask}");
+    let bit_length = *field_bits.0;
+    let bit_mask = create_bit_mask(bit_length);
+    // let bit_mask: proc_macro2::TokenStream =
+    //     format!("0b{}", "1".repeat(bit_length as usize)).parse().unwrap();
 
     let acc_bits = field_bits.1;
 
     if IS_ENCODE {
-        quote::quote!((#field_name & #bit_mask) << #acc_bits )
+        quote::quote!((#field_name & #bit_mask) << #acc_bits)
     } else {
-        quote::quote!((#field_name >> #acc_bits) & #bit_mask )
+        quote::quote!((#field_name >> #acc_bits) & #bit_mask)
     }
 }
 
@@ -84,6 +94,7 @@ fn extract_variant_data(
     })
 }
 
+// TODO: Pad instruction that are not full 32 bit. ex: instructions that only uses registers (8+5+5 = 18 bit used);
 const PRIMITIVES_INT: [&str; 5] = ["u8", "u16", "i16", "u32", "i32"];
 
 fn generate_fields(
@@ -120,6 +131,7 @@ fn generate_fields(
         };
 
         let bit_mask = generate_operands::<true>(&field_bits, &prefix);
+        eprintln!("Field encoding: from: {field_name} type: {ty} to: {bit_mask}");
         encoded_field_value.extend(quote::quote! {
             result |= #bit_mask;
         });

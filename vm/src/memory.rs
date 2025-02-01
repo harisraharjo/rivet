@@ -57,11 +57,10 @@ impl LinearMemory {
         self.0.len()
     }
 
-    // #[inline(always)]
-    // fn bulk_write<const BYTES: usize>(&mut self, address: usize, value: &[u8]) {
-    //     self.bulk_write::<2>(address, &value.to_le_bytes());
-    //     self.0[address..address + BYTES].copy_from_slice(value);
-    // }
+    #[inline(always)]
+    fn bulk_writes<const BYTES: usize>(&mut self, address: usize, value: &[u8]) {
+        self.0[address..address + BYTES].copy_from_slice(value);
+    }
 }
 
 impl ReadWrite<u8> for LinearMemory {
@@ -82,8 +81,7 @@ impl ReadWrite<u16> for LinearMemory {
     }
 
     fn write(&mut self, address: usize, value: u16) -> Result<(), MemoryError> {
-        let bytes = value.to_le_bytes();
-        self.0[address..address + 2].copy_from_slice(&bytes);
+        self.bulk_writes::<2>(address, &value.to_le_bytes());
         Ok(())
     }
 }
@@ -96,8 +94,8 @@ impl ReadWrite<u32> for LinearMemory {
     }
 
     fn write(&mut self, address: usize, value: u32) -> Result<(), MemoryError> {
-        let bytes = value.to_le_bytes();
-        self.0[address..address + 4].copy_from_slice(&bytes);
+        self.bulk_writes::<4>(address, &value.to_le_bytes());
+
         Ok(())
     }
 }
@@ -301,8 +299,12 @@ impl MemoryManager {
         }
     }
 
+    pub fn name(&self) -> i32 {
+        1
+    }
+
     pub fn load_program(&mut self, program: &[u8], start_address: u32) -> Result<(), MemoryError> {
-        // rounding up to the nearest alignment in case the program length is not aligned. //TODO: Decide giving region memory alignment or not
+        // rounding up to the nearest alignment in case the program length is not aligned. //TODO: Decide to give region alignment or not if the program legnth is not aligned
         let alignment = 4;
         let end = (program.len() as u32).div_ceil(alignment) * alignment;
 
@@ -315,12 +317,13 @@ impl MemoryManager {
         // Handle full 4-byte chunks
         for chunk in program.chunks(4) {
             if chunk.len() == 4 {
+                println!("Chunk: {:?}", chunk);
                 // Write full 4 bytes
-                let word = u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+                let word = u32::from_ne_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
                 self.write::<u32>(current_address, word)?;
                 current_address += 4;
             } else {
-                // TODO: Decide this with padding or not
+                // TODO: Decide to write/add padding to the bytes or not if the program is not aligned
                 panic!("CHUNK IS NOT 4 BYTES");
                 // Handle the remaining bytes which are less than 4
                 // for &byte in chunk {
@@ -330,7 +333,6 @@ impl MemoryManager {
             }
         }
 
-        // TODO: FIX ME
         self.regions[RegionType::Code]
             .permissions
             .disable(Permission::W);
@@ -394,6 +396,7 @@ impl MemoryManager {
     {
         let a = &self.regions[RegionType::Code].range;
         let data = &self.memory[a.into()];
+        println!("Read: {:?}", data);
 
         // TODO: TIDY ME.
         let real_addr = self.validate(address, 4, false).unwrap();
@@ -408,6 +411,7 @@ impl MemoryManager {
         let real_addr = self.validate(address, 4, true).unwrap();
         let a = &self.regions[RegionType::Code].range;
         let data = &self.memory[a.into()];
+        println!("Write: {:?}", data);
 
         self.memory.write(real_addr, value)
     }

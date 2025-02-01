@@ -230,18 +230,20 @@ mod test {
         let mut vm = VM::new(size);
         for (a, b) in CASES {
             let program = &[
-                Li {
-                    dest: Register::T1,
-                    value: a as u32,
-                },
-                Li {
-                    dest: Register::T2,
-                    value: b as u32,
-                },
-                Add {
+                // Li {
+                //     dest: Register::T1,
+                //     value: a as u32,
+                // },
+                // Li {
+                //     dest: Register::T2,
+                //     value: b as u32,
+                // },
+                AddI {
                     dest: Register::T3,
-                    src1: Register::T2,
-                    src2: Register::T1,
+                    src: Register::T2,
+                    // TODO: Get back here
+                    value: todo!(),
+                    // src2: Register::T1,
                 },
                 Syscall {
                     src1: Register::Zero,
@@ -251,9 +253,10 @@ mod test {
             ];
 
             match vm.test_run(program) {
-                Ok(e) => println!("Test run Ok"),
+                Ok(e) => {}
                 Err(e) => println!("Test run went wrong"),
             }
+            println!("\n");
             assert_eq!(vm.cpu.registers.get(Register::T3), (a + b) as u32);
             vm.reset();
         }

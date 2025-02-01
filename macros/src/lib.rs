@@ -8,3 +8,8 @@ pub trait VMInstruction {
 pub trait EnumCount {
     const VARIANT_COUNT: usize;
 }
+
+pub trait Codec {
+    fn encode(&self);
+    fn decode(&self);
+}

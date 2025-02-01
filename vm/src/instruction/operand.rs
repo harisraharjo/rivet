@@ -1,97 +1,103 @@
-// #[derive(Debug)]
-// pub struct Immediate<const T: u8>(i32);
+use std::ops::{BitAnd, Shl};
 
-// impl<const T: u8> Immediate<T> {
-//     fn new(value: i32) -> Immediate<T> {
-//         Immediate(value)
-//     }
+use super::register::Codec;
+
+// toDO: create compile time check for bit length only until 32 inclusive
+#[derive(Debug, PartialEq, Eq)]
+pub struct Immediate(i32);
+
+impl Codec for Immediate {
+    fn decode(src: u32, bit_accumulation: u32, bit_length: u32) -> Self
+    where
+        Self: From<u32>,
+    {
+        Self::convert_twos_complement_to_i32((src >> bit_accumulation) & bit_length, bit_length)
+            .into()
+    }
+}
+
+impl From<u32> for Immediate {
+    fn from(value: u32) -> Self {
+        Immediate(value as i32)
+    }
+}
+
+impl BitAnd<u32> for &Immediate {
+    type Output = u32;
+
+    fn bitand(self, rhs: u32) -> Self::Output {
+        (self.0 as u32) & rhs
+    }
+}
+
+impl Shl<u32> for &Immediate {
+    type Output = u32;
+
+    fn shl(self, rhs: u32) -> Self::Output {
+        (self.0 as u32) << rhs
+    }
+}
+
+// impl<const BL: u32> CheckBitLength<BL> for Immediate {}
+
+impl Immediate {
+    // const BIT_LENGTH: u32 = if BIT_LENGTH <= 32 {
+    //     BIT_LENGTH
+    // } else {
+    //     panic!("Invalid offset") // Compile time panic
+    // };
+
+    // const _A: () = assert!(BIT_LENGTH <= u32::BITS, "N must not exceed u32::BITS");
+
+    // pub fn new<const N: usize>() -> () {
+    // }
+
+    fn convert_twos_complement_to_i32(masked_value: u32, bit_length: u32) -> Self {
+        // Check if the sign bit is set
+        let sign_bit = 1u32 << (bit_length.trailing_ones() - 1);
+
+        if masked_value & sign_bit != 0 {
+            // Negative number: extend sign by converting to two's complement
+            println!("Masked Val2: {masked_value}");
+            let positive_counterpart = (sign_bit << 1) - masked_value;
+            println!("Masked Val3: {masked_value}");
+            Self(-(positive_counterpart as i32))
+        } else {
+            // Positive number or zero
+            Self(masked_value as i32)
+        }
+    }
+}
+
+// #[macro_export]
+// macro_rules! immediate {
+//     ($bits:expr) => {{
+//         // Check if bits is within the range of u8::BITS
+//         // const _CONSTANT: () = assert!(
+//         //     $bits <= u8::BITS as usize,
+//         //     "Bit length must not exceed u8::BITS"
+//         // );
+//         const _CONSTANT: () = assert!(
+//             $bits <= u8::BITS as usize,
+//             concat!("Bit length must not exceed u8::BITS at ", stringify!($bits))
+//         );
+
+//         // Create an instance of the struct with the given bit length and value
+//         Immediate::<{ $bits }>
+//     }};
 // }
 
-// use std::collections::HashMap;
-// #[derive(Debug, Clone, Copy)]
-// enum Permissions {
-//     Read = 1,
-//     Write = 2,
-//     Execute = 4,
-// }
-// #[derive(Debug, Clone)]
-// struct MemorySegment {
-//     base_address: u32,
-//     size: usize,
-//     permissions: Permissions,
-//     data: Vec<u8>,
-// } // VM structure with explicit 32-bit little-endian memory model
-// struct VM {
-//     memory_segments: HashMap<u32, MemorySegment>,
-// }
-// impl VM {
-//     fn new() -> Self {
-//         VM {
-//             memory_segments: HashMap::new(),
-//         }
-//     } // Helper function to write 32-bit word in little-endian
+#[cfg(test)]
+mod test_super {
+    use super::*;
 
-//     fn write_word_le(&mut self, address: u32, value: u32) -> Result<(), String> {
-//         let segment = self
-//             .memory_segments
-//             .get_mut(&(address & 0xFFFFF000))
-//             .ok_or("Segment not found")?;
+    #[test]
+    fn test_imm() {
+        let imm = Immediate(-31);
+        let result = imm.encode(0x3FFF, 18);
+        assert_eq!(result, 0xFF840000);
 
-//         if !segment.permissions.contains(Permissions::Write) {
-//             return Err("Write permission not granted".to_string());
-//         }
-//         let offset = (address & 0xFFF) as usize;
-//         if offset + 4 > segment.size {
-//             return Err("Write would exceed segment boundaries".to_string());
-//         }
-//         segment.data[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
-//         Ok(())
-//     } // Load program, ensuring we use little-endian for instructions
-
-//     fn load_program(&mut self, program: &[u32]) -> Result<(), String> {
-//         let code_segment = self.memory_segments.entry(0x1000).or_insert(MemorySegment {
-//             base_address: 0x1000,
-//             size: 4096, // Example size, 4KB
-//             permissions: Permissions::Read | Permissions::Execute,
-//             data: vec![0; 4096],
-//         });
-
-//         // Temporarily elevate permissions to write
-//         let old_permissions = code_segment.permissions;
-//         code_segment.permissions = Permissions::Read | Permissions::Write | Permissions::Execute;
-
-//         for (i, &instruction) in program.iter().enumerate() {
-//             let address = 0x1000 + (i * 4) as u32;
-//             self.write_word_le(address, instruction)?;
-//         }
-
-//         // Revert permissions
-//         code_segment.permissions = old_permissions;
-//         Ok(())
-//     } // Print memory state, showing 32-bit values in little-endian
-
-//     fn print_memory_state(&self) {
-//         for (addr, segment) in &self.memory_segments {
-//             println!(
-//                 "Segment at {:#x}: Size={}, Permissions={:?}",
-//                 addr, segment.size, segment.permissions
-//             );
-//             for i in (0..segment.size).step_by(4).take(10) {
-//                 // Print first 10 words
-//                 if i + 4 <= segment.size {
-//                     let word = u32::from_le_bytes(segment.data[i..i + 4].try_into().unwrap());
-//                     println!(" Address {:#x}: {:#010X}", addr + i as u32, word);
-//                 }
-//             }
-//         }
-//     }
-// }
-// fn main() {
-//     let mut vm = VM::new(); // Dummy program with some placeholder 32-bit instructions in little-endian
-//     let dummy_program: [u32; 4] = [0x01020304, 0x05060708, 0x090A0B0C, 0x0D0E0F10];
-//     match vm.load_program(&dummy_program) {
-//         Ok(_) => println!("Program loaded successfully"),
-//         Err(e) => println!("Failed to load program: {}", e),
-//     }
-//     vm.print_memory_state();
-// }
+        let result = Immediate::decode(4286958867, 18, 0x3FFF);
+        assert_eq!(result, imm);
+    }
+}
