@@ -1,16 +1,62 @@
 use crate::instruction::Codec;
-use std::ops::{Add, BitAnd, Shl};
+use std::ops::{BitAnd, Shl};
+
 // toDO: create compile time check for bit length only until 32 inclusive
 #[derive(Debug, PartialEq, Eq)]
 pub struct Immediate(i32);
 
+impl Immediate {
+    // const BIT_LENGTH: u32 = if BIT_LENGTH <= 32 {
+    //     BIT_LENGTH
+    // } else {
+    //     panic!("Invalid offset") // Compile time panic
+    // };
+
+    // const _A: () = assert!(BIT_LENGTH <= u32::BITS, "N must not exceed u32::BITS");
+
+    pub const fn new<const BIT_LENGTH: u32>(value: i32) -> Self {
+        if BIT_LENGTH == 0 || BIT_LENGTH >= (u32::BITS) {
+            panic!("Max bit length is 32");
+        };
+
+        let max = (1 << (BIT_LENGTH - 1)) - 1;
+        let min = -(max + 1);
+
+        // Clamp from std can't be used in const fn
+        Immediate(if value < min {
+            min
+        } else if value > max {
+            max
+        } else {
+            value
+        })
+    }
+
+    fn convert_twos_complement_to_i32(masked_value: u32, bit_mask: u32) -> Self {
+        // Check if the sign bit is set
+
+        println!("Decode mask value: {}", masked_value);
+
+        let sign_bit = 1u32 << (bit_mask.trailing_ones() - 1);
+
+        if masked_value & sign_bit != 0 {
+            // Negative number: extend sign by converting to two's complement
+            let positive_counterpart = (sign_bit << 1) - masked_value;
+
+            Self(-(positive_counterpart as i32))
+        } else {
+            // Positive number or zero
+            Self(masked_value as i32)
+        }
+    }
+}
+
 impl Codec for Immediate {
-    fn decode(src: u32, bit_accumulation: u32, bit_length: u32) -> Self
+    fn decode(src: u32, bit_accumulation: u32, bit_mask: u32) -> Self
     where
         Self: From<u32>,
     {
-        Self::convert_twos_complement_to_i32((src >> bit_accumulation) & bit_length, bit_length)
-            .into()
+        Self::convert_twos_complement_to_i32((src >> bit_accumulation) & bit_mask, bit_mask).into()
     }
 }
 
@@ -45,36 +91,6 @@ impl Shl<u32> for &Immediate {
 
     fn shl(self, rhs: u32) -> Self::Output {
         (self.0 as u32) << rhs
-    }
-}
-
-// impl<const BL: u32> CheckBitLength<BL> for Immediate {}
-
-impl Immediate {
-    // const BIT_LENGTH: u32 = if BIT_LENGTH <= 32 {
-    //     BIT_LENGTH
-    // } else {
-    //     panic!("Invalid offset") // Compile time panic
-    // };
-
-    // const _A: () = assert!(BIT_LENGTH <= u32::BITS, "N must not exceed u32::BITS");
-
-    pub fn new(value: i32) -> Self {
-        Immediate(value)
-    }
-
-    fn convert_twos_complement_to_i32(masked_value: u32, bit_mask: u32) -> Self {
-        // Check if the sign bit is set
-        let sign_bit = 1u32 << (bit_mask.trailing_ones() - 1);
-
-        if masked_value & sign_bit != 0 {
-            // Negative number: extend sign by converting to two's complement
-            let positive_counterpart = (sign_bit << 1) - masked_value;
-            Self(-(positive_counterpart as i32))
-        } else {
-            // Positive number or zero
-            Self(masked_value as i32)
-        }
     }
 }
 

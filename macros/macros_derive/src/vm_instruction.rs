@@ -240,19 +240,19 @@ pub(crate) fn isa2(input: proc_macro2::TokenStream) -> deluxe::Result<proc_macro
         }
 
         pub trait Codec {
-            fn decode(src: u32, bit_accumulation: u32, bit_length: u32) -> Self
+            fn decode(src: u32, bit_accumulation: u32, bit_mask: u32) -> Self
             where
-                Self: From<u32>,
+                Self: core::convert::From<u32>,
             {
-                ((src >> bit_accumulation) & bit_length).into()
+                ((src >> bit_accumulation) & bit_mask).into()
             }
 
             // use std::ops::{BitAnd, Shl, Shr};
-            fn encode(&self, bit_length: u32, bit_accumulation: u32) -> u32
+            fn encode(&self, bit_mask: u32, bit_accumulation: u32) -> u32
             where
                 for<'a> &'a Self: std::ops::BitAnd<u32, Output = u32> + std::ops::Shl<u32, Output = u32>,
             {
-                (self & bit_length) << bit_accumulation
+                (self & bit_mask) << bit_accumulation
             }
         }
 

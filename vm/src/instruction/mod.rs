@@ -75,8 +75,9 @@ pub enum Instruction {
         dest: Register,
         src: Register,
         value: Immediate,
-        // value: Immediate,
     },
+    // #[isa(0x14, 5, 19)]
+    // Lui { dest: Register, value: Immediate },
     #[isa(0xc, 5, 5, 14)]
     LoadWord {
         dest: Register,
@@ -123,6 +124,8 @@ pub enum Instruction {
 
 #[cfg(test)]
 mod test {
+    use crate::vm::VM;
+
     use super::*;
     use register::*;
 
@@ -130,15 +133,39 @@ mod test {
     fn t_opcode() {
         let op1 = u32::from(&Instruction::Li {
             dest: Register::Zero,
-            value: Immediate::new(150),
+            value: Immediate::new::<19>(150),
         }) as u8;
 
         assert_eq!(op1.to_le_bytes(), 0xff_u8.to_le_bytes());
     }
 
     #[test]
-    fn t_overflow_todo() {
-        // TODO: TEST OVERFLOW IN THE ASSEMBLER NOT HERE
+    fn t_overflow() {
+        let size = 1024 * 4;
+        let mut vm = VM::new(size);
+        // 16384
+
+        let addi_overflow = Instruction::AddI {
+            dest: Register::A0,
+            src: Register::Zero,
+            value: Immediate::new::<14>(-0x4000),
+        };
+
+        match vm.test_run(&[
+            addi_overflow,
+            Instruction::Syscall {
+                src1: Register::Zero,
+                src2: Register::Zero,
+                src3: Register::Zero,
+            },
+        ]) {
+            Ok(e) => {}
+            Err(e) => println!("Test run went wrong"),
+        }
+        assert_eq!(
+            vm.registers().get(Register::A0),
+            Immediate::new::<14>(-0x4000).into()
+        );
     }
 
     #[test]
@@ -161,12 +188,12 @@ mod test {
             // },
             Instruction::Li {
                 dest: Register::T0,
-                value: Immediate::new(150),
+                value: Immediate::new::<19>(150),
             },
             Instruction::AddI {
                 dest: Register::A0,
                 src: Register::A1,
-                value: Immediate::new(-31),
+                value: Immediate::new::<19>(-31),
             },
             // Instruction::LoadWord {
             //     dest: Register::T2,
