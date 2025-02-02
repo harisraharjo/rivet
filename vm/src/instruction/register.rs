@@ -139,19 +139,19 @@ impl Shl<u32> for &Register {
     }
 }
 
-impl Shr<u32> for &Register {
-    type Output = u32;
-
-    fn shr(self, rhs: u32) -> Self::Output {
-        (*self as u32) >> rhs
-    }
-}
-
 impl Shl<Register> for u32 {
     type Output = Self;
 
     fn shl(self, rhs: Register) -> Self::Output {
         self << (rhs as u32)
+    }
+}
+
+impl Shr<u32> for &Register {
+    type Output = u32;
+
+    fn shr(self, rhs: u32) -> Self::Output {
+        (*self as u32) >> rhs
     }
 }
 

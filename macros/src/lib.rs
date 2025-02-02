@@ -8,3 +8,13 @@ pub trait VMInstruction {
 pub trait EnumCount {
     const VARIANT_COUNT: usize;
 }
+
+pub mod helper {
+    pub fn max_value_for_bit_length<const SIGNED: bool>(bit_count: u32) -> u32 {
+        if !SIGNED {
+            (1u32 << bit_count) - 1
+        } else {
+            (1 << (bit_count - 1)) - 1
+        }
+    }
+}

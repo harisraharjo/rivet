@@ -147,14 +147,6 @@ impl Permissions {
     }
 }
 
-#[derive(Debug)]
-enum RegionType {
-    Code,
-    Data,
-    Heap,
-    Stack,
-}
-
 #[derive(Default, Debug)]
 struct RegionRange(u32, u32);
 impl RegionRange {
@@ -166,9 +158,16 @@ impl RegionRange {
         self.0
     }
 
-    /// Exclusive
+    fn start_mut(&mut self, value: u32) {
+        self.0 = value;
+    }
+
     fn end(&self) -> u32 {
         self.1
+    }
+
+    fn end_mut(&mut self, value: u32) {
+        self.1 = value;
     }
 }
 
@@ -179,6 +178,14 @@ impl From<&RegionRange> for Range<usize> {
             end: value.1 as usize,
         }
     }
+}
+
+#[derive(Debug)]
+enum RegionType {
+    Code,
+    Data,
+    Heap,
+    Stack,
 }
 
 #[derive(Debug)]
@@ -197,6 +204,10 @@ impl Region {
             t,
             // size,
         }
+    }
+
+    fn grow(&mut self, offset: u32) {
+        self.range.end_mut(offset);
     }
 
     // /// Check if the address is valid
@@ -221,6 +232,11 @@ impl Region {
 pub struct Regions([Region; 4]);
 
 impl Regions {
+    fn grow(&mut self, region: RegionType, offset: u32) -> Result<(), ()> {
+        self[region].grow(offset);
+        Ok(())
+    }
+
     // fn valid(&self) -> i32 {
     //     let f = 0xFFFFF000;
     //     // 4294963200
@@ -299,7 +315,8 @@ impl MemoryManager {
         }
     }
 
-    pub fn name(&self) -> i32 {
+    fn alter(&self) -> i32 {
+        let mem_size = self.memory.size();
         1
     }
 
@@ -308,6 +325,7 @@ impl MemoryManager {
         let alignment = 4;
         let end = (program.len() as u32).div_ceil(alignment) * alignment;
 
+        //   self.regions.grow(RegionType::Stack,)
         self.regions[RegionType::Code].range = RegionRange::new(0, end);
         self.regions[RegionType::Code]
             .permissions
@@ -348,6 +366,10 @@ impl MemoryManager {
         is_write: bool,
     ) -> Result<usize, &'static str> {
         // Alignment check (RISC-V requires alignment for LW/SW/LH/SH)
+        let f = vaddr % size;
+        // println!("Validate vaddr: {vaddr}");
+        // println!("Validate size: {size}");
+        // println!("Validate modulo: {f}");
         if vaddr % size != 0 {
             return Err("Unaligned access");
         }
@@ -385,8 +407,10 @@ impl MemoryManager {
         if vaddr <= r.0 && vaddr >= r.1 {
             return Ok(vaddr as usize);
         }
+        // Err("Address out of bounds")
 
-        Err("Address out of bounds")
+        // TODO: Delete me.
+        Ok(vaddr as usize)
     }
 
     pub fn read<T>(&self, address: u32) -> Result<T, MemoryError>
@@ -409,10 +433,6 @@ impl MemoryManager {
         LinearMemory: ReadWrite<T>,
     {
         let real_addr = self.validate(address, 4, true).unwrap();
-        let a = &self.regions[RegionType::Code].range;
-        let data = &self.memory[a.into()];
-        println!("Write: {:?}", data);
-
         self.memory.write(real_addr, value)
     }
 

@@ -9,8 +9,6 @@ use register::Register;
 #[derive(Debug, PartialEq, Eq, VMInstruction)]
 // #[repr(u32)]
 pub enum Instruction {
-    #[isa(0xff, 5, 19)]
-    Li { dest: Register, value: Immediate },
     // ---Binary Operators---
     #[isa(0x1, 5, 5, 5)]
     Add {
@@ -70,14 +68,16 @@ pub enum Instruction {
         shift: Register,
     },
     // --- Imm ---
+    /// Add Immediate
     #[isa(0x13, 5, 5, 14)]
     AddI {
         dest: Register,
         src: Register,
         value: Immediate,
     },
-    // #[isa(0x14, 5, 19)]
-    // Lui { dest: Register, value: Immediate },
+    /// Load Upper Immediate
+    #[isa(0x14, 5, 19)]
+    Lui { dest: Register, value: Immediate },
     #[isa(0xc, 5, 5, 14)]
     LoadWord {
         dest: Register,
@@ -110,6 +110,9 @@ pub enum Instruction {
         src2: Register,
         src3: Register,
     },
+    // Pseudo
+    #[isa(0xff, 5, 19)]
+    Li { dest: Register, value: Immediate },
     // #[isa(0xff,5,5,5)]
     // Syscall { number: u32 },
     // #[isa(0x0,5,5,5)]
@@ -143,15 +146,23 @@ mod test {
     fn t_overflow() {
         let size = 1024 * 4;
         let mut vm = VM::new(size);
-        // 16384
 
         let addi_overflow = Instruction::AddI {
             dest: Register::A0,
             src: Register::Zero,
-            value: Immediate::new::<14>(-0x4000),
+            value: Immediate::new::<14>(0x2000),
         };
 
+        println!("EKO {:#?}", addi_overflow);
+
+        let lui = Instruction::Lui {
+            dest: Register::T0,
+            value: Immediate::new::<19>(0x7FFFF),
+        };
+        println!("EKO {:#?}", lui);
+
         match vm.test_run(&[
+            lui,
             addi_overflow,
             Instruction::Syscall {
                 src1: Register::Zero,
@@ -164,8 +175,17 @@ mod test {
         }
         assert_eq!(
             vm.registers().get(Register::A0),
-            Immediate::new::<14>(-0x4000).into()
+            Immediate::new::<14>(0x2000).into(),
+            "Addi error"
         );
+
+        assert_eq!(
+            vm.registers().get(Register::T0),
+            Immediate::new::<19>(0x7FFFF).into(),
+            "lui error"
+        );
+
+        vm.reset();
     }
 
     #[test]
@@ -187,6 +207,10 @@ mod test {
             //     offset: 255,
             // },
             Instruction::Li {
+                dest: Register::T0,
+                value: Immediate::new::<19>(150),
+            },
+            Instruction::Lui {
                 dest: Register::T0,
                 value: Immediate::new::<19>(150),
             },

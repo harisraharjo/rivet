@@ -258,3 +258,9 @@ pub(crate) fn isa2(input: proc_macro2::TokenStream) -> deluxe::Result<proc_macro
 
     })
 }
+// pub struct Opcode<const VALUE: u8>(u8);
+// impl<const VALUE: u8> Opcode<VALUE> {
+//     pub const fn new() -> Self {
+//         Self(VALUE)
+//     }
+// }

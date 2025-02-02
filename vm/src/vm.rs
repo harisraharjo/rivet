@@ -166,20 +166,27 @@ impl VM {
                     .set(dest, self.cpu.registers.get(src).wrapping_add(value.into()));
                 Ok(())
             }
-            // Instruction::Lui { dest, value } => {
-            //     /*
-            //     **U-type** example: `LUI x1, 0x12345`.
-            //     Opcode 0110111.
-            //     The immediate 0x12345 is shifted right by 12 bits to get the upper 20 bits.
-            //     The encoding places these 20 bits in the imm[31:12] field, followed by rd (x1) and opcode.
-            //     Decoding extracts the upper 20 bits and shifts left by 12 to reconstruct the immediate.
-            //     */
+            Instruction::Lui { dest, value } => {
+                /*
+                **U-type** example: `LUI x1, 0x12345`.
+                Opcode 0110111.
+                The immediate 0x12345 is shifted right by 12 bits to get the upper 20 bits.
+                The encoding places these 20 bits in the imm[31:12] field, followed by rd (x1) and opcode.
+                Decoding extracts the upper 20 bits and shifts left by 12 to reconstruct the immediate.
+                */
+                let valei32 = value.value();
+                // println!("VALE i32: {:032b}", valei32); // 18
+                let vale: u32 = value.into();
+                // println!("VALE u32: {:032b}", vale); // 18
 
-            //     todo!();
-            //     // self.registers().set(dest);
-            //     Ok(())
-            // }
+                // 0xFFFFF000
+                // 0b11111111111111111111000000000000
+                self.cpu.registers.set(dest, vale);
+                // self.registers().set(dest);
+                Ok(())
+            }
             Instruction::LoadWord { dest, src, offset } => {
+                println!("Load Word");
                 let addr = u32::from(offset) + self.cpu.registers.get(src);
                 self.cpu
                     .registers
@@ -187,10 +194,14 @@ impl VM {
                 Ok(())
             }
             Instruction::StoreWord { dest, src, offset } => {
+                println!("Store word Start");
                 let base = self.cpu.registers.get(src);
-                self.memory
-                    .write(u32::from(offset) + base, self.cpu.registers.get(dest))
-                    .unwrap();
+                println!("Store Word Src: {base}");
+                let address = u32::from(offset) + base;
+                let value = self.cpu.registers.get(dest);
+                println!("Store Word value: {value}");
+                self.memory.write(address, value).unwrap();
+                println!("Store Word quit");
                 Ok(())
             }
             Instruction::Shl { dest, src, shift } => {
@@ -265,6 +276,7 @@ mod test {
                 },
             ];
 
+            // TODO: fix this, and make generic immediate
             match vm.test_run(program) {
                 Ok(e) => {}
                 Err(e) => println!("Test run went wrong"),
@@ -276,52 +288,52 @@ mod test {
     }
 
     #[test]
-    fn t_load() -> Result<(), DecodeError> {
+    fn t_load_store() -> Result<(), DecodeError> {
         let size = 1024 * 1024;
 
         let mut vm = VM::new(size);
 
-        // Scenario: Iterating through an array to perform some computation.
-        //           Currently, at the 5th element, needing to load it for a calculation.
-        // # x5 points to the beginning of an array of integers
-        // addi x7, x0, 16  # 4 bytes * 4 (for index 4, 5th element)
-        // add x7, x5, x7   # Calculate the address of the 5th element
-        // lw x6, 0(x7)     # Load the 5th element into x6 for computation
+        let program = &[
+            Lui {
+                dest: Register::T3,
+                value: Immediate::new::<19>(0x4000),
+            },
+            AddI {
+                dest: Register::T3,
+                src: Register::T3,
+                value: Immediate::new::<14>(0x100),
+            },
+            AddI {
+                dest: Register::T2,
+                src: Register::Zero,
+                value: Immediate::new::<14>(42),
+            },
+            StoreWord {
+                dest: Register::T2,
+                src: Register::T3,
+                offset: Immediate::new::<14>(0),
+            },
+            LoadWord {
+                dest: Register::T1,
+                src: Register::T3,
+                offset: Immediate::new::<14>(0),
+            },
+            Syscall {
+                src1: Register::Zero,
+                src2: Register::Zero,
+                src3: Register::Zero,
+            },
+        ];
 
-        for (a, b) in CASES {
-            let program = &[
-                AddI {
-                    dest: Register::T3,
-                    src: Register::Zero,
-                    value: Immediate::new::<14>(a),
-                },
-                Add {
-                    dest: Register::T3,
-                    src1: Register::T1,
-                    src2: Register::T3,
-                },
-                LoadWord {
-                    dest: Register::T2,
-                    src: Register::T3,
-                    offset: Immediate::new::<14>(0),
-                },
-                Syscall {
-                    src1: Register::Zero,
-                    src2: Register::Zero,
-                    src3: Register::Zero,
-                },
-            ];
-
-            match vm.test_run(program) {
-                Ok(e) => {}
-                Err(e) => println!("Test run went wrong"),
-            }
-            assert_eq!(vm.cpu.registers.get(Register::T2), (a + b) as u32);
-            vm.reset();
+        match vm.test_run(program) {
+            Ok(e) => {}
+            Err(e) => println!("Test run went wrong"),
         }
-
-        // let store = Instruction::StoreWord { dest: Register::A0, src: Register::A1, offset: () }
-
+        assert_eq!(
+            vm.cpu.registers.get(Register::T1),
+            vm.cpu.registers.get(Register::T2)
+        );
+        vm.reset();
         Ok(())
     }
 }

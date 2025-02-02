@@ -21,21 +21,19 @@ impl Immediate {
 
         let max = (1 << (BIT_LENGTH - 1)) - 1;
         let min = -(max + 1);
+        if value < min && value > max {
+            panic!("the value does not fit into the type `Immediate");
+        };
 
-        // Clamp from std can't be used in const fn
-        Immediate(if value < min {
-            min
-        } else if value > max {
-            max
-        } else {
-            value
-        })
+        Immediate(value)
+    }
+
+    pub fn value(&self) -> i32 {
+        self.0
     }
 
     fn convert_twos_complement_to_i32(masked_value: u32, bit_mask: u32) -> Self {
         // Check if the sign bit is set
-
-        println!("Decode mask value: {}", masked_value);
 
         let sign_bit = 1u32 << (bit_mask.trailing_ones() - 1);
 
