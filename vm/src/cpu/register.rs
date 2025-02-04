@@ -3,7 +3,6 @@ use std::ops::{BitAnd, Shl, Shr};
 use macros::EnumCount;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, EnumCount)]
-#[repr(u8)]
 pub enum Register {
     Zero,
     RA,
@@ -48,58 +47,27 @@ use crate::instruction::Codec;
 
 impl Codec for Register {}
 
-impl From<u8> for Register {
-    fn from(value: u8) -> Self {
-        match value {
-            1 => Register::RA,
-            2 => Register::SP,
-            3 => Register::GP,
-            4 => Register::TP,
-            5 => Register::T0,
-            6 => Register::T1,
-            7 => Register::T2,
-            8 => Register::T3,
-            9 => Register::S0,
-            10 => Register::S1,
-            11 => Register::S2,
-            12 => Register::S3,
-            13 => Register::A0,
-            14 => Register::A1,
-            15 => Register::A2,
-            16 => Register::A3,
-            17 => Register::A7,
-            _ => Register::Zero,
-        }
-    }
-}
-
 impl From<Register> for u32 {
     fn from(value: Register) -> Self {
-        match value {
-            Register::Zero => todo!(),
-            Register::RA => todo!(),
-            Register::SP => todo!(),
-            Register::GP => todo!(),
-            Register::TP => todo!(),
-            Register::T0 => todo!(),
-            Register::T1 => todo!(),
-            Register::T2 => todo!(),
-            Register::T3 => todo!(),
-            Register::S0 => todo!(),
-            Register::S1 => todo!(),
-            Register::S2 => todo!(),
-            Register::S3 => todo!(),
-            Register::A0 => todo!(),
-            Register::A1 => todo!(),
-            Register::A2 => todo!(),
-            Register::A3 => todo!(),
-            Register::A7 => todo!(),
-        }
+        value as u32
     }
 }
 
 impl From<u32> for Register {
     fn from(value: u32) -> Self {
+        // if value  > (Self::VARIANT_COUNT as u32) {
+        //     Register::Zero
+        // } else {
+        //     value.into()
+        // }
+
+        // TODO: Try the branchless
+        //branchless
+        // Compute the condition as a bit mask
+        // let in_range = (value <= Self::VARIANT_COUNT as u32) as u32;
+        // // Select between value and Register::Zero based on the condition
+        // let result_value = (in_range * value) | (!in_range & Register::Zero as u32);
+        // Register::from(result_value)
         match value {
             1 => Register::RA,
             2 => Register::SP,
@@ -168,30 +136,6 @@ impl Shr<Register> for i32 {
 
     fn shr(self, rhs: Register) -> Self::Output {
         self >> (rhs as i32)
-    }
-}
-
-#[derive(Default, Debug)]
-pub struct ProgramCounter(u32);
-
-impl ProgramCounter {
-    pub fn new() -> ProgramCounter {
-        ProgramCounter(0)
-    }
-
-    #[inline(always)]
-    pub fn increment(&mut self) {
-        self.0 += 4
-    }
-
-    #[inline(always)]
-    pub fn value(&self) -> u32 {
-        self.0
-    }
-
-    #[inline(always)]
-    pub fn reset(&mut self) {
-        self.0 = 0;
     }
 }
 

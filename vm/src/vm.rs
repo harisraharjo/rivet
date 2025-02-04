@@ -12,7 +12,7 @@ pub struct VM {
 }
 
 impl VM {
-    pub fn new(size: usize) -> Self {
+    pub fn new(size: u32) -> Self {
         Self {
             cpu: CPU::new(),
             memory: MemoryManager::new(size),
@@ -26,6 +26,7 @@ impl VM {
         self.cpu.registers.reset();
         self.halt = false;
         self.cpu.pc.reset();
+        self.memory.reset();
     }
 
     pub fn run(&mut self) -> Result<(), ()> {
@@ -80,10 +81,13 @@ impl VM {
 
         unsafe {
             let program_bytes = program_words.align_to::<u8>().1;
-            self.memory.load_program(program_bytes, 0)?;
+            self.memory.load_program(program_bytes)?;
             // .map_err(Box::new)?;
         }
 
+        println!("");
+        println!("Program is successfully loaded");
+        println!("");
         // self.cpu
         //     .registers
         //     .set(register::Register::SP, self.memory.size() as u32);
@@ -174,14 +178,17 @@ impl VM {
                 The encoding places these 20 bits in the imm[31:12] field, followed by rd (x1) and opcode.
                 Decoding extracts the upper 20 bits and shifts left by 12 to reconstruct the immediate.
                 */
-                let valei32 = value.value();
+                // let valei32 = value.value();
+                println!("Lui val {:#?}", value);
                 // println!("VALE i32: {:032b}", valei32); // 18
-                let vale: u32 = value.into();
+                let value32: u32 = value.into();
+
+                println!("Lui valu32 {:#?}", value32);
                 // println!("VALE u32: {:032b}", vale); // 18
 
                 // 0xFFFFF000
                 // 0b11111111111111111111000000000000
-                self.cpu.registers.set(dest, vale);
+                self.cpu.registers.set(dest, value32);
                 // self.registers().set(dest);
                 Ok(())
             }
@@ -194,11 +201,9 @@ impl VM {
                 Ok(())
             }
             Instruction::StoreWord { dest, src, offset } => {
-                println!("Store word Start");
-                let base = self.cpu.registers.get(src);
-                println!("Store Word Src: {base}");
-                let address = u32::from(offset) + base;
+                let address = u32::from(offset) + self.cpu.registers.get(src);
                 let value = self.cpu.registers.get(dest);
+                println!("Store Word address: {address}");
                 println!("Store Word value: {value}");
                 self.memory.write(address, value).unwrap();
                 println!("Store Word quit");
@@ -229,7 +234,7 @@ impl VM {
 
 #[cfg(test)]
 mod test {
-    use register::Register;
+    use crate::cpu::register::Register;
     use Instruction::*;
 
     use super::*;
@@ -282,8 +287,13 @@ mod test {
                 Err(e) => println!("Test run went wrong"),
             }
             println!("\n");
-            assert_eq!(vm.cpu.registers.get(Register::T3), (a + b) as u32);
+            assert_eq!(
+                vm.cpu.registers.get(Register::T3),
+                (a + b) as u32,
+                "Variable: {a} and {b}"
+            );
             vm.reset();
+            println!("Move on to the next items: {a} & {b}");
         }
     }
 

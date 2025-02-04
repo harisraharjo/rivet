@@ -14,7 +14,7 @@ impl Immediate {
 
     // const _A: () = assert!(BIT_LENGTH <= u32::BITS, "N must not exceed u32::BITS");
 
-    pub const fn new<const BIT_LENGTH: u32>(value: i32) -> Self {
+    pub fn new<const BIT_LENGTH: u32>(value: i32) -> Self {
         if BIT_LENGTH == 0 || BIT_LENGTH >= (u32::BITS) {
             panic!("Max bit length is 32");
         };

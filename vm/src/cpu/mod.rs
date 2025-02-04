@@ -1,8 +1,10 @@
+pub mod register;
+
 use std::ops::{Index, IndexMut};
 
 use macros::EnumCount;
 
-use crate::instruction::register::{ProgramCounter, Register};
+use register::Register;
 
 #[derive(Default, Debug)]
 pub struct Registers([u32; Register::VARIANT_COUNT]);
@@ -50,5 +52,29 @@ impl CPU {
             pc: ProgramCounter::new(),
             flags: 0,
         }
+    }
+}
+
+#[derive(Default, Debug)]
+pub struct ProgramCounter(u32);
+
+impl ProgramCounter {
+    pub fn new() -> ProgramCounter {
+        ProgramCounter(0)
+    }
+
+    #[inline(always)]
+    pub fn increment(&mut self) {
+        self.0 += 4
+    }
+
+    #[inline(always)]
+    pub fn value(&self) -> u32 {
+        self.0
+    }
+
+    #[inline(always)]
+    pub fn reset(&mut self) {
+        self.0 = 0;
     }
 }

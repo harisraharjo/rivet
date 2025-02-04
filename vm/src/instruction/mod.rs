@@ -1,10 +1,9 @@
 mod constants;
 pub mod operand;
-pub mod register;
 
+use crate::cpu::register::Register;
 use macros::VMInstruction;
 use operand::Immediate;
-use register::Register;
 
 #[derive(Debug, PartialEq, Eq, VMInstruction)]
 // #[repr(u32)]
@@ -130,7 +129,7 @@ mod test {
     use crate::vm::VM;
 
     use super::*;
-    use register::*;
+    use crate::cpu::register::*;
 
     #[test]
     fn t_opcode() {
@@ -150,15 +149,16 @@ mod test {
         let addi_overflow = Instruction::AddI {
             dest: Register::A0,
             src: Register::Zero,
-            value: Immediate::new::<14>(0x2000),
+            value: Immediate::new::<14>(-0x1FFF),
         };
-
-        println!("EKO {:#?}", addi_overflow);
 
         let lui = Instruction::Lui {
             dest: Register::T0,
-            value: Immediate::new::<19>(0x7FFFF),
+            value: Immediate::new::<19>(0x3FFFF),
         };
+        // max 19bit
+        // 262143i32
+        // 524287u32
         println!("EKO {:#?}", lui);
 
         match vm.test_run(&[
@@ -175,13 +175,13 @@ mod test {
         }
         assert_eq!(
             vm.registers().get(Register::A0),
-            Immediate::new::<14>(0x2000).into(),
+            Immediate::new::<14>(-0x1FFF).into(),
             "Addi error"
         );
 
         assert_eq!(
             vm.registers().get(Register::T0),
-            Immediate::new::<19>(0x7FFFF).into(),
+            Immediate::new::<19>(0x3FFFF).into(),
             "lui error"
         );
 
