@@ -62,7 +62,7 @@ where
 #[derive(Debug)]
 pub struct LinearMemory {
     buffer: Vec<u8>,
-    //TODO: Since this will be converted to WASM, I personally don't see the benefit of MaybeUninit because essentially "uninitialized" data is 0 in wasm
+    //TODO: Since the VM will be converted to WASM, I personally don't see the benefit of Vec<MaybeUninit<u8>> because essentially "uninitialized" data is 0 in wasm
     // buffer: Vec<MaybeUninit<u8>>,
     // size: usize,
 }
@@ -73,18 +73,12 @@ impl LinearMemory {
     // TODO: Make sure the capacity doesn't exceed u32::MAX
     pub fn new(size: u32) -> LinearMemory {
         //  assert!(size <= u32::MAX);
-        // let uninit_data = const { MaybeUninit::uninit() };
-        //let buffer:_ =vec![uninit_data; size as usize];
         // TODO: In other arch this will use `calloc`. I'm not sure about wasm though, couldn't find any info.
         // let buffer = vec![0; size as usize];
         let buffer = Vec::with_capacity(size as usize);
-        // println!("buffer len: {}", buffer.len());
-        println!("Uninit buffer len: {}", buffer.len());
 
         LinearMemory {
             buffer,
-            // buffer_uninit,
-            // buffer: Vec::with_capacity(size as usize),
             // size: size as usize,
         }
     }
@@ -108,26 +102,7 @@ impl LinearMemory {
 
     #[inline(always)]
     fn bulk_writes<const BYTES: usize>(&mut self, address: usize, value: &[u8]) {
-        // self.buffer.append(&mut value.to_owned());
-        // let count = value.len();
-        // self.buffer.reserve(count);
-        // let len = self.buffer.len();
-        // unsafe {
-        //     std::ptr::copy_nonoverlapping(
-        //         value as *const T,
-        //         self.buffer.as_mut_ptr().add(len),
-        //         count,
-        //     )
-        // };
-        // unsafe {
-        //     self.buffer.set_len(len + count);
-        // }
-
-        // self.buffer.resize_with(new_len, f);
         // self.buffer[address..address + BYTES].copy_from_slice(value);
-        // unsafe {
-        //     ptr::copy_nonoverlapping(src.as_ptr(), self.as_mut_ptr(), self.len());
-        // }
     }
 }
 
@@ -169,7 +144,6 @@ impl ReadWrite<u32> for LinearMemory {
                 self.buffer.capacity(),
             )
         };
-        println!("Incoming bytes {:?}", v);
         // let unit = self.buffer.spare_capacity_mut();
         let bytes_len = v.len();
         let last_input_addr = address + bytes_len;
@@ -179,21 +153,10 @@ impl ReadWrite<u32> for LinearMemory {
             std::ptr::copy_nonoverlapping(v.as_ptr(), unit.as_mut_ptr().cast(), bytes_len);
 
             if should_grow {
-                self.buffer.set_len(last_input_addr); //31
+                self.buffer.set_len(last_input_addr);
             };
         }
 
-        if address == 16640 {
-            let checking_address = self.buffer.capacity();
-            println!("Checking the address= {:#?}", checking_address);
-        }
-
-        //  let free_capacity = self.buffer.capacity();
-        let last_input_mem: &[_] = self.buffer.as_ref();
-        println!(
-            "Last byte in mem: {:?}",
-            &last_input_mem[address..(address + bytes_len)]
-        );
         // self.bulk_writes::<4>(address, &v);
 
         Ok(())
@@ -242,7 +205,6 @@ impl MemoryManager {
         println!("Program: {:?}", program);
         // Handle full 4-byte chunks
         for chunk in program.chunks(4) {
-            println!("Memory len Outside: {}", self.memory.buffer.len());
             if chunk.len() == 4 {
                 println!("Chunk: {:?}", chunk);
                 // Write full 4 bytes
@@ -292,6 +254,11 @@ impl MemoryManager {
         }
 
         let is_write = ty == Permission::W;
+
+        // if let Some(region) = self.regions.get(vaddr) {};
+        // else {
+        //     Err("Address out of bounds")
+        // }
 
         let r = &self.regions[RegionType::Code].bounds;
         // Code segment (read-only)
@@ -506,8 +473,8 @@ impl Region {
     }
 
     fn reset(&mut self) {
-        &self.bounds.start_mut(0);
-        &self.bounds.end_mut(0);
+        self.bounds.start_mut(0);
+        self.bounds.end_mut(0);
     }
 
     // /// Check if the address is valid
@@ -543,8 +510,7 @@ impl Regions {
         let mut res: Option<&Region> = None;
 
         for region in self.0.iter() {
-            let is_valid = region.is_valid_address(address);
-            if is_valid {
+            if region.is_valid_address(address) {
                 res = Some(region);
                 break;
             }

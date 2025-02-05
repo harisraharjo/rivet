@@ -118,11 +118,21 @@ pub enum Instruction {
     // Halt,
 }
 
-// pub trait InstructionHandler {
-//     fn fetch(&self, memory: u8) -> Instruction;
+pub trait Codec {
+    fn decode(src: u32, bit_accumulation: u32, bit_mask: u32) -> Self
+    where
+        Self: core::convert::From<u32>,
+    {
+        ((src >> bit_accumulation) & bit_mask).into()
+    }
 
-//     fn decode(&self, opcode: Instruction) -> Result<(), ()>;
-// }
+    fn encode(&self, bit_mask: u32, bit_accumulation: u32) -> u32
+    where
+        for<'a> &'a Self: std::ops::BitAnd<u32, Output = u32> + std::ops::Shl<u32, Output = u32>,
+    {
+        (self & bit_mask) << bit_accumulation
+    }
+}
 
 #[cfg(test)]
 mod test {

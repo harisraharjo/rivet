@@ -1,7 +1,7 @@
 use crate::{
     cpu::{Registers, CPU},
     instruction::{DecodeError, Instruction},
-    memory::{MemoryError, MemoryManager},
+    memory::MemoryManager,
 };
 
 pub struct VM {
@@ -73,7 +73,7 @@ impl VM {
     // }
 
     #[cfg(test)]
-    pub fn test_run(&mut self, program: &[Instruction]) -> Result<(), MemoryError> {
+    pub fn test_run(&mut self, program: &[Instruction]) -> Result<(), crate::memory::MemoryError> {
         let program_words: Vec<u32> = program
             .iter()
             .map(|instruction| instruction.into())
@@ -112,10 +112,10 @@ impl VM {
         memory.try_into()
     }
 
-    //inlined bcs of hot loop (https://nnethercote.github.io/perf-book/inlining.html)
-    #[inline(always)]
-    fn decode_execute(&mut self, opcode: Instruction) -> Result<(), ()> {
-        match opcode {
+    // TODO: Should it be inlined bcs of hot loop? (https://nnethercote.github.io/perf-book/inlining.html)
+    // #[inline(always)]
+    fn decode_execute(&mut self, instruction: Instruction) -> Result<(), ()> {
+        match instruction {
             Instruction::Li { dest, value } => {
                 self.registers().set(dest, value.into());
                 // let opo = 33u32.get_bit(3);
@@ -178,22 +178,11 @@ impl VM {
                 The encoding places these 20 bits in the imm[31:12] field, followed by rd (x1) and opcode.
                 Decoding extracts the upper 20 bits and shifts left by 12 to reconstruct the immediate.
                 */
-                // let valei32 = value.value();
-                println!("Lui val {:#?}", value);
-                // println!("VALE i32: {:032b}", valei32); // 18
-                let value32: u32 = value.into();
 
-                println!("Lui valu32 {:#?}", value32);
-                // println!("VALE u32: {:032b}", vale); // 18
-
-                // 0xFFFFF000
-                // 0b11111111111111111111000000000000
-                self.cpu.registers.set(dest, value32);
-                // self.registers().set(dest);
+                self.cpu.registers.set(dest, value.into());
                 Ok(())
             }
             Instruction::LoadWord { dest, src, offset } => {
-                println!("Load Word");
                 let addr = u32::from(offset) + self.cpu.registers.get(src);
                 self.cpu
                     .registers
@@ -203,10 +192,7 @@ impl VM {
             Instruction::StoreWord { dest, src, offset } => {
                 let address = u32::from(offset) + self.cpu.registers.get(src);
                 let value = self.cpu.registers.get(dest);
-                println!("Store Word address: {address}");
-                println!("Store Word value: {value}");
                 self.memory.write(address, value).unwrap();
-                println!("Store Word quit");
                 Ok(())
             }
             Instruction::Shl { dest, src, shift } => {
@@ -293,7 +279,7 @@ mod test {
                 "Variable: {a} and {b}"
             );
             vm.reset();
-            println!("Move on to the next items: {a} & {b}");
+            println!("Finished {a} & {b}");
         }
     }
 

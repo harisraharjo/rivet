@@ -9,49 +9,31 @@ pub enum Register {
     SP,
     GP,
     TP,
-    /// temporary values
-    T0, // alternate return address
+    // === temporary values ===
+    /// Alternate Return Address
+    T0,
     T1,
     T2,
     T3,
-    /// saved values
-    S0, //frame pointer
+    // === saved values ===
+    /// Frame Pointer
+    S0,
     S1,
     S2,
     S3,
-    /// Argument register (function args & return values)
-    A0, //return value
+    // === Argument register (function args & return values) ===
+    ///Return Value
+    A0,
     A1,
     A2,
     A3,
-    A7, //syscall
+    /// Syscall
+    A7,
 }
 
-// pub trait Decode
-// where
-//     Self: From<u32>,
-// {
-//     fn decode(src: u32, bit_accumulation: u32, bit_length: u32) -> Self {
-//         ((src >> bit_accumulation) & bit_length).into()
-//     }
-// }
-// pub trait Encode
-// where
-//     for<'a> &'a Self: BitAnd<u32, Output = u32> + Shl<u32, Output = u32>,
-// {
-//     fn encode(&self, bit_length: u32, bit_accumulation: u32) -> u32 {
-//         (self & bit_length) << bit_accumulation
-//     }
-// }
 use crate::instruction::Codec;
 
 impl Codec for Register {}
-
-impl From<Register> for u32 {
-    fn from(value: Register) -> Self {
-        value as u32
-    }
-}
 
 impl From<u32> for Register {
     fn from(value: u32) -> Self {
@@ -61,33 +43,18 @@ impl From<u32> for Register {
         //     value.into()
         // }
 
-        // TODO: Try the branchless
-        //branchless
-        // Compute the condition as a bit mask
-        // let in_range = (value <= Self::VARIANT_COUNT as u32) as u32;
-        // // Select between value and Register::Zero based on the condition
-        // let result_value = (in_range * value) | (!in_range & Register::Zero as u32);
-        // Register::from(result_value)
-        match value {
-            1 => Register::RA,
-            2 => Register::SP,
-            3 => Register::GP,
-            4 => Register::TP,
-            5 => Register::T0,
-            6 => Register::T1,
-            7 => Register::T2,
-            8 => Register::T3,
-            9 => Register::S0,
-            10 => Register::S1,
-            11 => Register::S2,
-            12 => Register::S3,
-            13 => Register::A0,
-            14 => Register::A1,
-            15 => Register::A2,
-            16 => Register::A3,
-            17 => Register::A7,
-            _ => Register::Zero,
-        }
+        // Check if value is within bounds (1 to 31)
+        // bool casted to u8 is either 0 or 1. Yes = 1, No = 0;
+        let is_in_range = ((value > 0) & (value <= (Self::VARIANT_COUNT - 1) as u32)) as u8;
+
+        // Clamp the value to 0 if it's out of range
+        // By multiplying value by is_in_range when is_in_range is 1, we get value itself.
+        // When is_in_range is 0, multiplying by 0 results in 0,
+        //      and we add Register::Zero (which is 0 in u8 representation) back in, effectively clamping all out-of-range values to 0.
+        let clamped_value = (is_in_range * value as u8) | ((!is_in_range) * Register::Zero as u8);
+
+        // Safety: clamped_value is ensured to be within a safe range for Register (Self::VARIANT_COUNT).
+        unsafe { std::mem::transmute::<u8, Register>(clamped_value) }
     }
 }
 
