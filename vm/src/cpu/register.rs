@@ -1,13 +1,17 @@
-use std::ops::{BitAnd, Shl, Shr};
+use std::ops::{BitAnd, Index, IndexMut, Shl, Shr};
 
 use macros::EnumCount;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, EnumCount)]
 pub enum Register {
     Zero,
+    /// Return Address
     RA,
+    /// Stack Pointer
     SP,
+    /// Global Pointer
     GP,
+    /// Thread Pointer
     TP,
     // === temporary values ===
     /// Alternate Return Address
@@ -103,6 +107,37 @@ impl Shr<Register> for i32 {
 
     fn shr(self, rhs: Register) -> Self::Output {
         self >> (rhs as i32)
+    }
+}
+
+#[derive(Default, Debug)]
+pub struct Registers([u32; Register::VARIANT_COUNT]);
+
+impl Registers {
+    pub fn get(&self, register: Register) -> u32 {
+        self.0[register as usize]
+    }
+
+    pub fn set(&mut self, register: Register, value: u32) {
+        self.0[register as usize] = value;
+    }
+
+    pub fn reset(&mut self) {
+        self.0.fill(0);
+    }
+}
+
+impl Index<Register> for Registers {
+    type Output = u32;
+
+    fn index(&self, index: Register) -> &Self::Output {
+        todo!()
+    }
+}
+
+impl IndexMut<Register> for Registers {
+    fn index_mut(&mut self, index: Register) -> &mut Self::Output {
+        todo!()
     }
 }
 

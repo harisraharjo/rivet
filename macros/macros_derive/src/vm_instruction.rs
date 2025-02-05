@@ -177,9 +177,10 @@ pub(crate) fn isa2(input: proc_macro2::TokenStream) -> deluxe::Result<proc_macro
 
     //generate
     Ok(quote::quote! {
-        #[derive(Debug)]
+        #[derive(Debug, thiserror::Error)]
         pub enum DecodeError {
-            UnknownOpcode
+            #[error("Unknown Opcode: `{0}`")]
+            UnknownOpcode(u8)
         }
 
         impl #impl_g TryFrom<u32> for #enum_name #type_g #where_c {
@@ -189,7 +190,7 @@ pub(crate) fn isa2(input: proc_macro2::TokenStream) -> deluxe::Result<proc_macro
                 let opcode = value as u8;
                 match opcode {
                     #(#decoded_variants)*
-                    _ => Err(DecodeError::UnknownOpcode),
+                    _ => Err(DecodeError::UnknownOpcode(opcode)),
                 }
             }
         }

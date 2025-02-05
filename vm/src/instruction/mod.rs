@@ -154,7 +154,7 @@ mod test {
     #[test]
     fn t_overflow() {
         let size = 1024 * 4;
-        let mut vm = VM::new(size);
+        let mut vm = VM::new(crate::memory::MemoryConfiguration::new(size));
 
         let addi_overflow = Instruction::AddI {
             dest: Register::A0,

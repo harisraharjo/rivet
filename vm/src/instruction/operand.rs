@@ -2,6 +2,7 @@ use crate::instruction::Codec;
 use std::ops::{BitAnd, Shl};
 
 // toDO: create compile time check for bit length only until 32 inclusive
+// TODO: Make generic immediate or make it u32 instead
 #[derive(Debug, PartialEq, Eq)]
 pub struct Immediate(i32);
 
@@ -19,11 +20,13 @@ impl Immediate {
             panic!("Max bit length is 32");
         };
 
-        let max = (1 << (BIT_LENGTH - 1)) - 1;
+        let max = (1 << (BIT_LENGTH - 1)) - 1; //i32
+                                               // let max = (1 << BIT_LENGTH) - 1; //u32
         let min = -(max + 1);
-        if value < min && value > max {
-            panic!("the value does not fit into the type `Immediate");
-        };
+        assert!(
+            value >= min && value <= max,
+            "the value does not fit into the type `Immediate"
+        );
 
         Immediate(value)
     }
@@ -72,6 +75,9 @@ impl From<u32> for Immediate {
 
 impl From<Immediate> for u32 {
     fn from(value: Immediate) -> Self {
+        // let g = value.0;
+        // println!("Immi: {:032b}", g);
+        // println!("Immi: {:032b}", g as u32);
         value.0 as u32
     }
 }

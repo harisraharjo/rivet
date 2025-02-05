@@ -1,7 +1,7 @@
 use crate::{
-    cpu::{Registers, CPU},
-    instruction::{DecodeError, Instruction},
-    memory::MemoryManager,
+    cpu::{register::Registers, CPU},
+    instruction::Instruction,
+    memory::{MemoryConfiguration, MemoryManager},
 };
 
 pub struct VM {
@@ -12,10 +12,10 @@ pub struct VM {
 }
 
 impl VM {
-    pub fn new(size: u32) -> Self {
+    pub fn new(configuration: MemoryConfiguration) -> Self {
         Self {
             cpu: CPU::new(),
-            memory: MemoryManager::new(size),
+            memory: MemoryManager::new(&configuration),
             halt: false,
         }
     }
@@ -29,7 +29,7 @@ impl VM {
         self.memory.reset();
     }
 
-    pub fn run(&mut self) -> Result<(), ()> {
+    pub fn run(&mut self) -> anyhow::Result<()> {
         // while self.cpu.pc.value() < self.memory.size() {
         //     self.step()?;
         // }
@@ -41,39 +41,20 @@ impl VM {
         Ok(())
     }
 
-    pub fn step(&mut self) -> Result<(), ()> {
-        match self.fetch() {
-            Ok::<Instruction, _>(instruction) => {
-                self.cpu.pc.increment();
-                self.decode_execute(instruction)
-            }
-            Err(e) => {
-                // TODO: Not like this
-                println!("Can't decode from memory: {:#?}", e);
-                Err(())
-            }
-        }
+    pub fn step(&mut self) -> anyhow::Result<()> {
+        let instruction = self.fetch()?;
+        self.cpu.pc.increment();
+        self.decode_execute(instruction)
     }
 
     pub fn registers(&mut self) -> &mut Registers {
         &mut self.cpu.registers
     }
 
-    // #[cfg(test)]
-    // pub fn load_from_vec<T>(&mut self, program: &[T], addr: u32) -> Result<(), MemoryError>
-    // where
-    //     T: Copy,
-    //     M: ReadWrite<T>,
-    // {
-    //     for (i, b) in program.iter().enumerate() {
-    //         let addr = addr + ((i as u32) * 4);
-    //         self.memory.write(addr, *b)?
-    //     }
-    //     Ok(())
-    // }
-
     #[cfg(test)]
-    pub fn test_run(&mut self, program: &[Instruction]) -> Result<(), crate::memory::MemoryError> {
+    pub fn test_run(&mut self, program: &[Instruction]) -> anyhow::Result<()> {
+        use crate::cpu::register::Register;
+
         let program_words: Vec<u32> = program
             .iter()
             .map(|instruction| instruction.into())
@@ -88,12 +69,12 @@ impl VM {
         println!("");
         println!("Program is successfully loaded");
         println!("");
-        // self.cpu
-        //     .registers
-        //     .set(register::Register::SP, self.memory.size() as u32);
+        self.cpu
+            .registers
+            .set(Register::SP, self.memory.stack_start());
 
         while !self.halt {
-            self.step().unwrap();
+            self.step()?;
         }
 
         // while self.cpu.pc.value() < self.memory.size() && !self.halt {
@@ -105,16 +86,16 @@ impl VM {
 }
 
 impl VM {
-    fn fetch(&self) -> Result<Instruction, DecodeError> {
+    fn fetch(&self) -> anyhow::Result<Instruction> {
         // TODO: unify the error
-        let memory = self.memory.read::<u32>(self.cpu.pc.value()).unwrap();
+        let memory = self.memory.read::<u32>(self.cpu.pc.value())?;
 
-        memory.try_into()
+        Ok(Instruction::try_from(memory)?)
     }
 
     // TODO: Should it be inlined bcs of hot loop? (https://nnethercote.github.io/perf-book/inlining.html)
     // #[inline(always)]
-    fn decode_execute(&mut self, instruction: Instruction) -> Result<(), ()> {
+    fn decode_execute(&mut self, instruction: Instruction) -> anyhow::Result<()> {
         match instruction {
             Instruction::Li { dest, value } => {
                 self.registers().set(dest, value.into());
@@ -165,9 +146,20 @@ impl VM {
                 Ok(())
             }
             Instruction::AddI { dest, src, value } => {
-                self.cpu
-                    .registers
-                    .set(dest, self.cpu.registers.get(src).wrapping_add(value.into()));
+                println!("");
+                println!("Addi");
+                println!("Imm: {:?}", value);
+                let v: u32 = value.into();
+                println!("Imm_u32: {v}");
+                let mem_cap = self.memory.mem_cap();
+                println!("memory cap: {:?}", mem_cap);
+                println!("src reg: {:?}", src);
+                let src = self.cpu.registers.get(src);
+                println!("src val: {:?}", src);
+                let result = src.wrapping_add(v);
+                println!("src wrapping_add imm_u32: {result}");
+                println!("Storing to dest reg: {:?}", dest);
+                self.cpu.registers.set(dest, result);
                 Ok(())
             }
             Instruction::Lui { dest, value } => {
@@ -184,15 +176,30 @@ impl VM {
             }
             Instruction::LoadWord { dest, src, offset } => {
                 let addr = u32::from(offset) + self.cpu.registers.get(src);
-                self.cpu
-                    .registers
-                    .set(dest, self.memory.read(addr).unwrap());
+                self.memory
+                    .alignment_check(std::mem::size_of::<u32>(), addr)?;
+                self.cpu.registers.set(dest, self.memory.read(addr)?);
                 Ok(())
             }
             Instruction::StoreWord { dest, src, offset } => {
-                let address = u32::from(offset) + self.cpu.registers.get(src);
-                let value = self.cpu.registers.get(dest);
-                self.memory.write(address, value).unwrap();
+                // Alignment check (RISC-V requires alignment for LW/SW/LH/SH)
+                println!("");
+                println!("Store word");
+
+                println!("dest reg: {:?}", dest);
+                let dest = self.cpu.registers.get(dest);
+                println!("Dest value: {dest}");
+                let offset = u32::from(offset);
+                println!("Offset: {}", u32::from(offset));
+                // TODO: dest and offset potential to be minus
+                let address = offset + dest;
+                println!("offset + dest: {address}");
+                self.memory
+                    .alignment_check(std::mem::size_of::<u32>(), address)?;
+                let value = self.cpu.registers.get(src);
+                println!("src reg: {:?}", src);
+                println!("src value: {:?}", value);
+                self.memory.write(address, value)?;
                 Ok(())
             }
             Instruction::Shl { dest, src, shift } => {
@@ -243,7 +250,7 @@ mod test {
     fn t_arith() {
         let size = 1024 * 1024;
 
-        let mut vm = VM::new(size);
+        let mut vm = VM::new(crate::memory::MemoryConfiguration::new(size));
         for (a, b) in CASES {
             let program = &[
                 // Li {
@@ -267,10 +274,9 @@ mod test {
                 },
             ];
 
-            // TODO: fix this, and make generic immediate
             match vm.test_run(program) {
-                Ok(e) => {}
-                Err(e) => println!("Test run went wrong"),
+                Ok(_) => {}
+                Err(e) => println!("Test run went wrong {}", e),
             }
             println!("\n");
             assert_eq!(
@@ -284,36 +290,69 @@ mod test {
     }
 
     #[test]
-    fn t_load_store() -> Result<(), DecodeError> {
+    fn t_load_store_on_the_stack() {
         let size = 1024 * 1024;
 
-        let mut vm = VM::new(size);
+        let mut vm = VM::new(crate::memory::MemoryConfiguration::new(size));
 
+        // # Function prologue - setup stack frame
+        // function_start:
+        //      addi sp, sp, -16
+        //      sw ra, 12(sp)     # Save return address
+        //      sw s0, 8(sp)      # Save frame pointer (if needed)
+        // # Store a variable on the stack
+        //      li t0, 42         # Load value 42 into t0
+        //      sw t0, 0(sp)      # Store this value on the stack
         let program = &[
-            Lui {
-                dest: Register::T3,
-                value: Immediate::new::<19>(0x4000),
-            },
             AddI {
-                dest: Register::T3,
-                src: Register::T3,
-                value: Immediate::new::<14>(0x100),
-            },
-            AddI {
-                dest: Register::T2,
+                dest: Register::RA,
                 src: Register::Zero,
-                value: Immediate::new::<14>(42),
+                value: Immediate::new::<14>(5),
+            },
+            AddI {
+                dest: Register::S0,
+                src: Register::Zero,
+                value: Immediate::new::<14>(13),
+            },
+            AddI {
+                dest: Register::SP,
+                src: Register::SP,
+                value: Immediate::new::<14>(-15), //allocate 15 bytes/index
             },
             StoreWord {
-                dest: Register::T2,
-                src: Register::T3,
-                offset: Immediate::new::<14>(0),
+                dest: Register::SP,
+                src: Register::RA,
+                offset: Immediate::new::<14>(0), //store value at SP + 0
+            },
+            StoreWord {
+                dest: Register::SP,
+                src: Register::S0,
+                offset: Immediate::new::<14>(4), //store value at SP + 4
+            },
+            Lui {
+                dest: Register::T0,
+                value: Immediate::new::<19>(43),
+            },
+            StoreWord {
+                dest: Register::SP,
+                src: Register::T0,
+                offset: Immediate::new::<14>(8), //store value at SP + 8
             },
             LoadWord {
                 dest: Register::T1,
-                src: Register::T3,
+                src: Register::SP,
                 offset: Immediate::new::<14>(0),
-            },
+            }, // Load data in address SP + 0 to T1. This is used for test
+            LoadWord {
+                dest: Register::T2,
+                src: Register::SP,
+                offset: Immediate::new::<14>(4),
+            }, // Load data in address SP + 4 to T2. This is used for test
+            LoadWord {
+                dest: Register::T3,
+                src: Register::SP,
+                offset: Immediate::new::<14>(8),
+            }, // Load data in address SP + 8 to T3. This is used for test
             Syscall {
                 src1: Register::Zero,
                 src2: Register::Zero,
@@ -322,14 +361,58 @@ mod test {
         ];
 
         match vm.test_run(program) {
-            Ok(e) => {}
-            Err(e) => println!("Test run went wrong"),
+            Ok(_) => {}
+            Err(e) => println!("Test run went wrong {}", e),
         }
-        assert_eq!(
-            vm.cpu.registers.get(Register::T1),
-            vm.cpu.registers.get(Register::T2)
-        );
+
+        assert_eq!(vm.cpu.registers.get(Register::T1), 5);
+        assert_eq!(vm.cpu.registers.get(Register::S0), 13);
+        assert_eq!(vm.cpu.registers.get(Register::T0), 43);
         vm.reset();
-        Ok(())
     }
 }
+// Invalid address test below
+// Lui {
+//         dest: Register::T3,
+//         value: Immediate::new::<19>(0x4000),
+//     },
+//     AddI {
+//         dest: Register::T3,
+//         src: Register::T3,
+//         value: Immediate::new::<14>(0x100),
+//     },
+// Lui {
+//         dest: Register::T3,
+//         value: Immediate::new::<19>(0x4000),
+//     },
+//     AddI {
+//         dest: Register::T3,
+//         src: Register::T3,
+//         value: Immediate::new::<14>(0x100),
+//     },
+//     AddI {
+//         dest: Register::T2,
+//         src: Register::Zero,
+//         value: Immediate::new::<14>(42),
+//     },
+//     StoreWord {
+//         dest: Register::T2,
+//         src: Register::T3,
+//         offset: Immediate::new::<14>(0),
+//     },
+//     LoadWord {
+//         dest: Register::T1,
+//         src: Register::T3,
+//         offset: Immediate::new::<14>(0),
+//     },
+
+// Unaligned test
+// AddI {
+//         dest: Register::SP,
+//         src: Register::SP,
+//         value: Immediate::new::<14>(-16),
+//     },
+//     StoreWord {
+//         dest: Register::SP,
+//         src: Register::RA,
+//         offset: Immediate::new::<14>(11),

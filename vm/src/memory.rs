@@ -15,8 +15,10 @@ use thiserror::Error;
 pub enum MemoryError {
     #[error("Permission Denied: Unable to `{0}` at address `{1}`")]
     PermissionDenied(Permission, u32),
-    #[error("Unaligned access: `{0}`")]
-    UnalignedAccess(u32),
+    #[error("Unaligned access: Trying to access address `{0}` with `{1}`")]
+    UnalignedAccess(u32, usize),
+    #[error("Invalid address: `{0}`")]
+    InvalidAddress(u32),
     #[error("out of bounds: `{0}`")]
     OutOfBounds(u32),
     #[error("Out of memory: maximum capacity is`{0}`")]
@@ -56,7 +58,6 @@ pub trait Addressable: ReadWrite<u8> + ReadWrite<u32> + Index<Range<usize>>
 where
     Self::Output: Debug,
 {
-    // fn is_empty(&self) -> bool;
 }
 
 #[derive(Debug)]
@@ -102,6 +103,7 @@ impl LinearMemory {
 
     #[inline(always)]
     fn bulk_writes<const BYTES: usize>(&mut self, address: usize, value: &[u8]) {
+        // TODO: fix
         // self.buffer[address..address + BYTES].copy_from_slice(value);
     }
 }
@@ -131,6 +133,7 @@ impl ReadWrite<u16> for LinearMemory {
 
 impl ReadWrite<u32> for LinearMemory {
     fn read(&self, address: usize) -> Result<u32, MemoryError> {
+        // TODO: Write done but Read not yet updated
         let bytes = &self.buffer[address..address + std::mem::size_of::<u32>()];
 
         Ok(u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
@@ -178,15 +181,32 @@ pub struct MemoryManager {
 }
 
 impl MemoryManager {
-    pub fn new(allocated_memory: u32) -> MemoryManager {
+    pub fn new(configuration: &MemoryConfiguration) -> MemoryManager {
         let mut regions = Regions::default();
-        let stack_start = allocated_memory - 1;
-        regions[RegionType::Stack].set_bounds(stack_start, stack_start);
+        let stack_start = configuration.allocated_memory - 1;
+        println!("Allocated mem: {}", configuration.allocated_memory);
+        println!("Stack size: {}", configuration.stack_size);
+
+        println!(
+            "Stack start: {}",
+            configuration.allocated_memory - configuration.stack_size
+        );
+        regions[RegionType::Stack].set_bounds(
+            configuration.allocated_memory - configuration.stack_size,
+            stack_start,
+        );
         MemoryManager {
-            memory: LinearMemory::new(allocated_memory),
+            memory: LinearMemory::new(configuration.allocated_memory),
             regions,
-            free_memory: allocated_memory,
+            free_memory: configuration.allocated_memory,
         }
+    }
+    pub fn mem_cap(&self) -> usize {
+        self.memory.buffer.capacity()
+    }
+
+    pub fn stack_start(&self) -> u32 {
+        self.regions[RegionType::Stack].bounds.end()
     }
 
     pub fn load_program(&mut self, program: &[u8]) -> Result<(), MemoryError> {
@@ -235,68 +255,35 @@ impl MemoryManager {
         Ok(())
     }
 
+    /// Alignment check (RISC-V requires alignment for LW/SW/LH/SH)
+    pub fn alignment_check(&self, size: usize, address: u32) -> Result<(), MemoryError> {
+        if address % (size as u32) != 0 {
+            return Err(MemoryError::UnalignedAccess(address, size));
+        };
+
+        Ok(())
+    }
+
     /// Validate address and alignment, return buffer offset
     fn validate(
         &self,
         vaddr: u32,
         size: usize, // 1, 2, or 4 bytes
-        ty: Permission,
+        permission: Permission,
     ) -> Result<usize, MemoryError> {
-        // println!("Validate vaddr: {vaddr}");
-        let size = size as u32;
-        // Alignment check (RISC-V requires alignment for LW/SW/LH/SH)
-        if vaddr % size != 0 {
-            return Err(MemoryError::UnalignedAccess(vaddr));
-        }
-
         if vaddr > (self.memory.buffer.capacity() as u32) {
             return Err(MemoryError::OutOfBounds(vaddr));
         }
 
-        let is_write = ty == Permission::W;
-
-        // if let Some(region) = self.regions.get(vaddr) {};
-        // else {
-        //     Err("Address out of bounds")
-        // }
-
-        let r = &self.regions[RegionType::Code].bounds;
-        // Code segment (read-only)
-        if vaddr >= r.0 && vaddr + size <= r.1 {
-            let is_immutable: bool = self.regions[RegionType::Code]
-                .permissions
-                .status(Permission::W);
-
-            if is_write && !is_immutable {
-                return Err(MemoryError::PermissionDenied(Permission::W, vaddr));
+        if let Some(region) = self.regions.get(vaddr) {
+            if region.allowed_to(permission) {
+                Ok(vaddr as usize)
+            } else {
+                Err(MemoryError::PermissionDenied(permission, vaddr))
             }
-            return Ok(vaddr as usize);
+        } else {
+            Err(MemoryError::InvalidAddress(vaddr))
         }
-
-        let r = &self.regions[RegionType::Data].bounds;
-        // Data segment (read-only)
-        if vaddr >= r.0 && vaddr + size <= r.1 {
-            if is_write {
-                return Err(MemoryError::PermissionDenied(Permission::W, vaddr));
-            }
-            return Ok(vaddr as usize);
-        }
-
-        let r = &self.regions[RegionType::Heap].bounds;
-        // Heap segment (read/write)
-        if vaddr >= r.0 && vaddr + size <= r.1 {
-            return Ok(vaddr as usize);
-        }
-
-        let r = &self.regions[RegionType::Stack].bounds;
-        // Stack segment (read/write, grows downward)
-        if vaddr <= r.0 && vaddr >= r.1 {
-            return Ok(vaddr as usize);
-        }
-
-        // Err("Address out of bounds")
-        // TODO: Fix memoery region intialization and Delete me and uncomment above.
-        Ok(vaddr as usize)
     }
 
     pub fn read<T>(&self, address: u32) -> Result<T, MemoryError>
@@ -304,10 +291,7 @@ impl MemoryManager {
         T: Copy,
         LinearMemory: ReadWrite<T>,
     {
-        // TODO: TIDY ME.
-        let real_addr = self
-            .validate(address, std::mem::size_of::<T>(), Permission::R)
-            .unwrap();
+        let real_addr = self.validate(address, std::mem::size_of::<T>(), Permission::R)?;
         self.memory.read(real_addr)
     }
 
@@ -316,10 +300,7 @@ impl MemoryManager {
         T: Copy,
         LinearMemory: ReadWrite<T>,
     {
-        let real_addr = self
-            .validate(address, std::mem::size_of::<T>(), Permission::W)
-            .unwrap();
-
+        let real_addr = self.validate(address, std::mem::size_of::<T>(), Permission::W)?;
         self.memory.write(real_addr, value)
     }
 
@@ -375,6 +356,7 @@ impl Permissions {
 
 impl From<Permissions> for [bool; Permission::VARIANT_COUNT] {
     fn from(value: Permissions) -> Self {
+        // TODO: Fishy. If the Permission::VARIANT_COUNT changes it won't be good
         [value.0[0], value.0[1], value.0[2]]
     }
 }
@@ -442,6 +424,12 @@ enum RegionType {
     Stack,
 }
 
+impl RegionType {
+    const fn default_stack_size() -> u32 {
+        2048
+    }
+}
+
 #[derive(Debug)]
 pub struct Region {
     permissions: Permissions,
@@ -465,7 +453,7 @@ impl Region {
     }
 
     fn is_valid_address(&self, address: u32) -> bool {
-        address >= self.bounds.start() && self.bounds.end() >= address
+        address >= self.bounds.start() && address <= self.bounds.end()
     }
 
     fn set_bounds(&mut self, start: u32, end: u32) {
@@ -477,27 +465,13 @@ impl Region {
         self.bounds.end_mut(0);
     }
 
-    // /// Check if the address is valid
-    // pub fn is_valid(&self, address: usize) -> bool {
-    //     debug!(
-    //         "start: {0}. address: {address}. size: {1}",
-    //         self.start, self.size
-    //     );
-
-    //     // self.start <= address && address < (self.size + self.start)
-    // }
-
+    fn allowed_to(&self, permission: Permission) -> bool {
+        self.permissions.status(permission)
+    }
     // pub fn offset(&self, address: usize) -> usize {
     //     address - self.start
     // }
 }
-
-// struct RegionConfig {
-//     permissions: &'a mut Permissions,
-//     start: Option<u32>,
-//     start: Option<u32>,
-
-// }
 
 // code (0x0000_0000, 0x0000_1000)
 // data (0x0000_1000, 0x4000_0000)
@@ -510,6 +484,7 @@ impl Regions {
         let mut res: Option<&Region> = None;
 
         for region in self.0.iter() {
+            println!("Region {:?} bounds: {:?}", region.ty, region.bounds);
             if region.is_valid_address(address) {
                 res = Some(region);
                 break;
@@ -524,18 +499,6 @@ impl Regions {
             region.reset();
         }
     }
-
-    // fn access(&self, address: u32) -> &Region {
-    //     // let heap_range = Range::from(&self[RegionType::Heap].bounds);
-    //     // let stack_range = Range::from(&self[RegionType::Heap].bounds);
-    //     let fg = &self
-    //         .0
-    //         .map(|region| {
-    //             &region.bounds
-    //         })
-    //         .iter().posi;
-    //     1
-    // }
 
     // fn valid(&self) -> i32 {
     //     let f = 0xFFFFF000;
@@ -583,6 +546,31 @@ impl Default for Regions {
                 RegionType::Stack,
             ), //(0x8000_0000, 0xFFFF_FFFF)
         ])
+    }
+}
+
+pub struct MemoryConfiguration {
+    allocated_memory: u32,
+    stack_size: u32,
+}
+
+impl MemoryConfiguration {
+    pub fn new(allocated_memory: u32) -> MemoryConfiguration {
+        let stack_size = RegionType::default_stack_size();
+        assert!(
+            stack_size <= allocated_memory,
+            "Stack size {} can't be more than the memory size and vice versa",
+            stack_size
+        );
+
+        MemoryConfiguration {
+            allocated_memory,
+            stack_size,
+        }
+    }
+
+    pub fn set_stack_size(mut self, size: u32) {
+        self.stack_size = size;
     }
 }
 
