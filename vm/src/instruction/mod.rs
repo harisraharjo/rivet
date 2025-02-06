@@ -72,25 +72,25 @@ pub enum Instruction {
     AddI {
         dest: Register,
         src: Register,
-        value: Immediate<{ ImmBit::B14.count() }>,
+        value: Immediate<{ ImmBit::B14.length() }>,
     },
-    /// Load Upper Immediate<{ImmBit::B14.count()}>
+    /// Load Upper Immediate<{ImmBit::B14.length()}>
     #[isa(0x14, 5, 19)]
     Lui {
         dest: Register,
-        value: Immediate<{ ImmBit::B19.count() }>,
+        value: Immediate<{ ImmBit::B19.length() }>,
     },
     #[isa(0xc, 5, 5, 14)]
     LoadWord {
         dest: Register,
         src: Register,
-        offset: Immediate<{ ImmBit::B14.count() }>,
+        offset: Immediate<{ ImmBit::B14.length() }>,
     },
     #[isa(0xd, 5, 5, 14)]
     StoreWord {
         dest: Register,
         src: Register,
-        offset: Immediate<{ ImmBit::B14.count() }>,
+        offset: Immediate<{ ImmBit::B14.length() }>,
     },
     // #[isa(0xe,5,5,5)]
     // LoadByte {
@@ -116,7 +116,7 @@ pub enum Instruction {
     #[isa(0xff, 5, 19)]
     Li {
         dest: Register,
-        value: Immediate<{ ImmBit::B19.count() }>,
+        value: Immediate<{ ImmBit::B19.length() }>,
     },
     // #[isa(0xff,5,5,5)]
     // Syscall { number: u32 },

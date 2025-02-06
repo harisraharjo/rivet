@@ -2,12 +2,12 @@ use crate::instruction::Codec;
 use std::ops::{BitAnd, Shl};
 
 pub enum ImmBit {
-    B14,
-    B19,
+    B14 = 14,
+    B19 = 19,
 }
 
 impl ImmBit {
-    pub const fn count(&self) -> u32 {
+    pub const fn length(&self) -> u32 {
         match self {
             ImmBit::B14 => 14,
             ImmBit::B19 => 19,
@@ -15,37 +15,40 @@ impl ImmBit {
     }
 }
 
+// impl From<u32> for ImmBit {
+//     fn from(value: u32) -> Self {
+//         match value {
+//              =>
+//             _ =>
+//         }
+//     }
+// }
+
 impl From<ImmBit> for u32 {
     fn from(value: ImmBit) -> Self {
-        value.count()
+        value.length()
     }
 }
 
-// toDO: create compile time check for bit length only until 32 inclusive
 // TODO: Make generic immediate or make it u32 instead
 #[derive(Debug, PartialEq, Eq)]
 pub struct Immediate<const BIT: u32>(i32);
-
 impl<const BIT: u32> Immediate<BIT> {
-    // const BIT_LENGTH: u32 = if BIT_LENGTH <= 32 {
-    //     BIT_LENGTH
-    // } else {
-    //     panic!("Invalid offset") // Compile time panic
-    // };
+    const _BIT: () = if BIT == 14 || BIT == 19 {
+        ()
+    } else {
+        panic!("Immediate only support 14 & 19 Bit");
+    };
 
-    // const _A: () = assert!(BIT_LENGTH <= u32::BITS, "N must not exceed u32::BITS");
-
-    pub fn new(value: i32) -> Self {
-        if BIT == 0 || BIT >= (u32::BITS) {
-            panic!("Max bit length is 32");
-        };
+    pub const fn new(value: i32) -> Self {
+        let _ = Self::_BIT;
 
         let max = (1 << (BIT - 1)) - 1; //i32
                                         // let max = (1 << BIT_LENGTH) - 1; //u32
         let min = -(max + 1);
         assert!(
             value >= min && value <= max,
-            "the value does not fit into the type `Immediate"
+            "the value does not fit into the type `Immediate`"
         );
 
         Immediate(value)
@@ -70,6 +73,16 @@ impl<const BIT: u32> Immediate<BIT> {
             Self(masked_value as i32)
         }
     }
+}
+
+impl Immediate<{ ImmBit::B14 as u32 }> {
+    // const BIT_LENGTH: u32 = if BIT_LENGTH <= 32 {
+    //     BIT_LENGTH
+    // } else {
+    //     panic!("Invalid offset") // Compile time panic
+    // };
+
+    // const _A: () = assert!(BIT_LENGTH <= u32::BITS, "N must not exceed u32::BITS");
 }
 
 impl<const BIT: u32> Codec for Immediate<BIT> {
@@ -124,7 +137,7 @@ mod test_super {
 
     #[test]
     fn t_imm() {
-        let imm = Immediate::<{ ImmBit::B14.count() }>(-31);
+        let imm = Immediate::<{ ImmBit::B14.length() }>(-31);
         let result = imm.encode(0x3FFF, 18);
         assert_eq!(result, 0xFF840000);
 

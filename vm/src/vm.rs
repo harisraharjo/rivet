@@ -332,21 +332,24 @@ mod test {
                 src: Register::T0,
                 offset: Immediate::<14>::new(8), //store value at SP + 8
             },
+            // Load data in address SP + 0 to T1. This is used for test
             LoadWord {
                 dest: Register::T1,
                 src: Register::SP,
                 offset: Immediate::<14>::new(0),
-            }, // Load data in address SP + 0 to T1. This is used for test
+            },
+            // Load data in address SP + 4 to T2. This is used for test
             LoadWord {
                 dest: Register::T2,
                 src: Register::SP,
                 offset: Immediate::<14>::new(4),
-            }, // Load data in address SP + 4 to T2. This is used for test
+            },
+            // Load data in address SP + 8 to T3. This is used for test
             LoadWord {
                 dest: Register::T3,
                 src: Register::SP,
                 offset: Immediate::<14>::new(8),
-            }, // Load data in address SP + 8 to T3. This is used for test
+            },
             Syscall {
                 src1: Register::Zero,
                 src2: Register::Zero,
