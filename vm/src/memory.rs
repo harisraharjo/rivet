@@ -573,10 +573,6 @@ impl MemoryConfiguration {
 
 #[cfg(test)]
 mod tests {
-    use crate::cpu::register::Register;
-    use crate::instruction::operand::Immediate;
-    use crate::instruction::Instruction::*;
-    use crate::vm::VM;
 
     use super::*;
     #[test]

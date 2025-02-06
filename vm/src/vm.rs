@@ -255,12 +255,12 @@ mod test {
                 AddI {
                     dest: Register::T2,
                     src: Register::Zero,
-                    value: Immediate::new::<14>(a),
+                    value: Immediate::<14>::new(a),
                 },
                 AddI {
                     dest: Register::T3,
                     src: Register::T2,
-                    value: Immediate::new::<14>(b),
+                    value: Immediate::<14>::new(b),
                 },
                 Syscall {
                     src1: Register::Zero,
@@ -301,51 +301,51 @@ mod test {
             AddI {
                 dest: Register::RA,
                 src: Register::Zero,
-                value: Immediate::new::<14>(5),
+                value: Immediate::<14>::new(5),
             },
             AddI {
                 dest: Register::S0,
                 src: Register::Zero,
-                value: Immediate::new::<14>(13),
+                value: Immediate::<14>::new(13),
             },
             AddI {
                 dest: Register::SP,
                 src: Register::SP,
-                value: Immediate::new::<14>(-15), //allocate 15 bytes/index
+                value: Immediate::<14>::new(-15), //allocate 15 bytes/index
             },
             StoreWord {
                 dest: Register::SP,
                 src: Register::RA,
-                offset: Immediate::new::<14>(0), //store value at SP + 0
+                offset: Immediate::<14>::new(0), //store value at SP + 0
             },
             StoreWord {
                 dest: Register::SP,
                 src: Register::S0,
-                offset: Immediate::new::<14>(4), //store value at SP + 4
+                offset: Immediate::<14>::new(4), //store value at SP + 4
             },
             Lui {
                 dest: Register::T0,
-                value: Immediate::new::<19>(43),
+                value: Immediate::<19>::new(43),
             },
             StoreWord {
                 dest: Register::SP,
                 src: Register::T0,
-                offset: Immediate::new::<14>(8), //store value at SP + 8
+                offset: Immediate::<14>::new(8), //store value at SP + 8
             },
             LoadWord {
                 dest: Register::T1,
                 src: Register::SP,
-                offset: Immediate::new::<14>(0),
+                offset: Immediate::<14>::new(0),
             }, // Load data in address SP + 0 to T1. This is used for test
             LoadWord {
                 dest: Register::T2,
                 src: Register::SP,
-                offset: Immediate::new::<14>(4),
+                offset: Immediate::<14>::new(4),
             }, // Load data in address SP + 4 to T2. This is used for test
             LoadWord {
                 dest: Register::T3,
                 src: Register::SP,
-                offset: Immediate::new::<14>(8),
+                offset: Immediate::<14>::new(8),
             }, // Load data in address SP + 8 to T3. This is used for test
             Syscall {
                 src1: Register::Zero,

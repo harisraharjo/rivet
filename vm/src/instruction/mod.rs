@@ -3,7 +3,7 @@ pub mod operand;
 
 use crate::cpu::register::Register;
 use macros::VMInstruction;
-use operand::Immediate;
+use operand::{ImmBit, Immediate};
 
 #[derive(Debug, PartialEq, Eq, VMInstruction)]
 // #[repr(u32)]
@@ -72,22 +72,25 @@ pub enum Instruction {
     AddI {
         dest: Register,
         src: Register,
-        value: Immediate,
+        value: Immediate<{ ImmBit::B14.count() }>,
     },
-    /// Load Upper Immediate
+    /// Load Upper Immediate<{ImmBit::B14.count()}>
     #[isa(0x14, 5, 19)]
-    Lui { dest: Register, value: Immediate },
+    Lui {
+        dest: Register,
+        value: Immediate<{ ImmBit::B19.count() }>,
+    },
     #[isa(0xc, 5, 5, 14)]
     LoadWord {
         dest: Register,
         src: Register,
-        offset: Immediate,
+        offset: Immediate<{ ImmBit::B14.count() }>,
     },
     #[isa(0xd, 5, 5, 14)]
     StoreWord {
         dest: Register,
         src: Register,
-        offset: Immediate,
+        offset: Immediate<{ ImmBit::B14.count() }>,
     },
     // #[isa(0xe,5,5,5)]
     // LoadByte {
@@ -111,12 +114,33 @@ pub enum Instruction {
     },
     // Pseudo
     #[isa(0xff, 5, 19)]
-    Li { dest: Register, value: Immediate },
+    Li {
+        dest: Register,
+        value: Immediate<{ ImmBit::B19.count() }>,
+    },
     // #[isa(0xff,5,5,5)]
     // Syscall { number: u32 },
     // #[isa(0x0,5,5,5)]
     // Halt,
 }
+
+// #[macro_export]
+// macro_rules! instruction {
+//     ($variant:expr) => {{
+//         // Check if bits is within the range of u8::BITS
+//         // const _CONSTANT: () = assert!(
+//         //     $bits <= u8::BITS as usize,
+//         //     "Bit length must not exceed u8::BITS"
+//         // );
+//         // const _CONSTANT: () = assert!(
+//         //     $variant <= u8::BITS as usize,
+//         //     concat!("Bit length must not exceed u8::BITS at ", stringify!($variant))
+//         // );
+
+//         // Create an instance of the struct with the given bit length and value
+//         Instruction::$variant
+//     }};
+// }
 
 pub trait Codec {
     fn decode(src: u32, bit_accumulation: u32, bit_mask: u32) -> Self
@@ -145,7 +169,7 @@ mod test {
     fn t_opcode() {
         let op1 = u32::from(&Instruction::Li {
             dest: Register::Zero,
-            value: Immediate::new::<19>(150),
+            value: Immediate::<19>::new(150),
         }) as u8;
 
         assert_eq!(op1.to_le_bytes(), 0xff_u8.to_le_bytes());
@@ -159,17 +183,13 @@ mod test {
         let addi_overflow = Instruction::AddI {
             dest: Register::A0,
             src: Register::Zero,
-            value: Immediate::new::<14>(-0x1FFF),
+            value: Immediate::<14>::new(-0x1FFF),
         };
 
         let lui = Instruction::Lui {
             dest: Register::T0,
-            value: Immediate::new::<19>(0x3FFFF),
+            value: Immediate::<19>::new(0x3FFFF),
         };
-        // max 19bit
-        // 262143i32
-        // 524287u32
-        println!("EKO {:#?}", lui);
 
         match vm.test_run(&[
             lui,
@@ -185,13 +205,13 @@ mod test {
         }
         assert_eq!(
             vm.registers().get(Register::A0),
-            Immediate::new::<14>(-0x1FFF).into(),
+            Immediate::<14>::new(-0x1FFF).into(),
             "Addi error"
         );
 
         assert_eq!(
             vm.registers().get(Register::T0),
-            Immediate::new::<19>(0x3FFFF).into(),
+            Immediate::<19>::new(0x3FFFF).into(),
             "lui error"
         );
 
@@ -206,28 +226,18 @@ mod test {
                 src1: Register::A1,
                 src2: Register::A2,
             },
-            // Instruction::LoadWord {
-            //     dest: Register::X4,
-            //     src: Register::X10,
-            //     offset: 213,
-            // },
-            // Instruction::StoreWord {
-            //     dest: Register::X4,
-            //     src: Register::X9,
-            //     offset: 255,
-            // },
             Instruction::Li {
                 dest: Register::T0,
-                value: Immediate::new::<19>(150),
+                value: Immediate::<19>::new(150),
             },
             Instruction::Lui {
                 dest: Register::T0,
-                value: Immediate::new::<19>(150),
+                value: Immediate::<19>::new(150),
             },
             Instruction::AddI {
                 dest: Register::A0,
                 src: Register::A1,
-                value: Immediate::new::<19>(-31),
+                value: Immediate::<14>::new(-31),
             },
             // Instruction::LoadWord {
             //     dest: Register::T2,

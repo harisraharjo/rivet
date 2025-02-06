@@ -1,12 +1,32 @@
 use crate::instruction::Codec;
 use std::ops::{BitAnd, Shl};
 
+pub enum ImmBit {
+    B14,
+    B19,
+}
+
+impl ImmBit {
+    pub const fn count(&self) -> u32 {
+        match self {
+            ImmBit::B14 => 14,
+            ImmBit::B19 => 19,
+        }
+    }
+}
+
+impl From<ImmBit> for u32 {
+    fn from(value: ImmBit) -> Self {
+        value.count()
+    }
+}
+
 // toDO: create compile time check for bit length only until 32 inclusive
 // TODO: Make generic immediate or make it u32 instead
 #[derive(Debug, PartialEq, Eq)]
-pub struct Immediate(i32);
+pub struct Immediate<const BIT: u32>(i32);
 
-impl Immediate {
+impl<const BIT: u32> Immediate<BIT> {
     // const BIT_LENGTH: u32 = if BIT_LENGTH <= 32 {
     //     BIT_LENGTH
     // } else {
@@ -15,13 +35,13 @@ impl Immediate {
 
     // const _A: () = assert!(BIT_LENGTH <= u32::BITS, "N must not exceed u32::BITS");
 
-    pub fn new<const BIT_LENGTH: u32>(value: i32) -> Self {
-        if BIT_LENGTH == 0 || BIT_LENGTH >= (u32::BITS) {
+    pub fn new(value: i32) -> Self {
+        if BIT == 0 || BIT >= (u32::BITS) {
             panic!("Max bit length is 32");
         };
 
-        let max = (1 << (BIT_LENGTH - 1)) - 1; //i32
-                                               // let max = (1 << BIT_LENGTH) - 1; //u32
+        let max = (1 << (BIT - 1)) - 1; //i32
+                                        // let max = (1 << BIT_LENGTH) - 1; //u32
         let min = -(max + 1);
         assert!(
             value >= min && value <= max,
@@ -52,7 +72,7 @@ impl Immediate {
     }
 }
 
-impl Codec for Immediate {
+impl<const BIT: u32> Codec for Immediate<BIT> {
     fn decode(src: u32, bit_accumulation: u32, bit_mask: u32) -> Self
     where
         Self: From<u32>,
@@ -61,20 +81,20 @@ impl Codec for Immediate {
     }
 }
 
-impl From<Immediate> for i32 {
-    fn from(value: Immediate) -> Self {
+impl<const BIT: u32> From<Immediate<BIT>> for i32 {
+    fn from(value: Immediate<BIT>) -> Self {
         value.0
     }
 }
 
-impl From<u32> for Immediate {
+impl<const BIT: u32> From<u32> for Immediate<BIT> {
     fn from(value: u32) -> Self {
         Immediate(value as i32)
     }
 }
 
-impl From<Immediate> for u32 {
-    fn from(value: Immediate) -> Self {
+impl<const BIT: u32> From<Immediate<BIT>> for u32 {
+    fn from(value: Immediate<BIT>) -> Self {
         // let g = value.0;
         // println!("Immi: {:032b}", g);
         // println!("Immi: {:032b}", g as u32);
@@ -82,7 +102,7 @@ impl From<Immediate> for u32 {
     }
 }
 
-impl BitAnd<u32> for &Immediate {
+impl<const BIT: u32> BitAnd<u32> for &Immediate<BIT> {
     type Output = u32;
 
     fn bitand(self, rhs: u32) -> Self::Output {
@@ -90,7 +110,7 @@ impl BitAnd<u32> for &Immediate {
     }
 }
 
-impl Shl<u32> for &Immediate {
+impl<const BIT: u32> Shl<u32> for &Immediate<BIT> {
     type Output = u32;
 
     fn shl(self, rhs: u32) -> Self::Output {
@@ -98,31 +118,13 @@ impl Shl<u32> for &Immediate {
     }
 }
 
-// #[macro_export]
-// macro_rules! immediate {
-//     ($bits:expr) => {{
-//         // Check if bits is within the range of u8::BITS
-//         // const _CONSTANT: () = assert!(
-//         //     $bits <= u8::BITS as usize,
-//         //     "Bit length must not exceed u8::BITS"
-//         // );
-//         const _CONSTANT: () = assert!(
-//             $bits <= u8::BITS as usize,
-//             concat!("Bit length must not exceed u8::BITS at ", stringify!($bits))
-//         );
-
-//         // Create an instance of the struct with the given bit length and value
-//         Immediate::<{ $bits }>
-//     }};
-// }
-
 #[cfg(test)]
 mod test_super {
     use super::*;
 
     #[test]
     fn t_imm() {
-        let imm = Immediate(-31);
+        let imm = Immediate::<{ ImmBit::B14.count() }>(-31);
         let result = imm.encode(0x3FFF, 18);
         assert_eq!(result, 0xFF840000);
 
