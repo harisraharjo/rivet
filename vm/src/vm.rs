@@ -5,7 +5,7 @@ use crate::{
 };
 
 pub struct VM {
-    cpu: CPU,
+    pub(crate) cpu: CPU,
     // memory: LinearMemory,
     memory: MemoryManager,
     halt: bool,
@@ -87,7 +87,6 @@ impl VM {
 
 impl VM {
     fn fetch(&self) -> anyhow::Result<Instruction> {
-        // TODO: unify the error
         let memory = self.memory.read::<u32>(self.cpu.pc.value())?;
 
         Ok(Instruction::try_from(memory)?)
@@ -253,10 +252,6 @@ mod test {
         let mut vm = VM::new(crate::memory::MemoryConfiguration::new(size));
         for (a, b) in CASES {
             let program = &[
-                // Li {
-                //     dest: Register::T2,
-                //     value: Immediate::new(a),
-                // },
                 AddI {
                     dest: Register::T2,
                     src: Register::Zero,
@@ -285,7 +280,6 @@ mod test {
                 "Variable: {a} and {b}"
             );
             vm.reset();
-            println!("Finished {a} & {b}");
         }
     }
 
@@ -371,48 +365,3 @@ mod test {
         vm.reset();
     }
 }
-// Invalid address test below
-// Lui {
-//         dest: Register::T3,
-//         value: Immediate::new::<19>(0x4000),
-//     },
-//     AddI {
-//         dest: Register::T3,
-//         src: Register::T3,
-//         value: Immediate::new::<14>(0x100),
-//     },
-// Lui {
-//         dest: Register::T3,
-//         value: Immediate::new::<19>(0x4000),
-//     },
-//     AddI {
-//         dest: Register::T3,
-//         src: Register::T3,
-//         value: Immediate::new::<14>(0x100),
-//     },
-//     AddI {
-//         dest: Register::T2,
-//         src: Register::Zero,
-//         value: Immediate::new::<14>(42),
-//     },
-//     StoreWord {
-//         dest: Register::T2,
-//         src: Register::T3,
-//         offset: Immediate::new::<14>(0),
-//     },
-//     LoadWord {
-//         dest: Register::T1,
-//         src: Register::T3,
-//         offset: Immediate::new::<14>(0),
-//     },
-
-// Unaligned test
-// AddI {
-//         dest: Register::SP,
-//         src: Register::SP,
-//         value: Immediate::new::<14>(-16),
-//     },
-//     StoreWord {
-//         dest: Register::SP,
-//         src: Register::RA,
-//         offset: Immediate::new::<14>(11),

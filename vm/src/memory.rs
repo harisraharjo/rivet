@@ -2,7 +2,6 @@
 
 use std::{
     fmt::{Debug, Display},
-    mem::MaybeUninit,
     ops::{Index, IndexMut, Range},
 };
 
@@ -11,7 +10,7 @@ use thiserror::Error;
 
 // use log::debug;
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, PartialEq)]
 pub enum MemoryError {
     #[error("Permission Denied: Unable to `{0}` at address `{1}`")]
     PermissionDenied(Permission, u32),
@@ -74,12 +73,12 @@ impl LinearMemory {
     // TODO: Make sure the capacity doesn't exceed u32::MAX
     pub fn new(size: u32) -> LinearMemory {
         //  assert!(size <= u32::MAX);
-        // TODO: In other arch this will use `calloc`. I'm not sure about wasm though, couldn't find any info.
-        // let buffer = vec![0; size as usize];
-        let buffer = Vec::with_capacity(size as usize);
+        // TODO: normally `vec![0; n]` will use `calloc`. I'm not sure about wasm though, couldn't find any info.\
+
+        // let buffer = Vec::with_capacity(size as usize);
 
         LinearMemory {
-            buffer,
+            buffer: vec![0; size as usize],
             // size: size as usize,
         }
     }
@@ -103,8 +102,7 @@ impl LinearMemory {
 
     #[inline(always)]
     fn bulk_writes<const BYTES: usize>(&mut self, address: usize, value: &[u8]) {
-        // TODO: fix
-        // self.buffer[address..address + BYTES].copy_from_slice(value);
+        self.buffer[address..address + BYTES].copy_from_slice(value);
     }
 }
 
@@ -140,27 +138,33 @@ impl ReadWrite<u32> for LinearMemory {
     }
 
     fn write(&mut self, address: usize, value: u32) -> Result<(), MemoryError> {
+        // println!("\x1b[93mMem len Before {}\x1b[0m", self.buffer.len());
         let v = value.to_le_bytes();
-        let unit = unsafe {
-            std::slice::from_raw_parts_mut(
-                self.buffer.as_mut_ptr().add(address) as *mut MaybeUninit<u8>,
-                self.buffer.capacity(),
-            )
-        };
-        // let unit = self.buffer.spare_capacity_mut();
-        let bytes_len = v.len();
-        let last_input_addr = address + bytes_len;
-        let should_grow = self.buffer.len() < last_input_addr;
-        unsafe {
-            // TODO: recheck the safety
-            std::ptr::copy_nonoverlapping(v.as_ptr(), unit.as_mut_ptr().cast(), bytes_len);
+        // let unit = unsafe {
+        //     std::slice::from_raw_parts_mut(
+        //         self.buffer.as_mut_ptr().add(address) as *mut MaybeUninit<u8>,
+        //         self.buffer.capacity(),
+        //     )
+        // };
 
-            if should_grow {
-                self.buffer.set_len(last_input_addr);
-            };
-        }
+        // let bytes_len = v.len();
+        // let last_input_addr = address + bytes_len;
 
-        // self.bulk_writes::<4>(address, &v);
+        // let should_grow = self.buffer.len() < last_input_addr;
+        // // let unit_slice = &mut unit[0..bytes_len];
+        // unsafe {
+        //     // TODO: recheck the safety
+        //     std::ptr::copy_nonoverlapping(v.as_ptr(), unit.as_mut_ptr().cast(), bytes_len);
+        //     // std::ptr::copy_nonoverlapping(v.as_ptr(), unit_slice.as_mut_ptr().cast(), bytes_len);
+
+        //     if should_grow {
+        //         self.buffer.set_len(last_input_addr);
+        //     };
+        // }
+
+        println!("\x1b[93mMem len After {}\x1b[0m", self.buffer.len());
+
+        self.bulk_writes::<4>(address, &v);
 
         Ok(())
     }
@@ -184,13 +188,6 @@ impl MemoryManager {
     pub fn new(configuration: &MemoryConfiguration) -> MemoryManager {
         let mut regions = Regions::default();
         let stack_start = configuration.allocated_memory - 1;
-        println!("Allocated mem: {}", configuration.allocated_memory);
-        println!("Stack size: {}", configuration.stack_size);
-
-        println!(
-            "Stack start: {}",
-            configuration.allocated_memory - configuration.stack_size
-        );
         regions[RegionType::Stack].set_bounds(
             configuration.allocated_memory - configuration.stack_size,
             stack_start,
@@ -576,6 +573,11 @@ impl MemoryConfiguration {
 
 #[cfg(test)]
 mod tests {
+    use crate::cpu::register::Register;
+    use crate::instruction::operand::Immediate;
+    use crate::instruction::Instruction::*;
+    use crate::vm::VM;
+
     use super::*;
     #[test]
     fn t_memory_translation() {
@@ -597,5 +599,23 @@ mod tests {
         //     }
         //     Err(e) => eprintln!("{e}"),
         // }
+    }
+
+    #[test]
+    fn t_memory_error() {
+        let mut memnager = MemoryManager::new(&MemoryConfiguration::new(1024 * 1024));
+        let mut err = memnager.write(0x8000, 44u32).err();
+        assert_eq!(Some(MemoryError::InvalidAddress(0x8000)), err);
+
+        err = memnager
+            .alignment_check(std::mem::size_of::<u32>(), 0x7FFF)
+            .err();
+        #[rustfmt::skip]
+        assert_eq!(Some(MemoryError::UnalignedAccess(0x7FFF, std::mem::size_of::<u32>())), err);
+
+        err = memnager.write(0x0, 44u32).err();
+        assert_eq!(Some(MemoryError::PermissionDenied(Permission::W, 0x0)), err);
+
+        println!("{:?}", err);
     }
 }
