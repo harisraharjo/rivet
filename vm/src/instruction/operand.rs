@@ -1,9 +1,9 @@
 use crate::instruction::Codec;
 use std::ops::{BitAnd, Shl};
 
-pub enum ImmBit {
-    B14 = 14,
-    B19 = 19,
+pub(crate) enum ImmBit {
+    B14,
+    B19,
 }
 
 impl ImmBit {
@@ -14,15 +14,6 @@ impl ImmBit {
         }
     }
 }
-
-// impl From<u32> for ImmBit {
-//     fn from(value: u32) -> Self {
-//         match value {
-//              =>
-//             _ =>
-//         }
-//     }
-// }
 
 impl From<ImmBit> for u32 {
     fn from(value: ImmBit) -> Self {
@@ -40,7 +31,7 @@ impl<const BIT: u32> Immediate<BIT> {
         panic!("Immediate only support 14 & 19 Bit");
     };
 
-    pub const fn new(value: i32) -> Self {
+    pub fn new(value: i32) -> Self {
         let _ = Self::_BIT;
 
         let max = (1 << (BIT - 1)) - 1; //i32
@@ -75,21 +66,15 @@ impl<const BIT: u32> Immediate<BIT> {
     }
 }
 
-impl Immediate<{ ImmBit::B14 as u32 }> {
-    // const BIT_LENGTH: u32 = if BIT_LENGTH <= 32 {
-    //     BIT_LENGTH
-    // } else {
-    //     panic!("Invalid offset") // Compile time panic
-    // };
-
-    // const _A: () = assert!(BIT_LENGTH <= u32::BITS, "N must not exceed u32::BITS");
-}
+impl Immediate<{ ImmBit::B14.length() }> {}
+impl Immediate<{ ImmBit::B19.length() }> {}
 
 impl<const BIT: u32> Codec for Immediate<BIT> {
     fn decode(src: u32, bit_accumulation: u32, bit_mask: u32) -> Self
     where
         Self: From<u32>,
     {
+        let _ = Self::_BIT;
         Self::convert_twos_complement_to_i32((src >> bit_accumulation) & bit_mask, bit_mask).into()
     }
 }
@@ -137,11 +122,18 @@ mod test_super {
 
     #[test]
     fn t_imm() {
-        let imm = Immediate::<{ ImmBit::B14.length() }>(-31);
+        let imm = Immediate::<{ ImmBit::B14.length() }>::new(-31);
         let result = imm.encode(0x3FFF, 18);
         assert_eq!(result, 0xFF840000);
 
         let result = Immediate::decode(4286958867, 18, 0x3FFF);
         assert_eq!(result, imm);
     }
+
+    // #[test]
+    // #[should_panic]
+    // fn t_imm_panic() {
+    //     let result = std::panic::catch_unwind(|| Immediate::<32>::new(-0x1FFF));
+    //     assert!(result.is_err());
+    // }
 }

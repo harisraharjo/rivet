@@ -66,7 +66,6 @@ fn extract_variant_data(
 }
 
 // TODO: Pad instruction that are not full 32 bit. ex: instructions that only uses registers (8+5+5 = 18 bit used);
-// toDO: create compile time check for bit length only until 32 inclusive
 fn create_bit_mask(bit_count: u32) -> u32 {
     (1u32 << bit_count) - 1
 }
