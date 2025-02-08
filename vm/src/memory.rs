@@ -62,7 +62,7 @@ where
 #[derive(Debug)]
 pub struct LinearMemory {
     buffer: Vec<u8>,
-    //TODO: Since the VM will be converted to WASM, I personally don't see the benefit of Vec<MaybeUninit<u8>> because essentially "uninitialized" data is 0 in wasm
+    //TODO: Since the VM will be converted to WASM, I personally don't see the benefit of Vec<MaybeUninit<u8>> because essentially "uninitialized" data is in fact initialized with 0 value in wasm
     // buffer: Vec<MaybeUninit<u8>>,
     // size: usize,
 }
@@ -153,7 +153,6 @@ impl ReadWrite<u32> for LinearMemory {
         // let should_grow = self.buffer.len() < last_input_addr;
         // // let unit_slice = &mut unit[0..bytes_len];
         // unsafe {
-        //     // TODO: recheck the safety
         //     std::ptr::copy_nonoverlapping(v.as_ptr(), unit.as_mut_ptr().cast(), bytes_len);
         //     // std::ptr::copy_nonoverlapping(v.as_ptr(), unit_slice.as_mut_ptr().cast(), bytes_len);
 
@@ -162,9 +161,16 @@ impl ReadWrite<u32> for LinearMemory {
         //     };
         // }
 
-        println!("\x1b[93mMem len After {}\x1b[0m", self.buffer.len());
+        println!(
+            "\x1b[93mMem b4: {:?}\x1b[0m",
+            &self.buffer[address..address + 4]
+        );
 
         self.bulk_writes::<4>(address, &v);
+        println!(
+            "\x1b[93mMem after: {:?}\x1b[0m",
+            &self.buffer[address..address + 4]
+        );
 
         Ok(())
     }
@@ -198,7 +204,9 @@ impl MemoryManager {
             free_memory: configuration.allocated_memory,
         }
     }
-    pub fn mem_cap(&self) -> usize {
+
+    #[cfg(test)]
+    pub fn capacity(&self) -> usize {
         self.memory.buffer.capacity()
     }
 
@@ -220,6 +228,7 @@ impl MemoryManager {
 
         let mut current_address = 0;
         println!("Program: {:?}", program);
+        // TODO: use chunks_exact
         // Handle full 4-byte chunks
         for chunk in program.chunks(4) {
             if chunk.len() == 4 {

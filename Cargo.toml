@@ -4,4 +4,4 @@ members = [
     "vm",
     "macros",
     "macros/macros_derive"
-]
+, "assembler", "isa"]

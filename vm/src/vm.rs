@@ -6,7 +6,6 @@ use crate::{
 
 pub struct VM {
     pub(crate) cpu: CPU,
-    // memory: LinearMemory,
     memory: MemoryManager,
     halt: bool,
 }
@@ -30,10 +29,6 @@ impl VM {
     }
 
     pub fn run(&mut self) -> anyhow::Result<()> {
-        // while self.cpu.pc.value() < self.memory.size() {
-        //     self.step()?;
-        // }
-
         while !self.halt {
             self.step()?;
         }
@@ -50,6 +45,17 @@ impl VM {
     pub fn registers(&mut self) -> &mut Registers {
         &mut self.cpu.registers
     }
+
+    // #[cfg(test)]
+    // pub fn load_asm(&self, path: &std::path::Path) -> i32 {
+    //     use std::fs::File;
+
+    //     let file = File::open(path);
+    //     let mut reader = BufReader::new(f);
+    //     // use std::path::Path;
+
+    //     1;
+    // }
 
     #[cfg(test)]
     pub fn test_run(&mut self, program: &[Instruction]) -> anyhow::Result<()> {
@@ -95,6 +101,7 @@ impl VM {
     // TODO: Should it be inlined bcs of hot loop? (https://nnethercote.github.io/perf-book/inlining.html)
     // #[inline(always)]
     fn decode_execute(&mut self, instruction: Instruction) -> anyhow::Result<()> {
+        // println!("Decoded Instruction: {:?}", instruction);
         match instruction {
             Instruction::Li { dest, value } => {
                 self.registers().set(dest, value.into());
@@ -150,8 +157,6 @@ impl VM {
                 println!("Imm: {:?}", value);
                 let v: u32 = value.into();
                 println!("Imm_u32: {v}");
-                let mem_cap = self.memory.mem_cap();
-                println!("memory cap: {:?}", mem_cap);
                 println!("src reg: {:?}", src);
                 let src = self.cpu.registers.get(src);
                 println!("src val: {:?}", src);
@@ -173,14 +178,14 @@ impl VM {
                 self.cpu.registers.set(dest, value.into());
                 Ok(())
             }
-            Instruction::LoadWord { dest, src, offset } => {
+            Instruction::Lw { dest, src, offset } => {
                 let addr = u32::from(offset) + self.cpu.registers.get(src);
                 self.memory
                     .alignment_check(std::mem::size_of::<u32>(), addr)?;
                 self.cpu.registers.set(dest, self.memory.read(addr)?);
                 Ok(())
             }
-            Instruction::StoreWord { dest, src, offset } => {
+            Instruction::Sw { dest, src, offset } => {
                 // Alignment check (RISC-V requires alignment for LW/SW/LH/SH)
                 println!("");
                 println!("Store word");
@@ -313,12 +318,12 @@ mod test {
                 src: Register::SP,
                 value: Immediate::<14>::new(-15), //allocate 15 bytes/index
             },
-            StoreWord {
+            Sw {
                 dest: Register::SP,
                 src: Register::RA,
                 offset: Immediate::<14>::new(0), //store value at SP + 0
             },
-            StoreWord {
+            Sw {
                 dest: Register::SP,
                 src: Register::S0,
                 offset: Immediate::<14>::new(4), //store value at SP + 4
@@ -327,25 +332,25 @@ mod test {
                 dest: Register::T0,
                 value: Immediate::<19>::new(43),
             },
-            StoreWord {
+            Sw {
                 dest: Register::SP,
                 src: Register::T0,
                 offset: Immediate::<14>::new(8), //store value at SP + 8
             },
             // Load data in address SP + 0 to T1. This is used for test
-            LoadWord {
+            Lw {
                 dest: Register::T1,
                 src: Register::SP,
                 offset: Immediate::<14>::new(0),
             },
             // Load data in address SP + 4 to T2. This is used for test
-            LoadWord {
+            Lw {
                 dest: Register::T2,
                 src: Register::SP,
                 offset: Immediate::<14>::new(4),
             },
             // Load data in address SP + 8 to T3. This is used for test
-            LoadWord {
+            Lw {
                 dest: Register::T3,
                 src: Register::SP,
                 offset: Immediate::<14>::new(8),

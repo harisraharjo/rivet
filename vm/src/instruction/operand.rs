@@ -35,7 +35,7 @@ impl<const BIT: u32> Immediate<BIT> {
         let _ = Self::_BIT;
 
         let max = (1 << (BIT - 1)) - 1; //i32
-                                        // let max = (1 << BIT_LENGTH) - 1; //u32
+                                        // let max = (1 << BIT) - 1; //u32
         let min = -(max + 1);
         assert!(
             value >= min && value <= max,
@@ -49,7 +49,7 @@ impl<const BIT: u32> Immediate<BIT> {
         self.0
     }
 
-    fn convert_twos_complement_to_i32(masked_value: u32, bit_mask: u32) -> Self {
+    fn convert_twos_complement_to_i32(masked_value: u32, bit_mask: u32) -> i32 {
         // Check if the sign bit is set
 
         let sign_bit = 1u32 << (bit_mask.trailing_ones() - 1);
@@ -58,10 +58,13 @@ impl<const BIT: u32> Immediate<BIT> {
             // Negative number: extend sign by converting to two's complement
             let positive_counterpart = (sign_bit << 1) - masked_value;
 
-            Self(-(positive_counterpart as i32))
+            -(positive_counterpart as i32)
+
+            // Self(-(positive_counterpart as i32))
         } else {
+            masked_value as i32
             // Positive number or zero
-            Self(masked_value as i32)
+            // Self(masked_value as i32)
         }
     }
 }
@@ -75,7 +78,11 @@ impl<const BIT: u32> Codec for Immediate<BIT> {
         Self: From<u32>,
     {
         let _ = Self::_BIT;
-        Self::convert_twos_complement_to_i32((src >> bit_accumulation) & bit_mask, bit_mask).into()
+        Self(Self::convert_twos_complement_to_i32(
+            (src >> bit_accumulation) & bit_mask,
+            bit_mask,
+        ))
+        .into()
     }
 }
 

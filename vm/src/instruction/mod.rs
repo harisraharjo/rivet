@@ -74,20 +74,22 @@ pub enum Instruction {
         src: Register,
         value: Immediate<{ ImmBit::B14.length() }>,
     },
-    /// Load Upper Immediate<{ImmBit::B14.length()}>
+    /// Load Upper Immediate.
     #[isa(0x14, 5, 19)]
     Lui {
         dest: Register,
         value: Immediate<{ ImmBit::B19.length() }>,
     },
+    /// Load Word
     #[isa(0xc, 5, 5, 14)]
-    LoadWord {
+    Lw {
         dest: Register,
         src: Register,
         offset: Immediate<{ ImmBit::B14.length() }>,
     },
+    /// Store Word
     #[isa(0xd, 5, 5, 14)]
-    StoreWord {
+    Sw {
         dest: Register,
         src: Register,
         offset: Immediate<{ ImmBit::B14.length() }>,
@@ -113,6 +115,7 @@ pub enum Instruction {
         src3: Register,
     },
     // Pseudo
+    /// Load Immediate
     #[isa(0xff, 5, 19)]
     Li {
         dest: Register,

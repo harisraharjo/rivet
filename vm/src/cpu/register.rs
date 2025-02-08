@@ -131,13 +131,13 @@ impl Index<Register> for Registers {
     type Output = u32;
 
     fn index(&self, index: Register) -> &Self::Output {
-        todo!()
+        &self.0[index as usize]
     }
 }
 
 impl IndexMut<Register> for Registers {
     fn index_mut(&mut self, index: Register) -> &mut Self::Output {
-        todo!()
+        &mut self.0[index as usize]
     }
 }
 

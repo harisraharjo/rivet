@@ -98,7 +98,7 @@ fn generate_fields(
         let acc_bits = field_bits.1;
 
         encoded_field_value.extend(quote::quote! {
-            result |= #field_name.encode(#bit_length, #acc_bits);
+            | #field_name.encode(#bit_length, #acc_bits)
         });
 
         decoded_field_value.extend(quote::quote! {
@@ -117,6 +117,7 @@ fn generate_fields(
     )
 }
 
+//TODO: Separate encoder for assembler and decoder for the VM
 pub(crate) fn isa2(input: proc_macro2::TokenStream) -> deluxe::Result<proc_macro2::TokenStream> {
     // parse
     let mut ast: syn::DeriveInput = syn::parse2(input)?;
@@ -142,12 +143,9 @@ pub(crate) fn isa2(input: proc_macro2::TokenStream) -> deluxe::Result<proc_macro
                         };
 
                     // encode
-                    // TODO: Here remove result |=
                     let encoded_field_value = quote::quote! {
                         {
-                            let mut result = #opcode as u32;
-                            #raw_encoded_field_value
-                            result
+                            (#opcode as u32) #raw_encoded_field_value
                         }
                     };
 
