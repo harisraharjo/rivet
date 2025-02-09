@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use crate::{
     operand::{Immediate14, Immediate19},
     register::Register,
@@ -119,6 +121,7 @@ pub enum Instruction {
     // #[isa(0x0,5,5,5)]
     // Halt,
 }
+// TODO: Add mnemonic. ("add", "addi", etc)
 
 pub trait Codec {
     fn decode(src: u32, bit_accumulation: u32, bit_mask: u32) -> Self
