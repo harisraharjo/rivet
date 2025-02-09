@@ -1,4 +1,8 @@
-pub fn add(left: u64, right: u64) -> u64 {
+pub mod instruction;
+pub mod operand;
+pub mod register;
+
+fn add(left: u64, right: u64) -> u64 {
     left + right
 }
 

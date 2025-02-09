@@ -1,6 +1,7 @@
+use isa::instruction::Instruction;
+
 use crate::{
     cpu::{register::Registers, CPU},
-    instruction::Instruction,
     memory::{MemoryConfiguration, MemoryManager},
 };
 
@@ -59,7 +60,7 @@ impl VM {
 
     #[cfg(test)]
     pub fn test_run(&mut self, program: &[Instruction]) -> anyhow::Result<()> {
-        use crate::cpu::register::Register;
+        use isa::register::Register;
 
         let program_words: Vec<u32> = program
             .iter()
@@ -231,11 +232,13 @@ impl VM {
 
 #[cfg(test)]
 mod test {
-    use crate::cpu::register::Register;
+    use isa::{
+        operand::{Immediate, Immediate14, Immediate19},
+        register::Register,
+    };
     use Instruction::*;
 
     use super::*;
-    use crate::instruction::{operand::Immediate, *};
 
     const CASES: [(i32, i32); 10] = [
         (1, 1),
@@ -260,12 +263,12 @@ mod test {
                 AddI {
                     dest: Register::T2,
                     src: Register::Zero,
-                    value: Immediate::<14>::new(a),
+                    value: Immediate14::new(a),
                 },
                 AddI {
                     dest: Register::T3,
                     src: Register::T2,
-                    value: Immediate::<14>::new(b),
+                    value: Immediate14::new(b),
                 },
                 Syscall {
                     src1: Register::Zero,
@@ -306,54 +309,54 @@ mod test {
             AddI {
                 dest: Register::RA,
                 src: Register::Zero,
-                value: Immediate::<14>::new(5),
+                value: Immediate14::new(5),
             },
             AddI {
                 dest: Register::S0,
                 src: Register::Zero,
-                value: Immediate::<14>::new(13),
+                value: Immediate14::new(13),
             },
             AddI {
                 dest: Register::SP,
                 src: Register::SP,
-                value: Immediate::<14>::new(-15), //allocate 15 bytes/index
+                value: Immediate14::new(-15), //allocate 15 bytes/index
             },
             Sw {
                 dest: Register::SP,
                 src: Register::RA,
-                offset: Immediate::<14>::new(0), //store value at SP + 0
+                offset: Immediate14::new(0), //store value at SP + 0
             },
             Sw {
                 dest: Register::SP,
                 src: Register::S0,
-                offset: Immediate::<14>::new(4), //store value at SP + 4
+                offset: Immediate14::new(4), //store value at SP + 4
             },
             Lui {
                 dest: Register::T0,
-                value: Immediate::<19>::new(43),
+                value: Immediate19::new(43),
             },
             Sw {
                 dest: Register::SP,
                 src: Register::T0,
-                offset: Immediate::<14>::new(8), //store value at SP + 8
+                offset: Immediate14::new(8), //store value at SP + 8
             },
             // Load data in address SP + 0 to T1. This is used for test
             Lw {
                 dest: Register::T1,
                 src: Register::SP,
-                offset: Immediate::<14>::new(0),
+                offset: Immediate14::new(0),
             },
             // Load data in address SP + 4 to T2. This is used for test
             Lw {
                 dest: Register::T2,
                 src: Register::SP,
-                offset: Immediate::<14>::new(4),
+                offset: Immediate14::new(4),
             },
             // Load data in address SP + 8 to T3. This is used for test
             Lw {
                 dest: Register::T3,
                 src: Register::SP,
-                offset: Immediate::<14>::new(8),
+                offset: Immediate14::new(8),
             },
             Syscall {
                 src1: Register::Zero,

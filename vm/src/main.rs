@@ -1,5 +1,4 @@
 mod cpu;
-mod instruction;
 mod loader;
 mod memory;
 mod vm;
