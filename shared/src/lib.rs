@@ -1,4 +1,4 @@
-pub use macros_derive::{EnumCount, VMInstruction};
+pub use macros_derive::{EnumCount, EnumVariants, VMInstruction};
 
 pub trait VMInstruction {
     fn opcode(&self) -> u8;
@@ -7,6 +7,10 @@ pub trait VMInstruction {
 
 pub trait EnumCount {
     const VARIANT_COUNT: usize;
+}
+
+pub trait EnumVariants<const N: usize> {
+    fn variants<'a>() -> [&'a str; N];
 }
 
 pub mod helper {

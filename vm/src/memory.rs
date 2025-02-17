@@ -5,7 +5,7 @@ use std::{
     ops::{Index, IndexMut, Range},
 };
 
-use macros::EnumCount;
+use shared::EnumCount;
 use thiserror::Error;
 
 // use log::debug;

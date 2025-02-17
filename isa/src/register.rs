@@ -1,4 +1,8 @@
-#[derive(Debug, PartialEq, Eq, Clone, Copy, EnumCount)]
+use crate::instruction::Codec;
+use shared::{EnumCount, EnumVariants};
+use std::ops::{BitAnd, Shl, Shr};
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy, EnumCount, EnumVariants)]
 pub enum Register {
     /// Zero
     Zero,
@@ -32,9 +36,16 @@ pub enum Register {
     A7,
 }
 
-use crate::instruction::Codec;
-use macros::EnumCount;
-use std::ops::{BitAnd, Shl, Shr};
+// Registers (x0-x31 and ABI names)
+// #[regex(r"x([0-9]|[1-2][0-9]|3[0-1])")]
+// #[regex(r"(zero|ra|sp|gp|tp|t[0-6]|s[0-1][0-1]|a[0-7]|ft[0-9]|ft1[0-1]|fs[0-1][0-1])")]
+// Register,
+
+impl Register {
+    pub fn fp() -> Register {
+        Register::S0
+    }
+}
 
 impl Codec for Register {}
 

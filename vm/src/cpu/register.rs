@@ -1,7 +1,7 @@
 use std::ops::{Index, IndexMut};
 
 use isa::register::Register;
-use macros::EnumCount;
+use shared::EnumCount;
 
 #[derive(Default, Debug)]
 pub struct Registers([u32; Register::VARIANT_COUNT]);

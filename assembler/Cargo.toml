@@ -4,5 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-nom = "8.0.0"
 rowan = "0.16.1"
+isa={ path = "../isa"}
+shared={path = "../shared"}
+thiserror = "2.0.11"
+logos = "0.15.0"

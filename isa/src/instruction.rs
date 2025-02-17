@@ -1,12 +1,10 @@
-use std::fmt::Display;
-
 use crate::{
     operand::{Immediate14, Immediate19},
     register::Register,
 };
-use macros::VMInstruction;
+use shared::{EnumCount, VMInstruction};
 
-#[derive(Debug, PartialEq, Eq, VMInstruction)]
+#[derive(Debug, PartialEq, Eq, VMInstruction, EnumCount)]
 // #[repr(u32)]
 pub enum Instruction {
     // ---Binary Operators---
@@ -72,8 +70,8 @@ pub enum Instruction {
     #[isa(0x13, 5, 5, 14)]
     AddI {
         dest: Register,
-        src: Register,
         value: Immediate14,
+        src: Register,
     },
     /// Load Upper Immediate.
     #[isa(0x14, 5, 19)]
@@ -82,15 +80,15 @@ pub enum Instruction {
     #[isa(0xc, 5, 5, 14)]
     Lw {
         dest: Register,
-        src: Register,
         offset: Immediate14,
+        src: Register,
     },
     /// Store Word
     #[isa(0xd, 5, 5, 14)]
     Sw {
-        dest: Register,
         src: Register,
         offset: Immediate14,
+        dest: Register,
     },
     // #[isa(0xe,5,5,5)]
     // LoadByte {
@@ -121,7 +119,6 @@ pub enum Instruction {
     // #[isa(0x0,5,5,5)]
     // Halt,
 }
-// TODO: Add mnemonic. ("add", "addi", etc)
 
 pub trait Codec {
     fn decode(src: u32, bit_accumulation: u32, bit_mask: u32) -> Self
@@ -143,7 +140,7 @@ pub trait Codec {
 mod test {
     use crate::{
         instruction::{DecodeError, Instruction},
-        operand::{Immediate, Immediate14, Immediate19},
+        operand::{Immediate14, Immediate19},
         register::Register,
     };
 

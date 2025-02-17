@@ -179,7 +179,7 @@ impl VM {
                 self.cpu.registers.set(dest, value.into());
                 Ok(())
             }
-            Instruction::Lw { dest, src, offset } => {
+            Instruction::Lw { src, dest, offset } => {
                 let addr = u32::from(offset) + self.cpu.registers.get(src);
                 self.memory
                     .alignment_check(std::mem::size_of::<u32>(), addr)?;
