@@ -78,7 +78,7 @@ impl VM {
         println!("");
         self.cpu
             .registers
-            .set(Register::SP, self.memory.stack_start());
+            .set(Register::X2, self.memory.stack_start());
 
         while !self.halt {
             self.step()?;
@@ -261,19 +261,19 @@ mod test {
         for (a, b) in CASES {
             let program = &[
                 AddI {
-                    dest: Register::T2,
-                    src: Register::Zero,
+                    dest: Register::X7,
+                    src: Register::X0,
                     value: Immediate14::new(a),
                 },
                 AddI {
-                    dest: Register::T3,
-                    src: Register::T2,
+                    dest: Register::X28,
+                    src: Register::X7,
                     value: Immediate14::new(b),
                 },
                 Syscall {
-                    src1: Register::Zero,
-                    src2: Register::Zero,
-                    src3: Register::Zero,
+                    src1: Register::X0,
+                    src2: Register::X0,
+                    src3: Register::X0,
                 },
             ];
 
@@ -283,7 +283,7 @@ mod test {
             }
             println!("\n");
             assert_eq!(
-                vm.cpu.registers.get(Register::T3),
+                vm.cpu.registers.get(Register::X28),
                 (a + b) as u32,
                 "Variable: {a} and {b}"
             );
@@ -307,61 +307,61 @@ mod test {
         //      sw t0, 0(sp)      # Store this value on the stack
         let program = &[
             AddI {
-                dest: Register::RA,
-                src: Register::Zero,
+                dest: Register::X1,
+                src: Register::X0,
                 value: Immediate14::new(5),
             },
             AddI {
-                dest: Register::S0,
-                src: Register::Zero,
+                dest: Register::X8,
+                src: Register::X0,
                 value: Immediate14::new(13),
             },
             AddI {
-                dest: Register::SP,
-                src: Register::SP,
+                dest: Register::X2,
+                src: Register::X2,
                 value: Immediate14::new(-15), //allocate 15 bytes/index
             },
             Sw {
-                dest: Register::SP,
-                src: Register::RA,
-                offset: Immediate14::new(0), //store value at SP + 0
+                dest: Register::X2,
+                src: Register::X1,
+                offset: Immediate14::new(0), //store value at X2 + 0
             },
             Sw {
-                dest: Register::SP,
-                src: Register::S0,
-                offset: Immediate14::new(4), //store value at SP + 4
+                dest: Register::X2,
+                src: Register::X8,
+                offset: Immediate14::new(4), //store value at X2 + 4
             },
             Lui {
-                dest: Register::T0,
+                dest: Register::X5,
                 value: Immediate19::new(43),
             },
             Sw {
-                dest: Register::SP,
-                src: Register::T0,
-                offset: Immediate14::new(8), //store value at SP + 8
+                dest: Register::X2,
+                src: Register::X5,
+                offset: Immediate14::new(8), //store value at X2 + 8
             },
-            // Load data in address SP + 0 to T1. This is used for test
+            // Load data in address X2 + 0 to X6. This is used for test
             Lw {
-                dest: Register::T1,
-                src: Register::SP,
+                dest: Register::X6,
+                src: Register::X2,
                 offset: Immediate14::new(0),
             },
-            // Load data in address SP + 4 to T2. This is used for test
+            // Load data in address X2 + 4 to X7. This is used for test
             Lw {
-                dest: Register::T2,
-                src: Register::SP,
+                dest: Register::X7,
+                src: Register::X2,
                 offset: Immediate14::new(4),
             },
-            // Load data in address SP + 8 to T3. This is used for test
+            // Load data in address X2 + 8 to X28. This is used for test
             Lw {
-                dest: Register::T3,
-                src: Register::SP,
+                dest: Register::X28,
+                src: Register::X2,
                 offset: Immediate14::new(8),
             },
             Syscall {
-                src1: Register::Zero,
-                src2: Register::Zero,
-                src3: Register::Zero,
+                src1: Register::X0,
+                src2: Register::X0,
+                src3: Register::X0,
             },
         ];
 
@@ -370,9 +370,9 @@ mod test {
             Err(e) => println!("Test run went wrong {}", e),
         }
 
-        assert_eq!(vm.cpu.registers.get(Register::T1), 5);
-        assert_eq!(vm.cpu.registers.get(Register::S0), 13);
-        assert_eq!(vm.cpu.registers.get(Register::T0), 43);
+        assert_eq!(vm.cpu.registers.get(Register::X6), 5);
+        assert_eq!(vm.cpu.registers.get(Register::X8), 13);
+        assert_eq!(vm.cpu.registers.get(Register::X5), 43);
         vm.reset();
     }
 }

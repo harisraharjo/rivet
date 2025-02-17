@@ -5,7 +5,7 @@ use crate::{
 use shared::{EnumCount, VMInstruction};
 
 #[derive(Debug, PartialEq, Eq, VMInstruction, EnumCount)]
-// #[repr(u32)]
+// TODO: FIELD ORDER MATTERS. (I forgot why, probably because of bit shift used for the decoding process)
 pub enum Instruction {
     // ---Binary Operators---
     #[isa(0x1, 5, 5, 5)]
@@ -70,8 +70,8 @@ pub enum Instruction {
     #[isa(0x13, 5, 5, 14)]
     AddI {
         dest: Register,
-        value: Immediate14,
         src: Register,
+        value: Immediate14,
     },
     /// Load Upper Immediate.
     #[isa(0x14, 5, 19)]
@@ -80,15 +80,15 @@ pub enum Instruction {
     #[isa(0xc, 5, 5, 14)]
     Lw {
         dest: Register,
-        offset: Immediate14,
         src: Register,
+        offset: Immediate14,
     },
     /// Store Word
     #[isa(0xd, 5, 5, 14)]
     Sw {
         src: Register,
-        offset: Immediate14,
         dest: Register,
+        offset: Immediate14,
     },
     // #[isa(0xe,5,5,5)]
     // LoadByte {
@@ -147,7 +147,7 @@ mod test {
     #[test]
     fn t_opcode() {
         let op1 = u32::from(&Instruction::Li {
-            dest: Register::Zero,
+            dest: Register::X0,
             value: Immediate19::new(150),
         }) as u8;
 
@@ -158,37 +158,37 @@ mod test {
     fn t_encode_decode() -> Result<(), DecodeError> {
         let ins: Vec<Instruction> = vec![
             Instruction::Add {
-                dest: Register::A0,
-                src1: Register::A1,
-                src2: Register::A2,
+                dest: Register::X10,
+                src1: Register::X11,
+                src2: Register::X12,
             },
             Instruction::Li {
-                dest: Register::T0,
+                dest: Register::X5,
                 value: Immediate19::new(150),
             },
             Instruction::Lui {
-                dest: Register::T0,
+                dest: Register::X5,
                 value: Immediate19::new(150),
             },
             Instruction::AddI {
-                dest: Register::A0,
-                src: Register::A1,
+                dest: Register::X10,
+                src: Register::X11,
                 value: Immediate14::new(-31),
             },
             // Instruction::LoadWord {
-            //     dest: Register::T2,
-            //     src: Register::T3,
+            //     dest: Register::X7,
+            //     src: Register::X28,
             //     offset: Immediate::new(11),
             // },
             // Instruction::StoreWord {
-            //     dest: Register::T2,
-            //     src: Register::T3,
+            //     dest: Register::X7,
+            //     src: Register::X28,
             //     offset: Immediate::new(11),
             // },
             Instruction::Syscall {
-                src1: Register::A1,
-                src2: Register::A2,
-                src3: Register::A3,
+                src1: Register::X11,
+                src2: Register::X12,
+                src3: Register::X13,
             },
         ];
 
@@ -196,7 +196,6 @@ mod test {
         for (l, r) in ins.iter().zip(encoded.iter()) {
             println!("instruction: {:?}, memory representation: {1}", l, r);
             let decoded = Instruction::try_from(*r)?;
-            // println!("Decoded: {:?}", decoded);
             assert_eq!(*l, decoded);
         }
         Ok(())

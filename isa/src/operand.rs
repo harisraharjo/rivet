@@ -42,7 +42,8 @@ impl<const BIT: u32> Immediate<BIT> {
         let min = -(max + 1);
         assert!(
             value >= min && value <= max,
-            "the value does not fit into the type `Immediate`"
+            "the value does not fit into `{}` bit",
+            BIT
         );
 
         Immediate(value)
@@ -80,8 +81,7 @@ impl<const BIT: u32> Codec for Immediate<BIT> {
     where
         Self: From<u32>,
     {
-        let _ = Self::_BIT;
-        Self(Self::convert_twos_complement_to_i32(
+        Self::new(Self::convert_twos_complement_to_i32(
             (src >> bit_accumulation) & bit_mask,
             bit_mask,
         ))
@@ -133,13 +133,13 @@ mod test_super {
     // TODO: add test for overflow
     // Immediate14::new(-0x1FFF),
     //  assert_eq!(
-    //         vm.registers().get(Register::A0),
+    //         vm.registers().get(Register::X10),
     //         Immediate14::new(-0x1FFF).into(),
     //         "Addi error"
     //     );
 
     //     assert_eq!(
-    //         vm.registers().get(Register::T0),
+    //         vm.registers().get(Register::X5),
     //         Immediate19::new(0x3FFFF).into(),
     //         "lui error"
     //     );

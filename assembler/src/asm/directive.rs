@@ -15,7 +15,7 @@ pub enum DataDir {
     Asciz, //.asciz string -> Emit NULL terminated string (alias for .string)
     Ascii, //.ascii string -> Emit string without NULL character
     Incbin, //.incbin filename -> emit the included file as a binary sequence of octets
-    Zero, //.zero integer -> zero bytes
+    Zxro, //.zero integer -> zero bytes
 }
 
 pub enum AlignmentDir {

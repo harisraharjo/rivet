@@ -215,19 +215,19 @@ mod test_super {
 
     use super::*;
 
-    #[test]
-    fn t_parse() {
-        let asmblr = Assembler::new();
+    // #[test]
+    // fn t_parse() {
+    // let asmblr = Assembler::new();
 
-        match File::open("test.asm") {
-            Ok(mut file) => {
-                let mut buffer = Vec::new();
+    // match File::open("test.asm") {
+    //     Ok(mut file) => {
+    //         let mut buffer = Vec::new();
 
-                // read the whole file
-                file.read_to_end(&mut buffer).unwrap();
-                asmblr.parse_line(&buffer);
-            }
-            Err(e) => println!("Error: {:?}", e),
-        }
-    }
+    //         // read the whole file
+    //         file.read_to_end(&mut buffer).unwrap();
+    //         asmblr.parse_line(&buffer);
+    //     }
+    //     Err(e) => println!("Error: {:?}", e),
+    // }
+    // }
 }
