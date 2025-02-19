@@ -89,27 +89,62 @@ fn extract_ident(lex: &mut logos::Lexer<Token>) -> Result<IdentifierType, Lexing
     Ok(value.into())
 }
 
-fn on_literal_numeric(lex: &mut logos::Lexer<Token>) -> Result<(), LexingError> {
-    let slice = lex.slice();
-    let skip = 2usize; //2 to skip 0x or 0b (0 and x)
-    let len = slice.len();
-    //safety: we read until the end so it's always safe
-    let target = unsafe { slice.get_unchecked(skip..len) };
+fn on_decimal(b: &u8) -> bool {
+    !b.is_ascii_digit()
+}
+fn on_bin(b: &u8) -> bool {
+    *b != b'0' && *b != b'1'
+}
+fn on_hex(b: &u8) -> bool {
+    !b.is_ascii_hexdigit()
+}
 
-    match target.iter().position(|b| !b.is_ascii_hexdigit()) {
-        Some(i) => {
-            Err(LexingError::InvalidSuffix(
+enum LiteralIntegerType {
+    Decimal,
+    Hex,
+    Binary,
+}
+
+impl LiteralIntegerType {
+    const fn cb(id: u8) -> for<'a> fn(&'a u8) -> bool {
+        match id {
+            0 => on_decimal,
+            1 => on_hex,
+            _ => on_bin,
+        }
+    }
+
+    const fn skip_by(id: u8) -> usize {
+        match id {
+            0 => 1,
+            _ => 2,
+        }
+    }
+}
+
+fn on_literal_integer<const TYPE: u8>(lex: &mut logos::Lexer<Token>) -> Result<(), LexingError> {
+    let slice = lex.slice();
+
+    let callback = LiteralIntegerType::cb(TYPE);
+    let len = slice.len();
+
+    //safety: we read the end of the slice so it's always safe
+    if callback(unsafe { slice.get_unchecked(len - 1) }) {
+        let skip = LiteralIntegerType::skip_by(TYPE);
+        //safety: we read until the end so it's always safe
+        let target = unsafe { slice.get_unchecked(skip..len) };
+        if let Some(i) = target.iter().position(callback) {
+            return Err(LexingError::InvalidSuffix(
                 //safety: we read until the end so it's always safe
                 String::from_utf8(unsafe { target.get_unchecked(i..target.len()) }.to_vec())
                     .unwrap(),
                 lex.extras.cell.column,
-            ))
-        }
-        None => Ok(()),
-    }
-}
+            ));
+        };
+    };
 
-// TODO: Fix this, Immediates value can be either literal or a symbol constant
+    Ok(())
+}
 
 #[derive(Logos, Debug, PartialEq, EnumCount, Copy, Clone)]
 #[logos(source = [u8])]
@@ -120,7 +155,7 @@ pub enum Token {
     #[regex(r#"[a-zA-Z_]\w+"#, extract_ident)]
     Identifier(IdentifierType),
 
-    #[regex(r#"[a-zA-Z]\w+:"#)] //suffix `:` followed by any whitespace or enter(EOL)
+    #[regex(r#"[a-zA-Z]\w+:"#)]
     // LabelDef(LabelType), //TODO: add numeric label?
     LabelDef,
     #[regex(r#"\.[a-zA-Z]\w+"#)]
@@ -128,56 +163,42 @@ pub enum Token {
 
     #[regex(r#"\"(\\.|[^\\"])*\""#)] // https://www.lysator.liu.se/c/ANSI-C-grammar-l.html
     LiteralString,
-    #[regex(r#"\d+(?:\w+)?"#)] //[ (\n)]
+    #[regex(r#"\d+(?:\w+)?"#, on_literal_integer::<{LiteralIntegerType::Decimal as u8}>)]
     LiteralDecimal,
-    // #[regex(r#"\s0x[0-9a-fA-F]+[\s(]"#)]
-    #[regex(r#"0x[0-9a-fA-F]+(?:\w+)?"#, on_literal_numeric)]
+    #[regex(r#"0x[0-9a-fA-F]+(?:\w+)?"#, on_literal_integer::<{LiteralIntegerType::Hex as u8}>)]
     LiteralHex,
-    // #[regex(r#"\s0b[01]+(\s*|\()"#)]
-    #[regex(r#"0b[01]+(?:\w+)?"#)]
+    #[regex(r#"0b[01]+(?:\w+)?"#, on_literal_integer::<{LiteralIntegerType::Binary as u8}>)]
     LiteralBinary,
 
-    #[token(b")")]
-    ParenR,
     #[token(b"-")]
     Negative,
     #[token(b"+")]
     Positive,
-    #[token(b"\'")]
-    QuoteSingle,
-    #[token(b".")]
-    Dot,
-    #[token(b",")]
-    Comma,
+    #[token(b")")]
+    ParenR,
     #[token(b"(")]
     ParenL,
-    #[token(b"\"")]
-    QuoteDouble,
+    #[token(b"\'")]
+    QuoteSingle,
+    // #[token(b".")]
+    // Dot,
+    #[token(b",")]
+    Comma,
+    // #[token(b"\"")]
+    // QuoteDouble,
     #[token(b":")]
     Colon,
     #[token(b"\n", on_newline, priority = 2)]
     Eol,
 
-    #[regex(r"(?:;|#|//)[^\n]*", logos::skip)]
+    #[regex(r#"(?:;|#|//)[^\n]*"#, logos::skip)]
     CommentSingleLine,
+    // #[regex(r#"/*(?:\*|[^*])*\*/"#, logos::skip)]
+    // CommentBlock,
     // #[token(b"/*", |lex| { lex.extras.in_block_comments = true; logos::Skip }, priority = 2)]
     // CommentBlockStart,
     // #[token(b"*/", |lex| { lex.extras.in_block_comments = false; logos::Skip }, priority = 3)]
     // CommentBlockEnd,
-}
-
-impl Token {
-    #[inline(always)]
-    fn sanitize(&self, span: &mut Range<usize>) {
-        // println!("span before: {:?}", span);
-        // match *self {
-        //     Token::LiteralDecimal | Token::LiteralHex | Token::LiteralBinary => {
-        //         span.start += 1;
-        //         // println!("span after: {:?}", span);
-        //     }
-        //     _ => (),
-        // }
-    }
 }
 
 impl TryFrom<Token> for symbol_table::SymbolType {
@@ -255,7 +276,7 @@ impl Lexer {
             let token = sequence?;
             let mut span = lex.span();
 
-            token.sanitize(&mut span);
+            // token.sanitize(&mut span);
             println!(
                 "Lexeme: {:?} as {:?}",
                 String::from_utf8(unsafe { input.slice_unchecked(span.clone()) }.to_vec()).unwrap(),
