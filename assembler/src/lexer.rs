@@ -1,7 +1,11 @@
+use std::ops::Range;
+
 use isa::{instruction::Instruction, register::Register};
 use logos::Logos;
 use shared::{EnumCount, EnumVariants};
 use thiserror::Error;
+
+use crate::symbol_table::{self};
 
 #[derive(Default, Debug)]
 struct Span {
@@ -38,23 +42,7 @@ fn on_newline(lex: &mut logos::Lexer<Token>) {
     lex.extras.row.end = lex.span().end;
 }
 
-// const fn generate_mnemonic_re<'a>() -> &'a [u8] {
-//     b"(?i:add|sub|and|or|xor|sll|srl|sra|)"
-// }
-
-//  let patterns = &[
-//             br#"(?s)/\*.*?\*/"#,                     // Block comments (/* ... */)
-//             br#"#.*"#,                                 // Line comments (# ...)
-//             br#"(?i)\b(addi|add|lw|sw|beq)\b"#,       // Mnemonics (case-insensitive)
-//             br#"\.(text|data|global|word)\b"#,         // Directives (.text, .data)
-//             br#"x([0-9]{1,2})\b"#,                    // Registers (x0–x31)
-//             br#"([a-zA-Z_][a-zA-Z0-9_]*):"#,           // Label definitions (loop:)
-//             br#"(-?\d+)\b"#,                           // Immediates (e.g., -42)
-//             br#"[(),]"#,                               // Punctuation
-//             br#"\s+"#,                                 // Whitespace (ignored)
-//         ];
-
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub enum IdentifierType {
     Mnemonic,
     Register,
@@ -94,25 +82,40 @@ fn extract_ident(lex: &mut logos::Lexer<Token>) -> Result<IdentifierType, Lexing
     Ok(value.into())
 }
 
-#[derive(Logos, Debug, PartialEq, EnumCount)]
+// fn extract_label(lex: &mut logos::Lexer<Token>) -> Result<IdentifierType, LexingError> {
+//     let value = lex.slice();
+//     if !value.is_ascii() {
+//         return Err(LexingError::NonAsciiCharacter(lex.span().end));
+//     }
+
+//     Ok(value.into())
+// }
+
+// TODO: Fix this, Immediates value can be either literal or a symbol constant
+
+#[derive(Logos, Debug, PartialEq, EnumCount, Copy, Clone)]
 #[logos(source = [u8])]
 #[logos(skip r"[ \t\f]+")] // Ignore this regex pattern between tokens
 #[logos(extras = State)]
 #[logos(error = LexingError)]
 pub enum Token {
-    #[regex(r#"\s\d+"#)]
-    Decimal,
-
-    #[regex(r#"\w+:[\s*|\n]"#)] //suffix `:` followed by any whitespace or enter(EOL)
+    #[regex(r#"\w+:"#)] //suffix `:` followed by any whitespace or enter(EOL)
+    // LabelDef(LabelType), //TODO: add numeric label?
     LabelDef,
     #[regex(r#"\.\w+"#)]
     Directive,
+
+    #[regex(r#"\s\d+"#)]
+    Decimal,
     #[regex(r#"\"(\\.|[^\\"])*\""#)] // https://www.lysator.liu.se/c/ANSI-C-grammar-l.html
     LiteralString,
-    #[regex(r#"\s0x[0-9a-fA-F]+[\s(]"#)]
+    // #[regex(r#"\s0x[0-9a-fA-F]+[\s(]"#)]
+    #[regex(r#"\s0x[0-9a-fA-F]+"#)]
     LiteralHex,
-    #[regex(r#"\s0b[01]+(\s*|\()"#)]
+    // #[regex(r#"\s0b[01]+(\s*|\()"#)]
+    #[regex(r#"\s0b[01]+"#)]
     LiteralBinary,
+
     #[regex(r#"\w+"#, extract_ident)]
     Identifier(IdentifierType),
 
@@ -147,194 +150,124 @@ pub enum Token {
     // CommentBlockEnd,
 }
 
-pub struct Tokens([Token; Token::VARIANT_COUNT - 1]); // 1 here is the
+impl TryFrom<Token> for symbol_table::SymbolType {
+    type Error = LexingError;
+
+    fn try_from(value: Token) -> Result<Self, Self::Error> {
+        match value {
+            Token::LabelDef => Ok(symbol_table::SymbolType::Label),
+            Token::Identifier(IdentifierType::Symbol) => Ok(symbol_table::SymbolType::Constant),
+            _ => Err(LexingError::UnknownSyntax),
+        }
+    }
+}
+
+/// Structure of Arrays
+pub struct Tokens {
+    tokens: Vec<Token>,
+    spans: Vec<Range<usize>>,
+}
+
+impl Tokens {
+    fn new(capacity: usize) -> Tokens {
+        Tokens {
+            tokens: Vec::with_capacity(capacity),
+            spans: Vec::with_capacity(capacity),
+        }
+    }
+
+    fn push(&mut self, token: Token, span: Range<usize>) {
+        self.tokens.push(token);
+        self.spans.push(span);
+    }
+
+    fn shrink_to_fit(&mut self) {
+        self.tokens.shrink_to_fit();
+        self.spans.shrink_to_fit();
+    }
+
+    pub fn buffer(&self) -> &[Token] {
+        &self.tokens
+    }
+
+    pub fn span(&self, index: usize) -> &Range<usize> {
+        &self.spans[index]
+    }
+
+    pub fn symbols(&self) -> impl Iterator<Item = (&Token, &Range<usize>)> {
+        self.tokens.iter().zip(&self.spans).filter(|(&token, ..)| {
+            token == Token::LabelDef || token == Token::Identifier(IdentifierType::Symbol)
+        })
+    }
+}
 
 pub struct Lexer;
 
 impl Lexer {
-    fn new() -> Lexer {
-        // let regex_set = RegexSet::new(patterns).unwrap();
-        // let regexes = patterns.iter().map(|p| Regex::new(p).unwrap()).collect();
-        // Lexer { regex_set, regexes }
+    pub fn new() -> Lexer {
         Lexer
     }
 
-    pub fn tokenize<'a>(&self, input: &'a [u8]) -> Result<(), LexingError> {
-        // TODO: get the token and the span, ditch others
+    pub fn tokenize<'a>(&self, input: &'a [u8]) -> Result<Tokens, LexingError> {
         let mut lex = Token::lexer(input);
-        while let Some(sequence) = lex.next() {
-            // match sequence {
-            //     Ok(t) => todo!(),
-            //     Err(_) => todo!(),
-            // }
-            let token = sequence?;
-            let span = lex.span();
-            // todo:
+        let mut tokens = Tokens::new(input.len());
 
-            let word = String::from_utf8(lex.slice().to_vec()).unwrap();
-            println!("Token Match: {:?} {}", token, word);
-            // match token {
-            //      =>
-            //     _ =>
-            // }
+        while let Some(sequence) = lex.next() {
+            let token = sequence?;
+            tokens.push(token, lex.span());
+            // println!(
+            //     "Token: {:?} as {:?}",
+            //     String::from_utf8(lex.slice().to_vec()).unwrap(),
+            //     token
+            // );
         }
 
-        Ok(())
+        tokens.shrink_to_fit();
 
-        // while pos < len {
-        //     let target = &input[pos..];
-        //     // Find the first matching pattern
-        //     let matches = self.regex_set.matches(target);
-        //     println!("Total match: {:?}", matches);
-        //     let Some(pattern_id) = matches.iter().next() else {
-        //         return Err(TokenizeError::UnclosedComment(pos));
-        //     };
-
-        //     let re = &self.regexes[pattern_id];
-        //     let Some(m) = re.find(target) else {
-        //         continue;
-        //     };
-        //     let start = pos + m.start();
-        //     let end = pos + m.end();
-
-        //     println!("Pattern ID: {pattern_id}");
-        //     println!("");
-
-        //     match pattern_id {
-        //         0 => {
-        //             // continue;
-        //             let reg = m.as_bytes();
-        //             let memo = String::from_utf8(reg.to_owned());
-        //             let span = (start, end);
-        //             println!("Block comments Bytes: {:?}, pos: {:?} ", memo, span);
-        //             // tokens.push(Token {
-        //             //     typ: TokenType::BlockComment,
-        //             //     span: (start, end),
-        //             // });
-        //         }
-        //         1 => {
-        //             // continue;
-        //             let reg = m.as_bytes();
-        //             let memo = String::from_utf8(reg.to_owned());
-        //             let span = (start, end);
-        //             println!("Block comments Bytes: {:?}, pos: {:?} ", memo, span);
-        //             // tokens.push(Token {
-        //             //     typ: TokenType::Comment,
-        //             //     span: (start, end),
-        //             // });
-        //         }
-        //         2 => {
-        //             // Mnemonic
-        //             let mnemonic = m.as_bytes();
-        //             let memo = String::from_utf8(mnemonic.to_owned());
-        //             let span = (start, end);
-        //             println!("Mnemonic Bytes: {:?}, pos: {:?} ", memo, span);
-        //             tokens.push(Token {
-        //                 typ: TokenType::Mnemonic(mnemonic),
-        //                 span: (start, end),
-        //             });
-        //         }
-        //         3 => {
-        //             // Directive
-        //             let directive = m.as_bytes();
-        //             tokens.push(Token {
-        //                 typ: TokenType::Directive(directive),
-        //                 span: (start, end),
-        //             });
-        //         }
-        //         4 => {
-        //             // Register
-        //             let reg = m.as_bytes();
-        //             let memo = String::from_utf8(reg.to_owned());
-        //             let span = (start, end);
-        //             println!("Register Bytes: {:?}, pos: {:?} ", memo, span);
-        //             tokens.push(Token {
-        //                 typ: TokenType::Register(reg),
-        //                 span: (start, end),
-        //             });
-        //         }
-        //         5 => {
-        //             // Label definition
-
-        //             // let label = m.as_str().trim_end_matches(':').to_string();
-        //             let label = m.as_bytes().trim_ascii_end();
-        //             tokens.push(Token {
-        //                 typ: TokenType::LabelDef(label),
-        //                 span: (start, end),
-        //             });
-        //         }
-        //         6 => {
-        //             // Immediate
-        //             let b = m.as_bytes();
-        //             let memo = String::from_utf8(b.to_owned());
-        //             let span = (start, end);
-        //             println!("Immediate Bytes: {:?}, pos: {:?} ", memo, span);
-        //             // println!("Imm Bytes: {:?}", memo);
-
-        //             // let imm = i32::from_ne_bytes([b[0], b[1], b[2], b[3]]);
-        //             let imm = 100;
-        //             tokens.push(Token {
-        //                 typ: TokenType::Immediate(imm),
-        //                 span: (start, end),
-        //             });
-        //         }
-        //         7 => {
-        //             // Punctuation
-        //             let punct = m.as_bytes();
-        //             let typ = match punct {
-        //                 b"," => TokenType::Comma,
-        //                 b"(" => TokenType::LParen,
-        //                 b")" => TokenType::RParen,
-        //                 _ => unreachable!(),
-        //             };
-        //             tokens.push(Token {
-        //                 typ,
-        //                 span: (start, end),
-        //             });
-        //         }
-        //         8 => {
-        //             // Immediate
-        //             let b = m.as_bytes();
-        //             let memo = String::from_utf8(b.to_owned());
-        //             let span = (start, end);
-        //             println!("Whitespace Bytes: {:?}, pos: {:?} ", memo, span);
-        //             // println!("Imm Bytes: {:?}", memo);
-
-        //             // let imm = i32::from_ne_bytes([b[0], b[1], b[2], b[3]]);
-        //             tokens.push(Token {
-        //                 typ: TokenType::Whitespace,
-        //                 span: (start, end),
-        //             });
-        //         }
-        //         _ => unreachable!(),
-        //     }
-
-        //     pos = end;
-        // }
+        Ok(tokens)
     }
 }
 
 #[cfg(test)]
 mod test {
-    use std::{fs::File, io::Read};
-
     use super::*;
+    use crate::symbol_table::{Symbol, SymbolTable};
+    use std::{fs::File, io::Read};
 
     #[test]
     fn t_tokenize() {
         let lex = Lexer::new();
-        match File::open("test.asm") {
+
+        let buffer = match File::open("test.asm") {
             Ok(mut file) => {
-                let mut buffer = Vec::new();
-
-                // read the whole file
-                file.read_to_end(&mut buffer).unwrap();
-                println!("Buffer : {:?}", &buffer[0..6]);
-                println!("");
-
-                let token = lex.tokenize(&buffer);
+                let mut _buffer = Vec::new();
+                file.read_to_end(&mut _buffer).unwrap();
+                Ok(_buffer)
             }
-            Err(e) => println!("File Error: {:?}", e),
+            Err(e) => {
+                println!("File Error: {:?}", e);
+                Err(e)
+            }
+        }
+        .unwrap();
+
+        let mut symbol_table = SymbolTable::new();
+        let mut test_spans = Vec::new();
+
+        let tokens = lex.tokenize(&buffer).unwrap();
+        for (&token, span) in tokens.symbols() {
+            symbol_table.insert(
+                &buffer[span.start..span.end],
+                Symbol::new(Default::default(), None, token.try_into().unwrap()),
+            );
+            test_spans.push(span);
+        }
+
+        println!("Symbol Table: {:?}", symbol_table);
+
+        for span in test_spans {
+            let key_slice = &buffer[span.start..span.end];
+            assert!(symbol_table.contains_key(key_slice));
         }
     }
 }

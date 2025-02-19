@@ -5,7 +5,7 @@ use crate::{
 use shared::{EnumCount, VMInstruction};
 
 #[derive(Debug, PartialEq, Eq, VMInstruction, EnumCount)]
-// TODO: FIELD ORDER MATTERS. (I forgot why, probably because of bit shift used for the decoding process)
+// TODO: if fields got re-arranged, make sure to re-arrange the bit arrangements
 pub enum Instruction {
     // ---Binary Operators---
     #[isa(0x1, 5, 5, 5)]
@@ -103,7 +103,6 @@ pub enum Instruction {
     // },
     // TODO: Exit, halt, shutdown
     // pub const SIGHALT: u8 = 0xf;
-    // #[isa(0X5D,5,5,5)]
     #[isa(0x73, 5, 5, 5)]
     Syscall {
         src1: Register,

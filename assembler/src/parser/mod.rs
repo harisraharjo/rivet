@@ -12,8 +12,15 @@ pub enum ParseError {
 pub struct Parser;
 
 impl Parser {
-    pub fn new<'a>(tokens: impl Iterator<Item = impl Debug + 'a>) -> Parser {
+    // pub fn new<'a>(tokens: impl Iterator<Item = impl Debug + 'a>) -> Parser {
+    //     Parser
+    // }
+    pub fn new() -> Parser {
         Parser
+    }
+
+    pub fn parse<'source>(&self, tokens: &'source [u8]) -> i32 {
+        1
     }
 }
 

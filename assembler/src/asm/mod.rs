@@ -1,19 +1,6 @@
-mod directive;
-mod label;
-mod memory;
-
-pub struct SymbolTable; //maps each program symbol to its value. Labels converted to symbol automatically by assmbler
-
-pub enum Symbol {
-    Local,
-    Global,
-}
-
-#[derive(Debug)]
-enum Comment {
-    Single, // #, //
-    Multi,  // /**/
-}
+pub mod directive;
+pub mod label;
+pub mod section;
 
 //? Note: The operands of assembly instructions may contain: Register, immediate, symbol name.
 
