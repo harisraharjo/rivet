@@ -20,6 +20,7 @@ impl Parser {
     }
 
     pub fn parse<'source>(&self, tokens: &'source [u8]) -> i32 {
+        let ff = 0xf;
         1
     }
 }

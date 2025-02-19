@@ -1,22 +1,27 @@
 use std::ops::Range;
 
 use isa::{instruction::Instruction, register::Register};
-use logos::Logos;
+use logos::{Logos, Source};
 use shared::{EnumCount, EnumVariants};
 use thiserror::Error;
 
 use crate::symbol_table::{self};
 
-#[derive(Default, Debug)]
-struct Span {
-    start: usize,
-    end: usize,
+#[derive(Debug)]
+struct Cell {
+    row: usize,
+    column: usize,
+}
+
+impl Default for Cell {
+    fn default() -> Self {
+        Self { row: 1, column: 1 }
+    }
 }
 
 #[derive(Default, Debug)]
 pub struct State {
-    row: Span,
-    column: Span,
+    cell: Cell,
     in_block_comments: bool,
 }
 
@@ -24,6 +29,8 @@ pub struct State {
 pub enum LexingError {
     #[error("Invalid Integer at {0}")]
     InvalidInteger(usize),
+    #[error("Invalid suffix {0} at {1}")]
+    InvalidSuffix(String, usize),
     #[error("Non Ascii Character at {0}")]
     NonAsciiCharacter(usize),
     #[default]
@@ -36,10 +43,10 @@ fn on_block_comment(lex: &mut logos::Lexer<Token>) -> logos::Skip {
     logos::Skip
 }
 
-/// Update the line count and the char index.
+/// Update the line count and cell. //TODO: column still wrong because can't index to the byte index but maybe i'm wrong
 fn on_newline(lex: &mut logos::Lexer<Token>) {
-    lex.extras.row.start += 1;
-    lex.extras.row.end = lex.span().end;
+    lex.extras.cell.row += 1;
+    lex.extras.cell.column = 1;
 }
 
 #[derive(Debug, PartialEq, Copy, Clone)]
@@ -78,18 +85,29 @@ fn extract_ident(lex: &mut logos::Lexer<Token>) -> Result<IdentifierType, Lexing
     if !value.is_ascii() {
         return Err(LexingError::NonAsciiCharacter(lex.span().end));
     }
-
+    // [a-zA-Z_]\w+
     Ok(value.into())
 }
 
-// fn extract_label(lex: &mut logos::Lexer<Token>) -> Result<IdentifierType, LexingError> {
-//     let value = lex.slice();
-//     if !value.is_ascii() {
-//         return Err(LexingError::NonAsciiCharacter(lex.span().end));
-//     }
+fn on_literal_numeric(lex: &mut logos::Lexer<Token>) -> Result<(), LexingError> {
+    let slice = lex.slice();
+    let skip = 2usize; //2 to skip 0x or 0b (0 and x)
+    let len = slice.len();
+    //safety: we read until the end so it's always safe
+    let target = unsafe { slice.get_unchecked(skip..len) };
 
-//     Ok(value.into())
-// }
+    match target.iter().position(|b| !b.is_ascii_hexdigit()) {
+        Some(i) => {
+            Err(LexingError::InvalidSuffix(
+                //safety: we read until the end so it's always safe
+                String::from_utf8(unsafe { target.get_unchecked(i..target.len()) }.to_vec())
+                    .unwrap(),
+                lex.extras.cell.column,
+            ))
+        }
+        None => Ok(()),
+    }
+}
 
 // TODO: Fix this, Immediates value can be either literal or a symbol constant
 
@@ -99,25 +117,25 @@ fn extract_ident(lex: &mut logos::Lexer<Token>) -> Result<IdentifierType, Lexing
 #[logos(extras = State)]
 #[logos(error = LexingError)]
 pub enum Token {
-    #[regex(r#"\w+:"#)] //suffix `:` followed by any whitespace or enter(EOL)
+    #[regex(r#"[a-zA-Z_]\w+"#, extract_ident)]
+    Identifier(IdentifierType),
+
+    #[regex(r#"[a-zA-Z]\w+:"#)] //suffix `:` followed by any whitespace or enter(EOL)
     // LabelDef(LabelType), //TODO: add numeric label?
     LabelDef,
-    #[regex(r#"\.\w+"#)]
+    #[regex(r#"\.[a-zA-Z]\w+"#)]
     Directive,
 
-    #[regex(r#"\s\d+"#)]
-    Decimal,
     #[regex(r#"\"(\\.|[^\\"])*\""#)] // https://www.lysator.liu.se/c/ANSI-C-grammar-l.html
     LiteralString,
+    #[regex(r#"\d+(?:\w+)?"#)] //[ (\n)]
+    LiteralDecimal,
     // #[regex(r#"\s0x[0-9a-fA-F]+[\s(]"#)]
-    #[regex(r#"\s0x[0-9a-fA-F]+"#)]
+    #[regex(r#"0x[0-9a-fA-F]+(?:\w+)?"#, on_literal_numeric)]
     LiteralHex,
     // #[regex(r#"\s0b[01]+(\s*|\()"#)]
-    #[regex(r#"\s0b[01]+"#)]
+    #[regex(r#"0b[01]+(?:\w+)?"#)]
     LiteralBinary,
-
-    #[regex(r#"\w+"#, extract_ident)]
-    Identifier(IdentifierType),
 
     #[token(b")")]
     ParenR,
@@ -135,19 +153,31 @@ pub enum Token {
     ParenL,
     #[token(b"\"")]
     QuoteDouble,
-
     #[token(b":")]
     Colon,
     #[token(b"\n", on_newline, priority = 2)]
     Eol,
 
-    #[regex(r"#[^\n]*", logos::skip)]
-    #[regex(r"//[^\n]*", logos::skip)]
+    #[regex(r"(?:;|#|//)[^\n]*", logos::skip)]
     CommentSingleLine,
     // #[token(b"/*", |lex| { lex.extras.in_block_comments = true; logos::Skip }, priority = 2)]
     // CommentBlockStart,
     // #[token(b"*/", |lex| { lex.extras.in_block_comments = false; logos::Skip }, priority = 3)]
     // CommentBlockEnd,
+}
+
+impl Token {
+    #[inline(always)]
+    fn sanitize(&self, span: &mut Range<usize>) {
+        // println!("span before: {:?}", span);
+        // match *self {
+        //     Token::LiteralDecimal | Token::LiteralHex | Token::LiteralBinary => {
+        //         span.start += 1;
+        //         // println!("span after: {:?}", span);
+        //     }
+        //     _ => (),
+        // }
+    }
 }
 
 impl TryFrom<Token> for symbol_table::SymbolType {
@@ -194,8 +224,16 @@ impl Tokens {
         &self.spans[index]
     }
 
+    fn iter(&self) -> impl Iterator<Item = (&Token, &Range<usize>)> {
+        self.tokens.iter().zip(&self.spans)
+    }
+
+    fn iter_mut(&mut self) -> impl Iterator<Item = (&mut Range<usize>, &Token)> {
+        self.spans.iter_mut().zip(&self.tokens)
+    }
+
     pub fn symbols(&self) -> impl Iterator<Item = (&Token, &Range<usize>)> {
-        self.tokens.iter().zip(&self.spans).filter(|(&token, ..)| {
+        self.iter().filter(|(&token, ..)| {
             token == Token::LabelDef || token == Token::Identifier(IdentifierType::Symbol)
         })
     }
@@ -213,13 +251,17 @@ impl Lexer {
         let mut tokens = Tokens::new(input.len());
 
         while let Some(sequence) = lex.next() {
+            lex.extras.cell.column += 1;
             let token = sequence?;
-            tokens.push(token, lex.span());
-            // println!(
-            //     "Token: {:?} as {:?}",
-            //     String::from_utf8(lex.slice().to_vec()).unwrap(),
-            //     token
-            // );
+            let mut span = lex.span();
+
+            token.sanitize(&mut span);
+            println!(
+                "Lexeme: {:?} as {:?}",
+                String::from_utf8(unsafe { input.slice_unchecked(span.clone()) }.to_vec()).unwrap(),
+                token
+            );
+            tokens.push(token, span);
         }
 
         tokens.shrink_to_fit();

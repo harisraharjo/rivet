@@ -33,7 +33,9 @@ impl<'a> Assembler<'a> {
         }
     }
 
-    fn assembler<'source>(&mut self, source: &'source [u8]) -> Result<(), AssemblerError> {
+    pub fn assemble<'source>(&mut self, source: &'source [u8]) -> Result<(), AssemblerError> {
+        // let dd = 0x1111TP;
+        // let ad = symbol111;
         let tokens = self.lexer.tokenize(source)?;
         let mut symbol_table = SymbolTable::new();
 
@@ -45,6 +47,7 @@ impl<'a> Assembler<'a> {
         }
 
         // let data = self.parser.parse(tokens);
+
         Ok(())
     }
 }
