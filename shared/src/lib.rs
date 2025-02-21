@@ -14,7 +14,7 @@ pub trait EnumVariants<const N: usize> {
 }
 
 pub mod helper {
-    pub fn max_value_for_bit_length<const SIGNED: bool>(bit_count: u32) -> u32 {
+    pub const fn max_value_for_bit_length<const SIGNED: bool>(bit_count: u32) -> u32 {
         if !SIGNED {
             (1u32 << bit_count) - 1
         } else {

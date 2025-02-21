@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::Debug};
+use std::{collections::HashMap, fmt::Debug, ops::Range};
 
 #[derive(Debug, Default, PartialEq, Eq)]
 pub enum SymbolType {
@@ -37,34 +37,23 @@ impl Symbol {
 //     Address(u32),       // Labels resolved to addresses
 // }
 
-// #[derive(PartialEq, Eq)]
-pub struct SymbolTable<'a> {
-    entries: HashMap<&'a [u8], Symbol>,
+#[derive(Debug)]
+pub struct SymbolTable {
+    entries: HashMap<Range<usize>, Symbol>,
 }
 
-impl<'a> SymbolTable<'a> {
-    pub fn new() -> SymbolTable<'a> {
+impl SymbolTable {
+    pub fn new() -> SymbolTable {
         SymbolTable {
             entries: HashMap::new(),
         }
     }
 
-    pub fn insert(&mut self, k: &'a [u8], v: Symbol) {
+    pub fn insert(&mut self, k: Range<usize>, v: Symbol) {
         self.entries.insert(k, v);
     }
 
-    pub fn contains_key(&self, key: &[u8]) -> bool {
+    pub fn contains_key(&self, key: &Range<usize>) -> bool {
         self.entries.contains_key(key)
-    }
-}
-
-impl<'a> Debug for SymbolTable<'a> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let ff: Vec<(String, &Symbol)> = self
-            .entries
-            .iter()
-            .map(|(bytes, symbol)| (String::from_utf8(bytes.to_vec()).unwrap(), symbol))
-            .collect();
-        f.debug_struct("SymbolTable").field("entries", &ff).finish()
     }
 }

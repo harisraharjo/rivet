@@ -1,14 +1,15 @@
 mod asm;
-mod ast;
 mod instruction;
 mod lexer;
 mod parser;
 mod symbol_table;
+mod token;
 
-use lexer::{Lexer, LexingError};
-use parser::Parser;
+use lexer::Lexer;
+// use parser::Parser;
 use symbol_table::{Symbol, SymbolTable};
 use thiserror::Error;
+use token::{LexingError, Tokens};
 
 #[derive(Error, Debug)]
 pub enum AssemblerError {
@@ -16,37 +17,34 @@ pub enum AssemblerError {
     LexerError(#[from] LexingError),
 }
 
-pub struct Assembler<'a> {
-    symbol_table: SymbolTable<'a>,
-    lexer: Lexer,
-    parser: Parser,
-    // input: &'source [u8],
+pub struct Assembler {
+    symbol_table: SymbolTable,
+    // lexer: Lexer,
+    // parser: Parser<'a>,
 }
 
-impl<'a> Assembler<'a> {
-    pub fn new() -> Assembler<'a> {
+impl Assembler {
+    pub fn new() -> Assembler {
         Assembler {
             symbol_table: SymbolTable::new(),
-            lexer: Lexer::new(),
-            parser: Parser::new(),
-            // input: source,
+            // lexer: Lexer::new(),
+            // parser: Parser::new([].as_slice(), Tokens::new(0)),
         }
     }
 
     pub fn assemble<'source>(&mut self, source: &'source [u8]) -> Result<(), AssemblerError> {
-        // let dd = 0x1111TP;
-        // let ad = symbol111;
-        let tokens = self.lexer.tokenize(source)?;
-        let mut symbol_table = SymbolTable::new();
+        let tokens = Lexer::new().tokenize(source)?;
 
         for (&token, span) in tokens.symbols() {
-            symbol_table.insert(
-                &source[span.start..span.end],
+            self.symbol_table.insert(
+                //safety: guaranteed to be safe because tokens derivate from the source
+                span.to_owned(),
                 Symbol::new(Default::default(), None, token.try_into().unwrap()),
             )
         }
 
-        // let data = self.parser.parse(tokens);
+        // let mut parser = Parser::new(source, tokens);
+        // let data = parser.parse();
 
         Ok(())
     }
