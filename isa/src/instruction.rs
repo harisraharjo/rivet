@@ -2,7 +2,7 @@ use crate::{
     operand::{Immediate14, Immediate19},
     register::Register,
 };
-use shared::{EnumCount, VMInstruction};
+use shared::{DecodeError, EnumCount, VMInstruction};
 
 #[derive(Debug, PartialEq, Eq, VMInstruction, EnumCount)]
 // TODO: if fields got re-arranged, make sure to re-arrange the bit arrangements
@@ -138,10 +138,12 @@ pub trait Codec {
 #[cfg(test)]
 mod test {
     use crate::{
-        instruction::{DecodeError, Instruction},
+        instruction::Instruction,
         operand::{Immediate14, Immediate19},
         register::Register,
     };
+
+    use shared::DecodeError;
 
     #[test]
     fn t_opcode() {

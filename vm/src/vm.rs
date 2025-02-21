@@ -1,4 +1,4 @@
-use isa::instruction::Instruction;
+use isa::Instruction;
 
 use crate::{
     cpu::{register::Registers, CPU},
@@ -60,7 +60,7 @@ impl VM {
 
     #[cfg(test)]
     pub fn test_run(&mut self, program: &[Instruction]) -> anyhow::Result<()> {
-        use isa::register::Register;
+        use isa::Register;
 
         let program_words: Vec<u32> = program
             .iter()
@@ -233,8 +233,8 @@ impl VM {
 #[cfg(test)]
 mod test {
     use isa::{
-        operand::{Immediate, Immediate14, Immediate19},
-        register::Register,
+        operand::{Immediate14, Immediate19},
+        Register,
     };
     use Instruction::*;
 

@@ -1,6 +1,9 @@
-pub mod instruction;
+mod instruction;
 pub mod operand;
-pub mod register;
+mod register;
+
+pub use instruction::Instruction;
+pub use register::Register;
 
 fn add(left: u64, right: u64) -> u64 {
     left + right

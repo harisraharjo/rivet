@@ -1,4 +1,3 @@
-use isa::{instruction::Instruction, register::Register};
 use shared::{EnumCount, EnumVariants};
 use thiserror::Error;
 
@@ -50,37 +49,44 @@ pub enum LexingError {
 //     logos::Skip
 // }
 
-/// Update the line count and cell. //TODO: column still wrong because can't index to the byte index but maybe i'm wrong
+/// Update the line count and cell. //TODO: column still can't be used because logos doesn't allow us to index to the byte index but maybe i'm wrong
 pub(super) fn on_newline(lex: &mut logos::Lexer<Token>) {
     lex.extras.cell.row += 1;
     lex.extras.cell.column = 1;
 }
 
+pub type Index = usize;
+
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum IdentifierType {
-    Mnemonic,
-    Register,
+    Mnemonic(Index),
+    Register(isa::Register),
     Symbol,
 }
 
 impl IdentifierType {
-    fn mnemonics<'a>() -> [&'a str; Instruction::VARIANT_COUNT] {
-        Instruction::mnemonics()
+    #[inline(always)]
+    fn mnemonics<'a>() -> [&'a str; isa::Instruction::VARIANT_COUNT] {
+        isa::Instruction::mnemonics()
     }
 
-    fn registers<'a>() -> [&'a str; Register::VARIANT_COUNT] {
-        Register::variants()
+    #[inline(always)]
+    fn registers<'a>() -> [&'a str; isa::Register::VARIANT_COUNT] {
+        isa::Register::variants()
     }
 }
 
 impl From<&[u8]> for IdentifierType {
     fn from(value: &[u8]) -> Self {
-        if let Some(_) = Self::mnemonics().iter().find(|v| v.as_bytes() == value) {
-            return Self::Mnemonic;
+        if let Some(i) = Self::mnemonics().iter().position(|v| v.as_bytes() == value) {
+            return Self::Mnemonic(i);
         };
 
-        if let Some(_) = Self::registers().iter().find(|v| v.as_bytes() == value) {
-            return Self::Register;
+        if let Some(i) = Self::registers().iter().position(|v| v.as_bytes() == value) {
+            return Self::Register(
+                // Safety: guaranteed to be safe because `i` is an actual index from the selected variant.
+                unsafe { std::mem::transmute::<u8, isa::Register>(i as u8) },
+            );
         };
 
         Self::Symbol
@@ -151,15 +157,13 @@ pub(super) fn on_literal_integer<const TYPE: u8>(
 
 pub(super) fn on_directive(lex: &mut logos::Lexer<Token>) -> Result<DirectiveType, LexingError> {
     let slice = lex.slice();
-
     let variants = DirectiveType::variants();
-    println!("Directive variants: {:?}", variants);
 
     //safety: we read the end of the slice so it's always safe
     let target = unsafe { slice.get_unchecked(1..) };
     if let Some(i) = variants.iter().position(|v| v.as_bytes() == target) {
         return Ok(
-            // Safety: guaranteed to be safe because `i` is an actual index from the selected variant.
+            // Safety: guaranteed to be safe because `i` is an actual index from the selected variant and DirectiveTypes variants are all unit variant.
             unsafe { std::mem::transmute::<u8, DirectiveType>(i as u8) },
         );
     };

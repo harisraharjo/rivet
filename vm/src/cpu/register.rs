@@ -1,6 +1,6 @@
 use std::ops::{Index, IndexMut};
 
-use isa::register::Register;
+use isa::Register;
 use shared::EnumCount;
 
 #[derive(Default, Debug)]

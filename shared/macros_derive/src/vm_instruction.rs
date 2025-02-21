@@ -1,10 +1,10 @@
-use proc_macro2::{Span, TokenStream};
-use syn::{LitByteStr, LitStr};
+use proc_macro2::Span;
+use syn::LitStr;
 
 fn extract_isa(
     variants: &syn::punctuated::Punctuated<syn::Variant, syn::token::Comma>,
 ) -> impl Iterator<Item = Vec<u32>> + '_ {
-    let bits = variants
+    variants
         .into_iter()
         .map(|v| v.attrs.iter().filter(|attr| attr.path().is_ident("isa")))
         .map(|attr| {
@@ -22,19 +22,14 @@ fn extract_isa(
             });
 
             data
-        });
-
-    bits
+        })
 }
 
 type EField = (syn::Ident, String);
-type FieldCount = usize;
-fn extract_variant_fields(
-    fields: &syn::Fields,
-) -> Option<(impl Iterator<Item = EField> + '_, FieldCount)> {
+fn extract_variant_fields(fields: &syn::Fields) -> Option<impl Iterator<Item = EField> + '_> {
     match fields {
-        syn::Fields::Named(f) => {
-            let f_ = f.named.iter().map(|f| {
+        syn::Fields::Named(fields) => {
+            let f_iter = fields.named.iter().map(|f| {
                 let name = f.ident.to_owned().unwrap();
                 let mut ty = String::new();
                 if let syn::Type::Path(type_path) = &f.ty {
@@ -43,7 +38,7 @@ fn extract_variant_fields(
 
                 (name, ty)
             });
-            Some((f_, f.named.len()))
+            Some(f_iter)
         }
         syn::Fields::Unit => None,
         _ => panic!("Only accept Named & Unit"),
@@ -56,7 +51,7 @@ fn extract_variant_data(
     Item = (
         &syn::Ident,
         proc_macro2::Span,
-        Option<(impl Iterator<Item = EField> + '_, usize)>,
+        Option<impl Iterator<Item = EField> + '_>,
     ),
 > {
     variants.iter().map(|v| {
@@ -72,11 +67,6 @@ fn extract_variant_data(
 // TODO: Pad instruction that are not full 32 bit. ex: instructions that only uses registers (8+5+5 = 18 bit used);
 fn create_bit_mask(bit_count: u32) -> u32 {
     (1u32 << bit_count) - 1
-}
-
-fn vec_to_arr<T, const N: usize>(v: Vec<T>) -> [T; N] {
-    v.try_into()
-        .unwrap_or_else(|v: Vec<T>| panic!("Expected a Vec of length {} but it was {}", N, v.len()))
 }
 
 fn generate_fields(
@@ -126,7 +116,14 @@ fn generate_fields(
     )
 }
 
-//TODO: Add mnemonic
+// fn create_alias(field: String) -> i32 {
+
+//     match field.starts_with("R") {
+//         true => "r",
+//         false => field.ends_with("4"),
+//     }
+// }
+
 pub(crate) fn isa2(input: proc_macro2::TokenStream) -> syn::Result<proc_macro2::TokenStream> {
     // parse
     let mut ast: syn::DeriveInput = syn::parse2(input)?;
@@ -145,7 +142,7 @@ pub(crate) fn isa2(input: proc_macro2::TokenStream) -> syn::Result<proc_macro2::
                     isa[0] = 8; //change opcode value to bits it occupy
 
                     let (fields_names, raw_encoded_field_value, raw_decoded_field_value) =
-                        if let Some((field_iter, _field_count)) = fields {
+                        if let Some(field_iter) = fields {
                             generate_fields(field_iter, isa)
                         } else {
                             (quote::quote!(), quote::quote!(), quote::quote!())
@@ -158,26 +155,20 @@ pub(crate) fn isa2(input: proc_macro2::TokenStream) -> syn::Result<proc_macro2::
                         }
                     };
 
-                    let encode_result = quote::quote_spanned! {
+                    let _encode = quote::quote_spanned! {
                         variant_span=>
                         #enum_name::#variant_name #fields_names => #encoded_field_value,
                     };
 
                     //decode
-                    let decoded_result = quote::quote_spanned! {
+                    let _decode = quote::quote_spanned! {
                         variant_span =>
                         #opcode => Ok(Self::#variant_name #raw_decoded_field_value ),
                     };
 
                     let mnemonic_string = variant_name.to_string().to_lowercase();
-                    let mnemonic_str =
+                    let _mnemonics_str =
                         LitStr::new(mnemonic_string.as_ref(), proc_macro2::Span::call_site());
-
-                    //mnemonics
-                    // let _mnemonic_token = quote::quote_spanned! {
-                    //     variant_span=>
-                    //     #enum_name::#variant_name { .. } => b"test",
-                    // };
 
                     //opcodes
                     let _opcodes = quote::quote_spanned! {
@@ -185,32 +176,42 @@ pub(crate) fn isa2(input: proc_macro2::TokenStream) -> syn::Result<proc_macro2::
                         #enum_name::#variant_name { .. } => #opcode,
                     };
 
-                    ((encode_result, decoded_result), (mnemonic_str, _opcodes))
+                    ((_encode, _decode), (_mnemonics_str, _opcodes))
                 })
                 .unzip();
 
-            let span = Span::call_site();
-            let mnemonic_strs: Vec<TokenStream> = result
-                .1
-                 .0
-                .iter()
-                .map(|lit_str| {
-                    quote::quote_spanned! {
-                        span=>
-                        #lit_str,
+            let (encode_decode, (mnemonics_str, opcodes)) = result;
+
+            let mnemonics_fn = {
+                let span = Span::call_site();
+                let len = mnemonics_str.len();
+                let mnemonic_tokenstream: Vec<_> = mnemonics_str
+                    .iter()
+                    .map(|lit_str| {
+                        quote::quote_spanned! {
+                            span=>
+                            #lit_str,
+                        }
+                    })
+                    .collect();
+
+                quote::quote! {
+                    pub fn mnemonics<'a>() -> [&'a str; #len] {
+                        [#(#mnemonic_tokenstream)*]
                     }
-                })
-                .collect();
-
-            let len = result.1 .0.len();
-            let _mnemonics_fn = quote::quote! {
-                pub fn mnemonics<'a>() -> [&'a str; #len] {
-                    [#(#mnemonic_strs)*]
                 }
-
             };
-            let ((a1, a2), (_, b1)) = result;
-            Ok(((a1, a2), (_mnemonics_fn, b1)))
+
+            for iter in extract_variant_data(variants)
+                .flat_map(|(_, __, fields)| fields)
+                .map(|f| f.map(|(_, ty)| ty.to_lowercase()))
+            {
+                for d in iter {
+                    eprintln!("field type: {d}");
+                }
+            }
+
+            Ok((encode_decode, (mnemonics_fn, opcodes)))
         }
         _ => Err(syn::Error::new(
             syn::spanned::Spanned::span(&ast),
@@ -220,14 +221,8 @@ pub(crate) fn isa2(input: proc_macro2::TokenStream) -> syn::Result<proc_macro2::
 
     //generate
     Ok(quote::quote! {
-        #[derive(Debug, thiserror::Error)]
-        pub enum DecodeError {
-            #[error("Unknown Opcode: `{0}`")]
-            UnknownOpcode(u8)
-        }
-
         impl #impl_g TryFrom<u32> for #enum_name #type_g #where_c {
-            type Error = DecodeError;
+            type Error = shared::DecodeError;
 
             fn try_from(value: u32) -> Result<Self, Self::Error> {
                 let opcode = value as u8;
