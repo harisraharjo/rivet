@@ -5,8 +5,8 @@ use std::ops::Range;
 
 pub use helper::LexingError;
 use helper::{
-    on_directive, on_ident, on_literal_integer, on_newline, IdentifierType, LiteralIntegerType,
-    State,
+    IdentifierType, LiteralIntegerType, State, on_directive, on_ident, on_literal_integer,
+    on_newline,
 };
 
 use crate::{asm::directive::DirectiveType, symbol_table};
@@ -128,7 +128,7 @@ impl Tokens {
     }
 
     pub fn symbols(&self) -> impl Iterator<Item = (&Token, &Range<usize>)> {
-        self.iter().filter(|(&token, ..)| {
+        self.iter().filter(|&(&token, ..)| {
             token == Token::Label || token == Token::Identifier(IdentifierType::Symbol)
         })
     }

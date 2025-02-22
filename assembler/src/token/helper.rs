@@ -147,7 +147,7 @@ pub(super) fn on_literal_integer<const TYPE: u8>(
     if let Some(i) = target.iter().position(callback) {
         return Err(LexingError::InvalidSuffix(
             //safety: we read until the end so it's always safe
-            String::from_utf8(unsafe { target.get_unchecked(i..target.len()) }.to_vec()).unwrap(),
+            String::from_utf8(unsafe { target.get_unchecked(i..target.len()).to_vec() }).unwrap(),
             lex.extras.cell.column,
         ));
     }
