@@ -22,7 +22,7 @@ impl From<ImmediateType> for u32 {
 }
 
 // TODO: Make generic immediate or make it u32 instead
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Default)]
 pub struct Immediate<const BIT: u32>(i32);
 pub type Immediate14 = Immediate<14>;
 pub type Immediate19 = Immediate<19>;
@@ -38,7 +38,7 @@ impl<const BIT: u32> Immediate<BIT> {
         let _ = Self::_BIT;
 
         let max = (1 << (BIT - 1)) - 1; //i32
-                                        // let max = (1 << BIT) - 1; //u32
+        // let max = (1 << BIT) - 1; //u32
         let min = -(max + 1);
         assert!(
             value >= min && value <= max,

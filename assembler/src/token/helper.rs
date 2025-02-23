@@ -55,7 +55,7 @@ pub(super) fn on_newline(lex: &mut logos::Lexer<Token>) {
     lex.extras.cell.column = 1;
 }
 
-pub type Index = usize;
+type Index = usize;
 
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum IdentifierType {

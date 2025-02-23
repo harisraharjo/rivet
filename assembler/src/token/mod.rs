@@ -3,11 +3,8 @@ mod helper;
 use logos::Logos;
 use std::ops::Range;
 
-pub use helper::LexingError;
-use helper::{
-    IdentifierType, LiteralIntegerType, State, on_directive, on_ident, on_literal_integer,
-    on_newline,
-};
+pub use helper::{IdentifierType, LexingError};
+use helper::{LiteralIntegerType, State, on_directive, on_ident, on_literal_integer, on_newline};
 
 use crate::{asm::directive::DirectiveType, symbol_table};
 
