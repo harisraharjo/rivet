@@ -55,11 +55,9 @@ pub(super) fn on_newline(lex: &mut logos::Lexer<Token>) {
     lex.extras.cell.column = 1;
 }
 
-type Index = usize;
-
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum IdentifierType {
-    Mnemonic(Index),
+    Mnemonic(isa::instruction::Mnemonic),
     Register(isa::Register),
     Symbol,
 }
@@ -67,7 +65,7 @@ pub enum IdentifierType {
 impl IdentifierType {
     #[inline(always)]
     fn mnemonics<'a>() -> [&'a str; isa::Instruction::VARIANT_COUNT] {
-        isa::Instruction::mnemonics()
+        isa::instruction::Mnemonic::variants()
     }
 
     #[inline(always)]
@@ -79,7 +77,10 @@ impl IdentifierType {
 impl From<&[u8]> for IdentifierType {
     fn from(value: &[u8]) -> Self {
         if let Some(i) = Self::mnemonics().iter().position(|v| v.as_bytes() == value) {
-            return Self::Mnemonic(i);
+            return Self::Mnemonic(
+                // Safety: guaranteed to be safe because `i` is an actual index from the selected variant.
+                unsafe { std::mem::transmute::<u8, isa::instruction::Mnemonic>(i as u8) },
+            );
         };
 
         if let Some(i) = Self::registers().iter().position(|v| v.as_bytes() == value) {
