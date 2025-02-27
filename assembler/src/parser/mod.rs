@@ -67,7 +67,7 @@ impl<'a> Parser<'a> {
     }
 
     fn peek(&self) -> Option<&Token> {
-        self.lexemes.get(self.current + 1)
+        self.lexemes.get_token(self.current + 1)
     }
 
     pub fn remainder(&self) -> &[Token] {
@@ -78,29 +78,31 @@ impl<'a> Parser<'a> {
     /// peek the current line
     fn peek_line(&self) -> LexemesSlice<'_> {
         //safety: unwrap safe because guaranteed (Token::Eol || Token::Eof) is always present
-        let pos = self
-            .remainder()
-            .iter()
-            .position(|&t| t == Token::Eol || t == Token::Eof)
-            .unwrap();
-        self.lexemes.slice(self.current..self.current + pos + 1)
+        let pos = self.nearest_break().unwrap();
+        // upper bound is the index of Eol||Eof because we don't take them in
+        self.lexemes.slice(self.current..self.current + pos)
     }
 
-    fn eat(&mut self) -> Token {
+    fn eat(&mut self) -> Option<Token> {
+        // Token::Eof
         let token = self.lexemes.buffer()[self.current];
+
+        if token == Token::Eof {
+            return None;
+        }
+
         self.advance();
-        token
+        Some(token)
+    }
+
+    fn nearest_break(&self) -> Option<usize> {
+        self.remainder()
+            .iter()
+            .position(|t| *t == Token::Eol || *t == Token::Eof)
     }
 
     fn advance_line(&mut self) {
-        let pos = self
-            .remainder()
-            .iter()
-            .position(|&t| t == Token::Eol || t == Token::Eof)
-            .unwrap();
-        // println!("current i: {}", self.current);
-        // println!("Eol | Eof: {}", pos);
-
+        let pos = self.nearest_break().unwrap();
         self.advance_by(pos);
     }
 
@@ -114,7 +116,7 @@ impl<'a> Parser<'a> {
 
     #[inline(always)]
     fn get_span(&self, index: usize) -> &Range<usize> {
-        self.lexemes.span(index)
+        self.lexemes.get_span(index)
     }
 
     #[inline(always)]
@@ -132,17 +134,17 @@ impl<'a> Parser<'a> {
         self.get_source(span)
     }
 
-    pub fn parse(&mut self) -> Result<(), ParserError> {
-        while self.current <= self.lexemes.len() {
-            self.walk()?;
+    pub fn parse(&mut self) -> Result<bool, ParserError> {
+        while let Some(token) = self.eat() {
+            self.walk(token)?;
         }
 
-        Ok(())
+        Ok(true)
     }
 
-    fn walk(&mut self) -> Result<(), ParserError> {
+    fn walk(&mut self, token: Token) -> Result<(), ParserError> {
         println!("Parsing...");
-        match self.eat() {
+        match token {
             Token::Directive(dir_type) => {
                 println!("Directive : {:?}", dir_type);
                 self.advance_line();
@@ -214,9 +216,8 @@ impl<'a> Parser<'a> {
                 // ast.nodes.push(AstNode::LabelDefinition { name, position });
             }
             Token::Identifier(IdentifierType::Mnemonic(mnemonic_type)) => {
-                println!("Instruction: {:?}", mnemonic_type);
-                let mut lexemes = self.peek_line().into_iter();
                 let rule = grammar::InstructionRule::new(mnemonic_type);
+                let mut lexemes = self.peek_line();
                 let rule_iter = rule.iter();
 
                 if let Some(mismatch) = rule_iter
@@ -234,42 +235,22 @@ impl<'a> Parser<'a> {
                     });
                 };
 
-                self.advance_by(rule.len() - 1);
-                self.expect(
-                    Token::Eol,
-                    ParserError::InvalidGrammar {
+                if let Some(remainder) = &lexemes.next() {
+                    let span = remainder.span();
+                    println!("leftover: {:?}", remainder.token());
+                    return Err(ParserError::InvalidGrammar {
                         expected: RuleError::InvalidInstruction(OperandTokenType::Eol).into(),
-                        found: String::from_utf8(
-                            self.get_source(self.get_span(self.current + 1).to_owned())
-                                .to_vec(),
-                        )
-                        .unwrap(),
-                    },
-                )?;
-
-                // if let Some(remainder) = &lexemes.next() {
-                //     ;
-                // }
-
-                // self.grammar
-                //     .instruction()
-                //     .parse(mnemonic_type, lexemes)
-                //     .map_err(|err| {
-                //         let span = err.span().to_owned();
-                //         let found = String::from_utf8(self.get_source(span).to_vec()).unwrap();
-                //         ParserError::InvalidGrammar {
-                //             expected: err.into(),
-                //             found,
-                //         }
-                //     })?;
+                        found: String::from_utf8(self.get_source(span.to_owned()).to_vec())
+                            .unwrap(),
+                    });
+                }
+                self.advance_by(rule.len());
 
                 // ast.nodes.push(AstNode::Instruction { mnemonic, operands });
             }
             Token::Eol => {
+                println!("=== eol ===");
                 // self.advance(); // Skip empty lines
-            }
-            Token::Eof => {
-                // finishing
             }
             t @ _ => {
                 println!("Unknown Token: {:?}", t);
@@ -279,16 +260,16 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
-    fn expect(&mut self, expected: Token, err: ParserError) -> Result<(), ParserError> {
-        let next = self.peek();
-        println!("next: {:?}", next);
-        if next == Some(&expected) {
-            self.advance();
-            Ok(())
-        } else {
-            Err(err)
-        }
-    }
+    // fn expect(&mut self, expected: Token, err: ParserError) -> Result<(), ParserError> {
+    //     let next = self.peek();
+    //     println!("next: {:?}", next);
+    //     if next == Some(&expected) {
+    //         self.advance();
+    //         Ok(())
+    //     } else {
+    //         Err(err)
+    //     }
+    // }
 }
 
 #[cfg(test)]
@@ -354,10 +335,11 @@ mod test_super {
         // }
 
         let mut parser = Parser::new(source.as_ref(), lexemes);
-        match parser.parse() {
-            Ok(ast) => println!("AST: {:?}", ast),
-            Err(e) => eprintln!("Parse error: {}", e),
-        }
+        assert!(parser.parse()?);
+        // match parser.parse() {
+        //     Ok(res) => println!("res: {:?}", res),
+        //     Err(e) => eprintln!("Parse error: {}", e),
+        // }
         Ok(())
     }
 }

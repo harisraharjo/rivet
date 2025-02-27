@@ -1,7 +1,7 @@
 mod helper;
 
 use logos::Logos;
-use std::ops::Range;
+use std::ops::{Index, Range};
 
 pub use helper::{IdentifierType, LexingError};
 use helper::{LiteralIntegerType, State, on_directive, on_ident, on_literal_integer, on_newline};
@@ -76,11 +76,11 @@ impl Token {
     // }
 }
 
-impl TryFrom<Token> for symbol_table::SymbolType {
+impl TryFrom<&Token> for symbol_table::SymbolType {
     type Error = LexingError;
 
-    fn try_from(value: Token) -> Result<Self, Self::Error> {
-        match value {
+    fn try_from(value: &Token) -> Result<Self, Self::Error> {
+        match *value {
             Token::Label => Ok(symbol_table::SymbolType::Label),
             Token::Identifier(IdentifierType::Symbol) => Ok(symbol_table::SymbolType::Constant),
             _ => Err(LexingError::UnknownSyntax),
@@ -102,8 +102,12 @@ impl Lexemes {
         }
     }
 
-    pub fn get(&self, index: usize) -> Option<&Token> {
+    pub fn get_token(&self, index: usize) -> Option<&Token> {
         self.tokens.get(index)
+    }
+
+    pub fn get_span(&self, index: usize) -> &Range<usize> {
+        &self.spans[index]
     }
 
     pub fn push(&mut self, token: Token, span: Range<usize>) {
@@ -125,10 +129,6 @@ impl Lexemes {
         &self.spans
     }
 
-    pub fn span(&self, index: usize) -> &Range<usize> {
-        &self.spans[index]
-    }
-
     pub fn iter(&self) -> impl Iterator<Item = (&Token, &Range<usize>)> {
         self.tokens.iter().zip(&self.spans)
     }
@@ -138,8 +138,8 @@ impl Lexemes {
     }
 
     pub fn symbols(&self) -> impl Iterator<Item = (&Token, &Range<usize>)> {
-        self.iter().filter(|&(&token, ..)| {
-            token == Token::Label || token == Token::Identifier(IdentifierType::Symbol)
+        self.iter().filter(|&(token, ..)| {
+            *token == Token::Label || *token == Token::Identifier(IdentifierType::Symbol)
         })
     }
 
@@ -148,9 +148,12 @@ impl Lexemes {
     }
 
     pub fn seal(&mut self) {
-        self.tokens.push(Token::Eof);
-        self.spans.push(0..0);
-        self.shrink_to_fit();
+        if let Some(last_span) = self.spans.last() {
+            let end = last_span.end;
+            self.spans.push(end..end);
+            self.tokens.push(Token::Eof);
+            self.shrink_to_fit();
+        }
     }
 
     pub fn slice<I>(&self, index: I) -> LexemesSlice<'_>
@@ -163,6 +166,14 @@ impl Lexemes {
         LexemesSlice::new(&self.tokens[index.clone()], &self.spans[index])
     }
 }
+
+// impl Index<usize> for Lexemes {
+//     type Output = (Token, Range<usize>);
+
+//     fn index(&self, index: usize) -> &Self::Output {
+//         (self.tokens[index], self.spans[index])
+//     }
+// }
 
 pub struct LexemesSlice<'a> {
     tokens: &'a [Token],

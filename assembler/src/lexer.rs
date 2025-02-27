@@ -59,7 +59,7 @@ mod test {
         let mut test_spans = Vec::new();
 
         let tokens = lex.tokenize(&buffer).unwrap();
-        for (&token, span) in tokens.symbols() {
+        for (token, span) in tokens.symbols() {
             symbol_table.insert(
                 span.to_owned(),
                 Symbol::new(Default::default(), None, token.try_into().unwrap()),

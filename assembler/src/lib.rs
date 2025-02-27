@@ -34,7 +34,7 @@ impl Assembler {
     pub fn assemble<'source>(&mut self, source: &'source [u8]) -> Result<(), AssemblerError> {
         let tokens = Lexer::new().tokenize(source)?;
 
-        for (&token, span) in tokens.symbols() {
+        for (token, span) in tokens.symbols() {
             self.symbol_table.insert(
                 //safety: guaranteed to be safe because tokens derivate from the source
                 span.to_owned(),

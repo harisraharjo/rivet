@@ -1,5 +1,3 @@
-use crate::token::Token;
-
 /// Describes how a sequence of token trees is delimited.
 /// Cannot use `proc_macro::Delimiter` directly because this
 /// structure should implement some additional traits.

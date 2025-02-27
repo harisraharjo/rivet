@@ -1,4 +1,4 @@
-use std::{fmt::Display, ops::Range};
+use std::fmt::Display;
 
 use isa::instruction::{InstructionType, Mnemonic};
 use shared::EnumCount;
@@ -14,6 +14,7 @@ pub struct InstructionRule<'a> {
 impl<'a> InstructionRule<'a> {
     pub fn new(mnemonic: Mnemonic) -> InstructionRule<'a> {
         let ty = OperandRuleType::from(mnemonic);
+        println!("Ins type: {:?}", ty);
         InstructionRule {
             ty,
             sequence: Self::generate_sequence(ty),
@@ -101,6 +102,7 @@ pub enum OperandTokenType {
     Immediate,
     ParenL,
     ParenR,
+    // Symbol,
     Eol,
 }
 
@@ -116,7 +118,8 @@ impl Display for OperandTokenType {
                 OperandTokenType::Immediate => "decimal|hex|binary",
                 OperandTokenType::ParenL => "(",
                 OperandTokenType::ParenR => ")",
-                OperandTokenType::Eol => "EOL", //"\\n|\\r"
+                OperandTokenType::Eol => "eol", //"\\n|\\r"
+                                                // OperandTokenType::Symbol => "symbol",
             }
         )
     }
@@ -140,7 +143,7 @@ impl PartialEq<OperandTokenType> for Token {
     }
 }
 
-#[derive(PartialEq, Default, Clone, Copy)]
+#[derive(PartialEq, Default, Clone, Copy, Debug)]
 /// The operands rule
 pub enum OperandRuleType {
     ///Register, Register, Register
@@ -163,8 +166,8 @@ impl From<InstructionType> for OperandRuleType {
         match value {
             InstructionType::Arithmetic => Self::R3,
             InstructionType::IA => Self::R2I,
-            InstructionType::IL => Self::RIR,
             InstructionType::IJ => Self::R2I,
+            InstructionType::IL => Self::RIR,
             InstructionType::S => Self::RIR,
             InstructionType::B => Self::R2L,
             InstructionType::J => Self::RL,
@@ -187,8 +190,8 @@ impl From<Mnemonic> for OperandRuleType {
             Mnemonic::ShrA => Self::R3,
             Mnemonic::AddI => Self::R2I,
             Mnemonic::Lui => Self::RI,
-            Mnemonic::Lw => Self::R2L,
-            Mnemonic::Sw => Self::R2L,
+            Mnemonic::Lw => Self::RIR,
+            Mnemonic::Sw => Self::RIR,
             Mnemonic::Syscall => Self::R3,
         }
     }
