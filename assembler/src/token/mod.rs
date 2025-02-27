@@ -25,15 +25,13 @@ pub enum Token {
 
     #[regex(r#"\"(\\.|[^\\"])*\""#)] // https://www.lysator.liu.se/c/ANSI-C-grammar-l.html
     LiteralString,
-    #[regex(r#"\d+(?:\w+)?"#, on_literal_integer::<{LiteralIntegerType::Decimal as u8}>)]
+    #[regex(r#"-?\d+(?:\w+)?"#, on_literal_integer::<{LiteralIntegerType::Decimal as u8}>)]
     LiteralDecimal,
-    #[regex(r#"0x[0-9a-fA-F]+(?:\w+)?"#, on_literal_integer::<{LiteralIntegerType::Hex as u8}>)]
+    #[regex(r#"-?0x[0-9a-fA-F]+(?:\w+)?"#, on_literal_integer::<{LiteralIntegerType::Hex as u8}>)]
     LiteralHex,
     #[regex(r#"0b[01]+(?:\w+)?"#, on_literal_integer::<{LiteralIntegerType::Binary as u8}>)]
     LiteralBinary,
 
-    #[token(b"-")]
-    Negative,
     #[token(b"+")]
     Positive,
     #[token(b")")]
@@ -64,6 +62,20 @@ pub enum Token {
     // CommentBlockEnd,
 }
 
+impl Token {
+    pub const fn register() -> Token {
+        Token::Identifier(IdentifierType::Register(isa::Register::X0))
+    }
+
+    pub fn symbol() -> Token {
+        Token::Identifier(IdentifierType::Symbol)
+    }
+
+    // pub fn symbol() -> Token {
+    //     Token::Identifier(IdentifierType::Mn)
+    // }
+}
+
 impl TryFrom<Token> for symbol_table::SymbolType {
     type Error = LexingError;
 
@@ -77,14 +89,14 @@ impl TryFrom<Token> for symbol_table::SymbolType {
 }
 
 /// Structure of Arrays
-pub struct Tokens {
+pub struct Lexemes {
     tokens: Vec<Token>,
     spans: Vec<Range<usize>>,
 }
 
-impl Tokens {
-    pub fn new(capacity: usize) -> Tokens {
-        Tokens {
+impl Lexemes {
+    pub fn new(capacity: usize) -> Lexemes {
+        Lexemes {
             tokens: Vec::with_capacity(capacity),
             spans: Vec::with_capacity(capacity),
         }
@@ -92,10 +104,6 @@ impl Tokens {
 
     pub fn get(&self, index: usize) -> Option<&Token> {
         self.tokens.get(index)
-    }
-
-    pub fn get_unchecked(&self, index: usize) -> Token {
-        self.tokens[index]
     }
 
     pub fn push(&mut self, token: Token, span: Range<usize>) {
@@ -108,8 +116,13 @@ impl Tokens {
         self.spans.shrink_to_fit();
     }
 
+    #[inline(always)]
     pub fn buffer(&self) -> &[Token] {
         &self.tokens
+    }
+
+    pub fn spans(&self) -> &[Range<usize>] {
+        &self.spans
     }
 
     pub fn span(&self, index: usize) -> &Range<usize> {
@@ -138,5 +151,64 @@ impl Tokens {
         self.tokens.push(Token::Eof);
         self.spans.push(0..0);
         self.shrink_to_fit();
+    }
+
+    pub fn slice<I>(&self, index: I) -> LexemesSlice<'_>
+    where
+        I: Clone
+            + std::slice::SliceIndex<[Token], Output = [Token]>
+            + std::slice::SliceIndex<[Range<usize>], Output = [Range<usize>]>,
+    {
+        // let add = &self.tokens[index.clone()].iter().zip(&self.spans[index]);
+        LexemesSlice::new(&self.tokens[index.clone()], &self.spans[index])
+    }
+}
+
+pub struct LexemesSlice<'a> {
+    tokens: &'a [Token],
+    spans: &'a [Range<usize>],
+    index: usize,
+}
+
+impl<'a> LexemesSlice<'a> {
+    fn new(tokens: &'a [Token], spans: &'a [Range<usize>]) -> LexemesSlice<'a> {
+        LexemesSlice {
+            tokens,
+            spans,
+            index: 0,
+        }
+    }
+}
+
+impl<'a> Iterator for LexemesSlice<'a> {
+    type Item = Lexeme<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index >= self.tokens.len() {
+            return None;
+        }
+
+        let lexeme = Lexeme {
+            token: &self.tokens[self.index],
+            span: &self.spans[self.index],
+        };
+
+        self.index += 1;
+        Some(lexeme)
+    }
+}
+
+pub struct Lexeme<'a> {
+    token: &'a Token,
+    span: &'a Range<usize>,
+}
+
+impl Lexeme<'_> {
+    pub fn token(&self) -> &Token {
+        self.token
+    }
+
+    pub fn span(&self) -> &Range<usize> {
+        self.span
     }
 }

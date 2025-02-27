@@ -1,6 +1,6 @@
 pub mod directive;
-pub mod label;
 pub mod section;
+pub mod symbol;
 
 //? Note: The operands of assembly instructions may contain: Register, immediate, symbol name.
 

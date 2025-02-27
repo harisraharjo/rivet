@@ -1,7 +1,7 @@
 use isa::Instruction;
 
 use crate::{
-    cpu::{register::Registers, CPU},
+    cpu::{CPU, register::Registers},
     memory::{MemoryConfiguration, MemoryManager},
 };
 
@@ -104,11 +104,11 @@ impl VM {
     fn decode_execute(&mut self, instruction: Instruction) -> anyhow::Result<()> {
         // println!("Decoded Instruction: {:?}", instruction);
         match instruction {
-            Instruction::Li { dest, value } => {
-                self.registers().set(dest, value.into());
-                // let opo = 33u32.get_bit(3);
-                Ok(())
-            }
+            // Instruction::Li { dest, value } => {
+            //     self.registers().set(dest, value.into());
+            //     // let opo = 33u32.get_bit(3);
+            //     Ok(())
+            // }
             Instruction::Add { dest, src1, src2 } => {
                 let r0 = self.cpu.registers.get(src1);
                 let r1 = self.cpu.registers.get(src2);
@@ -152,18 +152,33 @@ impl VM {
                 self.registers().set(dest, r0 ^ r1);
                 Ok(())
             }
+            Instruction::Shl { dest, src, shift } => {
+                let base = self.cpu.registers.get(src);
+                self.registers().set(dest, base << shift);
+                Ok(())
+            }
+            Instruction::Shr { dest, src, shift } => {
+                let base = self.cpu.registers.get(src);
+                self.registers().set(dest, base >> shift);
+                Ok(())
+            }
+            Instruction::ShrA { dest, src, shift } => {
+                let base = self.cpu.registers.get(src) as i32;
+                self.registers().set(dest, (base >> shift) as u32);
+                Ok(())
+            }
             Instruction::AddI { dest, src, value } => {
-                println!("");
-                println!("Addi");
-                println!("Imm: {:?}", value);
+                // println!("");
+                // println!("Addi");
+                // println!("Imm: {:?}", value);
                 let v: u32 = value.into();
-                println!("Imm_u32: {v}");
-                println!("src reg: {:?}", src);
+                // println!("Imm_u32: {v}");
+                // println!("src reg: {:?}", src);
                 let src = self.cpu.registers.get(src);
-                println!("src val: {:?}", src);
+                // println!("src val: {:?}", src);
                 let result = src.wrapping_add(v);
-                println!("src wrapping_add imm_u32: {result}");
-                println!("Storing to dest reg: {:?}", dest);
+                // println!("src wrapping_add imm_u32: {result}");
+                // println!("Storing to dest reg: {:?}", dest);
                 self.cpu.registers.set(dest, result);
                 Ok(())
             }
@@ -207,21 +222,6 @@ impl VM {
                 self.memory.write(address, value)?;
                 Ok(())
             }
-            Instruction::Shl { dest, src, shift } => {
-                let base = self.cpu.registers.get(src);
-                self.registers().set(dest, base << shift);
-                Ok(())
-            }
-            Instruction::Shr { dest, src, shift } => {
-                let base = self.cpu.registers.get(src);
-                self.registers().set(dest, base >> shift);
-                Ok(())
-            }
-            Instruction::ShrA { dest, src, shift } => {
-                let base = self.cpu.registers.get(src) as i32;
-                self.registers().set(dest, (base >> shift) as u32);
-                Ok(())
-            }
             Instruction::Syscall { src1, src2, src3 } => {
                 self.halt = true;
                 Ok(())
@@ -232,11 +232,11 @@ impl VM {
 
 #[cfg(test)]
 mod test {
-    use isa::{
-        operand::{Immediate14, Immediate19},
-        Register,
-    };
     use Instruction::*;
+    use isa::{
+        Register,
+        operand::{Immediate14, Immediate19},
+    };
 
     use super::*;
 

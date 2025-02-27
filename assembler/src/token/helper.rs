@@ -55,7 +55,7 @@ pub(super) fn on_newline(lex: &mut logos::Lexer<Token>) {
     lex.extras.cell.column = 1;
 }
 
-#[derive(Debug, PartialEq, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum IdentifierType {
     Mnemonic(isa::instruction::Mnemonic),
     Register(isa::Register),
@@ -140,7 +140,10 @@ impl LiteralIntegerType {
 pub(super) fn on_literal_integer<const TYPE: u8>(
     lex: &mut logos::Lexer<Token>,
 ) -> Result<(), LexingError> {
-    let slice = lex.slice();
+    let mut slice = lex.slice();
+    if slice[0] == b"-"[0] {
+        slice = slice.get(1..).unwrap();
+    }
 
     //safety: we read the end of the slice so it's always safe
     let target = unsafe { slice.get_unchecked(LiteralIntegerType::skip_by(TYPE)..) };

@@ -1,3 +1,5 @@
+use crate::token::Token;
+
 /// Describes how a sequence of token trees is delimited.
 /// Cannot use `proc_macro::Delimiter` directly because this
 /// structure should implement some additional traits.
@@ -77,10 +79,13 @@ pub enum TokenType {
     Eof,
 }
 
-struct Token {
-    ty: TokenType,
-}
+// struct Immediate;
 
-impl Token {
-    // fn new(ty: TokenType) -> Token {}
-}
+// impl PartialEq<Immediate> for Token {
+//     fn eq(&self, _: &Immediate) -> bool {
+//         match self {
+//             Self::LiteralBinary | Self::LiteralDecimal | Self::LiteralHex => true,
+//             _ => false,
+//         }
+//     }
+// }

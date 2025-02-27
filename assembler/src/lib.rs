@@ -9,7 +9,7 @@ use lexer::Lexer;
 // use parser::Parser;
 use symbol_table::{Symbol, SymbolTable};
 use thiserror::Error;
-use token::{LexingError, Tokens};
+use token::LexingError;
 
 #[derive(Error, Debug)]
 pub enum AssemblerError {
@@ -28,7 +28,6 @@ impl Assembler {
         Assembler {
             symbol_table: SymbolTable::new(),
             // lexer: Lexer::new(),
-            // parser: Parser::new([].as_slice(), Tokens::new(0)),
         }
     }
 

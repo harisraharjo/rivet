@@ -4,83 +4,6 @@ use crate::{
 };
 use shared::{DecodeError, EnumCount, EnumVariants, VMInstruction};
 
-pub enum Rule {
-    R3,
-    R2I,
-    RIR,
-    RI,
-}
-
-pub enum InstructionType {
-    /// Register - Register
-    R, //r,r,r
-    // Immediate type
-    /// Immediate Arithmetic
-    IA, //r,r,i
-    /// Immediate Load
-    IL, //r,i(r)
-    /// Immediate Jump
-    IJ, //r,r,i
-    /// Store
-    S, //r,i(r)
-    /// Branch
-    B, //r,r,i (asmbler: i is a label)
-    //Jump
-    J, //r,i
-    /// Upper immediate
-    U, //r,i
-}
-
-impl InstructionType {
-    pub fn rule(&self) -> Rule {
-        Rule::R2I
-    }
-}
-
-impl From<u8> for InstructionType {
-    fn from(value: u8) -> Self {
-        // Safety: guaranteed to be safe because both have the same sizes (unit).
-        unsafe { std::mem::transmute::<u8, InstructionType>(value) }
-    }
-}
-
-impl From<InstructionType> for Rule {
-    fn from(value: InstructionType) -> Self {
-        match value {
-            InstructionType::R => Self::R3,
-            InstructionType::IA => Self::R2I,
-            InstructionType::IL => Self::RIR,
-            InstructionType::IJ => Self::R2I,
-            InstructionType::S => Self::RIR,
-            InstructionType::B => Self::R2I,
-            InstructionType::J => Self::RI,
-            InstructionType::U => Self::RI,
-        }
-    }
-}
-
-// impl From<&Instruction> for InstructionType {
-//     fn from(value: &Instruction) -> Self {
-//         match value {
-//             Instruction::Add { ..} => todo!(),
-//             Instruction::Sub { ..} => todo!(),
-//             Instruction::Mul { ..} => todo!(),
-//             Instruction::And { ..} => todo!(),
-//             Instruction::Or { ..} => todo!(),
-//             Instruction::Xor { ..} => todo!(),
-//             Instruction::Shl { ..} => todo!(),
-//             Instruction::Shr { ..} => todo!(),
-//             Instruction::ShrA { ..} => todo!(),
-//             Instruction::AddI { ..} => todo!(),
-//             Instruction::Lui {..} => todo!(),
-//             Instruction::Lw { ..} => todo!(),
-//             Instruction::Sw { ..} => todo!(),
-//             Instruction::Syscall { ..} => todo!(),
-//             Instruction::Li {..} => todo!(),
-//         }
-//     }
-// }
-
 #[derive(Debug, PartialEq, Eq, VMInstruction, EnumCount)]
 // TODO: if fields got re-arranged, make sure to re-arrange the bit arrangements
 pub enum Instruction {
@@ -186,10 +109,10 @@ pub enum Instruction {
         src2: Register,
         src3: Register,
     },
-    // Pseudo
-    /// Load Immediate
-    #[isa(0xff, 5, 19)]
-    Li { dest: Register, value: Immediate19 },
+    // // Pseudo
+    // /// Load Immediate
+    // #[isa(0xff, 5, 19)]
+    // Li { dest: Register, value: Immediate19 },
     // #[isa(0xff,5,5,5)]
     // Syscall { number: u32 },
     // #[isa(0x0,5,5,5)]
@@ -230,10 +153,36 @@ pub trait Codec {
     }
 }
 
+pub enum InstructionType {
+    /// Register - Register
+    Arithmetic, //r,r,r
+    /// Immediate Arithmetic
+    IA, //r,r,i
+    /// Branch
+    B, //r,r,i (asmbler: i is a label)
+    /// Immediate Jump
+    IJ, //r,r,i
+    /// Immediate Load
+    IL, //r,i(r)
+    /// Store
+    S, //r,i(r)
+    //Jump
+    J, //r,i
+    /// Upper immediate
+    U, //r,i
+}
+
+impl From<u8> for InstructionType {
+    fn from(value: u8) -> Self {
+        // Safety: guaranteed to be safe because both have the same sizes (unit).
+        unsafe { std::mem::transmute::<u8, InstructionType>(value) }
+    }
+}
+
 #[cfg(test)]
 mod test {
     use crate::{
-        instruction::{self, Instruction},
+        instruction::Instruction,
         operand::{Immediate14, Immediate19},
         register::Register,
     };
@@ -243,7 +192,7 @@ mod test {
     #[test]
     fn t_opcode() {
         // let d = instruction::Mnemonic
-        let op1 = u32::from(&Instruction::Li {
+        let op1 = u32::from(&Instruction::Lui {
             dest: Register::X0,
             value: Immediate19::new(150),
         }) as u8;
@@ -259,7 +208,7 @@ mod test {
                 src1: Register::X11,
                 src2: Register::X12,
             },
-            Instruction::Li {
+            Instruction::Lui {
                 dest: Register::X5,
                 value: Immediate19::new(150),
             },

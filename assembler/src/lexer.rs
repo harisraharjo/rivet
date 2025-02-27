@@ -1,6 +1,6 @@
 use logos::Logos;
 
-use crate::token::{LexingError, Token, Tokens};
+use crate::token::{Lexemes, LexingError, Token};
 
 pub struct Lexer;
 
@@ -9,9 +9,9 @@ impl Lexer {
         Lexer
     }
 
-    pub fn tokenize<'a>(&self, input: &'a [u8]) -> Result<Tokens, LexingError> {
+    pub fn tokenize<'a>(&self, input: &'a [u8]) -> Result<Lexemes, LexingError> {
         let mut lex = Token::lexer(input);
-        let mut tokens = Tokens::new(input.len());
+        let mut tokens = Lexemes::new(input.len());
 
         while let Some(sequence) = lex.next() {
             lex.extras.advance_row();

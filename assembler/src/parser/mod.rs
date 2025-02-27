@@ -1,76 +1,19 @@
-mod ast;
+pub mod grammar;
 mod token;
 
-use std::fmt::Debug;
+use grammar::{OperandTokenType, RuleError};
+use std::{fmt::Debug, ops::Range};
 use thiserror::Error;
 
-#[derive(Error, Debug)]
-pub enum ParseError {
-    #[error("Undefined symbol: {0}")]
-    UndefinedSymbol(String),
-    #[error("Duplicate label: {0}")]
-    DuplicateLabel(String),
-}
-
-use std::collections::HashMap;
-
-use crate::token::{IdentifierType, Token, Tokens};
-
-// Token type from lexer (assume this is provided)
-// #[derive(Debug, Clone, PartialEq)]
-// enum Token {
-//     Mnemonic(String),
-//     Register(u8),
-//     Immediate(i32),
-//     Label(String),
-//     Directive(String),
-//     Symbol(String),
-//     Comma,
-//     Newline,
-//     EOF,
+// #[derive(Error, Debug)]
+// pub enum ParseError {
+//     #[error("Undefined symbol: {0}")]
+//     UndefinedSymbol(String),
+//     #[error("Duplicate label: {0}")]
+//     DuplicateLabel(String),
 // }
 
-// impl Token {
-//     fn to_string(&self) -> String {
-//         match self {
-//             Token::Mnemonic(s) => s.clone(),
-//             Token::Register(r) => format!("x{}", r),
-//             Token::Immediate(i) => i.to_string(),
-//             Token::Label(l) => l.clone(),
-//             Token::Directive(d) => d.clone(),
-//             Token::Symbol(s) => s.clone(),
-//             Token::Comma => ",".to_string(),
-//             Token::Eol => "\n".to_string(),
-//             Token::EOF => "".to_string(),
-//         }
-//     }
-// }
-
-// Flat AST representation
-#[derive(Debug)]
-struct Ast {
-    nodes: Vec<AstNode>,
-    symbols: HashMap<String, SymbolInfo>,
-}
-
-#[derive(Debug)]
-enum AstNode {
-    Instruction {
-        mnemonic: String,
-        operands: Vec<Operand>,
-    },
-    LabelDefinition {
-        name: String,
-        position: usize,
-    },
-    Directive {
-        name: String,
-        args: Vec<String>,
-    },
-    Data {
-        value: DataValue,
-    },
-}
+use crate::token::{IdentifierType, Lexemes, LexemesSlice, Token};
 
 #[derive(Debug)]
 enum Operand {
@@ -82,7 +25,7 @@ enum Operand {
 #[derive(Debug)]
 enum DataValue {
     Word(u32),
-    // Add more data types as needed
+    // Add more current_source types as needed
 }
 
 #[derive(Debug)]
@@ -91,17 +34,29 @@ struct SymbolInfo {
     is_global: bool,
 }
 
+#[derive(Error, Debug)]
+pub enum ParserError {
+    #[error("Invalid grammar. expected {expected} found `{found}`")]
+    InvalidGrammar {
+        #[source]
+        expected: RuleError,
+        found: String,
+    },
+    #[error("Syntax Error. expected LABEL|DIRECTIVE|MNEMONIC")]
+    SyntaxError,
+}
+
 // Parser with grammar checking
 pub struct Parser<'a> {
-    tokens: Tokens,
+    lexemes: Lexemes,
     current: usize,
     source: &'a [u8],
 }
 
 impl<'a> Parser<'a> {
-    pub fn new(source: &'a [u8], tokens: Tokens) -> Self {
+    pub fn new(source: &'a [u8], lexemes: Lexemes) -> Self {
         Parser {
-            tokens,
+            lexemes,
             current: 0,
             source,
         }
@@ -112,44 +67,87 @@ impl<'a> Parser<'a> {
     }
 
     fn peek(&self) -> Option<&Token> {
-        self.tokens.get(self.current + 1)
+        self.lexemes.get(self.current + 1)
     }
 
-    fn fetch(&self) -> Token {
-        self.tokens.get_unchecked(self.current)
+    pub fn remainder(&self) -> &[Token] {
+        // safety: Read until the end. guaranteed to be safe
+        &self.lexemes.buffer()[self.current..]
     }
 
-    fn data(&self) -> &[u8] {
-        let span = self.tokens.span(self.current).to_owned();
+    /// peek the current line
+    fn peek_line(&self) -> LexemesSlice<'_> {
+        //safety: unwrap safe because guaranteed (Token::Eol || Token::Eof) is always present
+        let pos = self
+            .remainder()
+            .iter()
+            .position(|&t| t == Token::Eol || t == Token::Eof)
+            .unwrap();
+        self.lexemes.slice(self.current..self.current + pos + 1)
+    }
+
+    fn eat(&mut self) -> Token {
+        let token = self.lexemes.buffer()[self.current];
+        self.advance();
+        token
+    }
+
+    fn advance_line(&mut self) {
+        let pos = self
+            .remainder()
+            .iter()
+            .position(|&t| t == Token::Eol || t == Token::Eof)
+            .unwrap();
+        // println!("current i: {}", self.current);
+        // println!("Eol | Eof: {}", pos);
+
+        self.advance_by(pos);
+    }
+
+    fn advance_by(&mut self, n: usize) {
+        self.current += n;
+    }
+
+    fn advance(&mut self) {
+        self.advance_by(1);
+    }
+
+    #[inline(always)]
+    fn get_span(&self, index: usize) -> &Range<usize> {
+        self.lexemes.span(index)
+    }
+
+    #[inline(always)]
+    fn get_source(&self, span: Range<usize>) -> &[u8] {
+        &self.source[span]
+    }
+
+    fn current_span(&self) -> &Range<usize> {
+        self.get_span(self.current)
+    }
+
+    fn current_source(&self) -> &[u8] {
+        let span = self.current_span().to_owned();
         // safety: safe because the span is guaranteed to be inside the bounds
-        unsafe { self.source.get_unchecked(span) }
+        self.get_source(span)
     }
 
-    fn advance(&mut self) -> Token {
-        // let token = self.peek().unwrap().clone();
-        self.current += 1;
-        self.fetch()
-        // token
-    }
-
-    pub fn parse(&mut self) -> Result<Ast, String> {
-        let mut ast = Ast {
-            nodes: Vec::with_capacity(1024),
-            symbols: HashMap::new(),
-        };
-
-        while self.current <= self.tokens.len() {
-            self.parse_line(&mut ast)?;
+    pub fn parse(&mut self) -> Result<(), ParserError> {
+        while self.current <= self.lexemes.len() {
+            self.walk()?;
         }
 
-        Ok(ast)
+        Ok(())
     }
 
-    fn parse_line(&mut self, ast: &mut Ast) -> Result<(), String> {
-        match self.fetch() {
+    fn walk(&mut self) -> Result<(), ParserError> {
+        println!("Parsing...");
+        match self.eat() {
             Token::Directive(dir_type) => {
+                println!("Directive : {:?}", dir_type);
+                self.advance_line();
                 // self.advance(); // Consume directive
-                let name = self.data();
+                // let name = self.current_source();
                 // let mut args = Vec::new();
 
                 // while let Some(&token) = self.peek() {
@@ -166,7 +164,7 @@ impl<'a> Parser<'a> {
                 //         }
                 //     }
                 // }
-                self.expect(Token::Eol, "Expected newline after directive")?;
+                // self.expect(Token::Eol, "Expected newline after directive")?;
 
                 // match name.as_str() {
                 //     ".globl" => {
@@ -195,11 +193,17 @@ impl<'a> Parser<'a> {
                 //     }
                 // }
             }
+            Token::Identifier(IdentifierType::Symbol) => {
+                self.advance_line();
+            }
             Token::Label => {
-                let name = self.data();
+                println!("Label");
+                self.advance_line();
+
+                // let name = self.current_source();
                 // self.advance(); // Consume label
-                self.expect(Token::Eol, "Expected newline after label")?;
-                let position = ast.nodes.len();
+                // self.expect(Token::Eol, "Expected newline after label")?;
+                // let position = ast.nodes.len();
                 // ast.symbols.insert(
                 //     name.clone(),
                 //     SymbolInfo {
@@ -209,139 +213,151 @@ impl<'a> Parser<'a> {
                 // );
                 // ast.nodes.push(AstNode::LabelDefinition { name, position });
             }
-            Token::Identifier(IdentifierType::Mnemonic(i)) => {
-                let mnemonic = self.data();
-                // TODO: get the rule -> match it and get the span -> create the instruction
-                let ins_type = isa::instruction::InstructionType::from(i as u8);
-                let rule = ins_type.rule();
-                // while self.peek() == rule.next() {
+            Token::Identifier(IdentifierType::Mnemonic(mnemonic_type)) => {
+                println!("Instruction: {:?}", mnemonic_type);
+                let mut lexemes = self.peek_line().into_iter();
+                let rule = grammar::InstructionRule::new(mnemonic_type);
+                let rule_iter = rule.iter();
 
+                if let Some(mismatch) = rule_iter
+                    .zip(&mut lexemes)
+                    .find(|(ty, lex)| lex.token().to_owned() != **ty)
+                {
+                    let (ty, lexeme) = mismatch;
+
+                    return Err(ParserError::InvalidGrammar {
+                        expected: RuleError::InvalidInstruction(*ty).into(),
+                        found: String::from_utf8(
+                            self.get_source(lexeme.span().to_owned()).to_vec(),
+                        )
+                        .unwrap(),
+                    });
+                };
+
+                self.advance_by(rule.len() - 1);
+                self.expect(
+                    Token::Eol,
+                    ParserError::InvalidGrammar {
+                        expected: RuleError::InvalidInstruction(OperandTokenType::Eol).into(),
+                        found: String::from_utf8(
+                            self.get_source(self.get_span(self.current + 1).to_owned())
+                                .to_vec(),
+                        )
+                        .unwrap(),
+                    },
+                )?;
+
+                // if let Some(remainder) = &lexemes.next() {
+                //     ;
                 // }
 
-                // self.advance(); // Consume mnemonic
-                // let operands = self.parse_operands(&mnemonic)?;
-                // self.check_operand_count(&mnemonic, &operands)?;
+                // self.grammar
+                //     .instruction()
+                //     .parse(mnemonic_type, lexemes)
+                //     .map_err(|err| {
+                //         let span = err.span().to_owned();
+                //         let found = String::from_utf8(self.get_source(span).to_vec()).unwrap();
+                //         ParserError::InvalidGrammar {
+                //             expected: err.into(),
+                //             found,
+                //         }
+                //     })?;
+
                 // ast.nodes.push(AstNode::Instruction { mnemonic, operands });
-                self.expect(Token::Eol, "Expected newline after instruction")?;
             }
             Token::Eol => {
                 // self.advance(); // Skip empty lines
             }
-            t @ _ => return Err(format!("Unexpected token: {:?}", t)),
+            Token::Eof => {
+                // finishing
+            }
+            t @ _ => {
+                println!("Unknown Token: {:?}", t);
+                return Err(ParserError::SyntaxError);
+            }
         }
         Ok(())
     }
 
-    // fn parse_operands(&mut self, mnemonic: &str) -> Result<Vec<Operand>, String> {
-    //     let mut operands = Vec::new();
-
-    //     while self.peek() != Token::Eol && self.peek() != Token::EOF {
-    //         match self.advance() {
-    //             Token::Identifier(IdentifierType::Register(r)) => {
-    //                 operands.push(Operand::Register(r))
-    //             }
-    //             Token::Immediate(i) => operands.push(Operand::Immediate(i)),
-    //             Token::Symbol(s) => operands.push(Operand::LabelRef(s)),
-    //             Token::Comma => {
-    //                 if operands.is_empty() {
-    //                     return Err("Unexpected comma before first operand".to_string());
-    //                 }
-    //                 continue;
-    //             }
-    //             t => return Err(format!("Invalid operand for {}: {:?}", mnemonic, t)),
-    //         }
-
-    //         // Expect a comma after each operand except the last one
-    //         if self.peek() != Token::Eol && self.peek() != Token::EOF {
-    //             self.expect(Token::Comma, "Expected comma between operands")?;
-    //         }
-    //     }
-
-    //     Ok(operands)
-    // }
-
-    // fn check_operand_count(&self, mnemonic: &str, operands: &[Operand]) -> Result<(), String> {
-    //     match mnemonic {
-    //         "add" | "sub" => {
-    //             if operands.len() != 3 {
-    //                 return Err(format!(
-    //                     "{} expects 3 operands, found {}",
-    //                     mnemonic,
-    //                     operands.len()
-    //                 ));
-    //             }
-    //             if !matches!(operands[0], Operand::Register(_))
-    //                 || !matches!(operands[1], Operand::Register(_))
-    //                 || !matches!(operands[2], Operand::Register(_))
-    //             {
-    //                 return Err(format!("{} expects register operands", mnemonic));
-    //             }
-    //         }
-    //         "addi" => {
-    //             if operands.len() != 3 {
-    //                 return Err(format!("addi expects 3 operands, found {}", operands.len()));
-    //             }
-    //             if !matches!(operands[0], Operand::Register(_))
-    //                 || !matches!(operands[1], Operand::Register(_))
-    //                 || !matches!(operands[2], Operand::Immediate(_))
-    //             {
-    //                 return Err("addi expects rd, rs1, immediate".to_string());
-    //             }
-    //         }
-    //         // Add more instruction checks here
-    //         _ => {} // Unknown mnemonics can be handled later in codegen
-    //     }
-    //     Ok(())
-    // }
-
-    fn expect(&mut self, expected: Token, msg: &str) -> Result<(), String> {
-        if self.peek() == Some(&expected) {
+    fn expect(&mut self, expected: Token, err: ParserError) -> Result<(), ParserError> {
+        let next = self.peek();
+        println!("next: {:?}", next);
+        if next == Some(&expected) {
             self.advance();
             Ok(())
         } else {
-            Err(format!("{}: found {:?}", msg, self.peek()))
+            Err(err)
         }
     }
 }
 
 #[cfg(test)]
 mod test_super {
-    // use super::*;
+    use std::{fs::File, io::Read};
 
-    // #[test]
-    // fn t() -> Result<(), Box<dyn std::error::Error>> {
-    // let tokens = vec![
-    //     Token::Directive(".text".to_string()),
-    //     Token::Eol,
-    //     Token::Mnemonic("add".to_string()),
-    //     Token::Register(1),
-    //     Token::Comma,
-    //     Token::Register(2),
-    //     Token::Comma,
-    //     Token::Register(3),
-    //     Token::Eol,
-    //     Token::Label("loop".to_string()),
-    //     Token::Eol,
-    //     Token::Mnemonic("addi".to_string()),
-    //     Token::Register(4),
-    //     Token::Comma,
-    //     Token::Register(0),
-    //     Token::Comma,
-    //     Token::Immediate(10),
-    //     Token::Eol,
-    //     // Invalid example (missing comma)
-    //     Token::Mnemonic("add".to_string()),
-    //     Token::Register(1),
-    //     Token::Register(2),
-    //     Token::Eol,
-    //     Token::EOF,
-    // ];
+    use crate::lexer::Lexer;
 
-    // let mut parser = Parser::new(tokens);
-    // match parser.parse() {
-    //     Ok(ast) => println!("AST: {:?}", ast),
-    //     Err(e) => eprintln!("Parse error: {}", e),
-    // }
-    // Ok(())
-    // }
+    use super::*;
+
+    #[test]
+    fn t_parser() -> Result<(), Box<dyn std::error::Error>> {
+        // let lexemes = vec![
+        //     Token::Directive(".text".to_string()),
+        //     Token::Eol,
+        //     Token::Mnemonic("add".to_string()),
+        //     Token::Register(1),
+        //     Token::Comma,
+        //     Token::Register(2),
+        //     Token::Comma,
+        //     Token::Register(3),
+        //     Token::Eol,
+        //     Token::Label("loop".to_string()),
+        //     Token::Eol,
+        //     Token::Mnemonic("addi".to_string()),
+        //     Token::Register(4),
+        //     Token::Comma,
+        //     Token::Register(0),
+        //     Token::Comma,
+        //     Token::Immediate(10),
+        //     Token::Eol,
+        //     // Invalid example (missing comma)
+        //     Token::Mnemonic("add".to_string()),
+        //     Token::Register(1),
+        //     Token::Register(2),
+        //     Token::Eol,
+        //     Token::EOF,
+        // ];
+
+        let lex = Lexer::new();
+
+        let source = match File::open("test.asm") {
+            Ok(mut file) => {
+                let mut buffer = Vec::new();
+                file.read_to_end(&mut buffer).unwrap();
+                Ok(buffer)
+            }
+            Err(e) => {
+                println!("File Error: {:?}", e);
+                Err(e)
+            }
+        }
+        .unwrap();
+
+        // let mut symbol_table = SymbolTable::new();
+
+        let lexemes = lex.tokenize(&source).unwrap();
+        // for (&token, span) in lexemes.symbols() {
+        //     symbol_table.insert(
+        //         span.to_owned(),
+        //         Symbol::new(Default::default(), None, token.try_into().unwrap()),
+        //     );
+        // }
+
+        let mut parser = Parser::new(source.as_ref(), lexemes);
+        match parser.parse() {
+            Ok(ast) => println!("AST: {:?}", ast),
+            Err(e) => eprintln!("Parse error: {}", e),
+        }
+        Ok(())
+    }
 }
