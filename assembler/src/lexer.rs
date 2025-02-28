@@ -18,11 +18,11 @@ impl Lexer {
             let token = sequence?;
             let span = lex.span();
 
-            println!(
-                "Lexeme: {:?} as {:?}",
-                String::from_utf8(unsafe { input.get_unchecked(span.clone()).to_vec() }).unwrap(),
-                token
-            );
+            // println!(
+            //     "Lexeme: {:?} as {:?}",
+            //     String::from_utf8(unsafe { input.get_unchecked(span.clone()).to_vec() }).unwrap(),
+            //     token
+            // );
             tokens.push(token, span);
         }
 

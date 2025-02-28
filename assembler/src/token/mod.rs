@@ -1,7 +1,7 @@
 mod helper;
 
 use logos::Logos;
-use std::ops::{Index, Range};
+use std::ops::Range;
 
 pub use helper::{IdentifierType, LexingError};
 use helper::{LiteralIntegerType, State, on_directive, on_ident, on_literal_integer, on_newline};
@@ -121,7 +121,7 @@ impl Lexemes {
     }
 
     #[inline(always)]
-    pub fn buffer(&self) -> &[Token] {
+    pub fn tokens(&self) -> &[Token] {
         &self.tokens
     }
 
@@ -156,24 +156,10 @@ impl Lexemes {
         }
     }
 
-    pub fn slice<I>(&self, index: I) -> LexemesSlice<'_>
-    where
-        I: Clone
-            + std::slice::SliceIndex<[Token], Output = [Token]>
-            + std::slice::SliceIndex<[Range<usize>], Output = [Range<usize>]>,
-    {
-        // let add = &self.tokens[index.clone()].iter().zip(&self.spans[index]);
+    pub fn slice(&self, index: Range<usize>) -> LexemesSlice<'_> {
         LexemesSlice::new(&self.tokens[index.clone()], &self.spans[index])
     }
 }
-
-// impl Index<usize> for Lexemes {
-//     type Output = (Token, Range<usize>);
-
-//     fn index(&self, index: usize) -> &Self::Output {
-//         (self.tokens[index], self.spans[index])
-//     }
-// }
 
 pub struct LexemesSlice<'a> {
     tokens: &'a [Token],
@@ -188,6 +174,18 @@ impl<'a> LexemesSlice<'a> {
             spans,
             index: 0,
         }
+    }
+
+    /// find a token within a slice. short-circuiting
+    pub fn find(&self, predicate: fn(&Token) -> bool) -> Option<Lexeme<'a>> {
+        self.tokens
+            .iter()
+            .position(predicate)
+            .and_then(|pos| Some(Lexeme::new(&self.tokens[pos], &self.spans[pos])))
+    }
+
+    pub fn len(&self) -> usize {
+        self.tokens.len()
     }
 }
 
@@ -207,14 +205,37 @@ impl<'a> Iterator for LexemesSlice<'a> {
         self.index += 1;
         Some(lexeme)
     }
+
+    // Override size_hint for clarity (optional, since default works)
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let remaining = self.tokens.len() - self.index;
+        (remaining, Some(remaining))
+    }
 }
 
+impl ExactSizeIterator for LexemesSlice<'_> {
+    fn len(&self) -> usize {
+        self.tokens.len() - self.index
+        // // // Note: This assertion is overly defensive, but it checks the invariant
+        // // // guaranteed by the trait. If this trait were rust-internal,
+        // // // we could use debug_assert!; assert_eq! will check all Rust user
+        // // // implementations too.
+        // // std::assert_eq!(upper, Some(lower));
+        // lower
+    }
+}
+
+#[derive(Debug)]
 pub struct Lexeme<'a> {
     token: &'a Token,
     span: &'a Range<usize>,
 }
 
-impl Lexeme<'_> {
+impl<'a> Lexeme<'a> {
+    fn new(token: &'a Token, span: &'a Range<usize>) -> Self {
+        Self { token, span }
+    }
+
     pub fn token(&self) -> &Token {
         self.token
     }

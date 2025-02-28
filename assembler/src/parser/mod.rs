@@ -15,41 +15,70 @@ use thiserror::Error;
 
 use crate::token::{IdentifierType, Lexemes, LexemesSlice, Token};
 
-#[derive(Debug)]
-enum Operand {
-    Register(u8),
-    Immediate(i32),
-    LabelRef(String),
+// #[derive(Debug)]
+// enum DataValue {
+//     Word(u32),
+//     // Add more current_source types as needed
+// }
+
+// #[derive(Debug)]
+// struct SymbolInfo {
+//     position: usize,
+//     is_global: bool,
+// }
+#[derive(Debug, Error)]
+enum Single {
+    #[error("label")]
+    Label,
+    #[error("directive")]
+    Directive,
 }
 
-#[derive(Debug)]
-enum DataValue {
-    Word(u32),
-    // Add more current_source types as needed
-}
+// #[derive(Default, Debug, Clone, PartialEq, Error)]
+// pub enum LexingError {
+//     #[error("Invalid Integer at {0}")]
+//     InvalidInteger(usize),
+//     #[error("Unknown directive {0} at {1}")]
+//     UnknownDirective(String, usize),
+//     #[error("Invalid suffix {0} at {1}")]
+//     InvalidSuffix(String, usize),
+//     #[error("Invalid Ascii Character at {0}")]
+//     NonAsciiCharacter(usize),
+//     #[default]
+//     #[error("Unknown Syntax")]
+//     UnknownSyntax,
+// }
 
-#[derive(Debug)]
-struct SymbolInfo {
-    position: usize,
-    is_global: bool,
+fn on_invalid_grammar<'a>(found: &Option<String>) -> String {
+    if let Some(v) = found {
+        format!("found {v}")
+    } else {
+        Default::default()
+    }
 }
 
 #[derive(Error, Debug)]
 pub enum ParserError {
-    #[error("Invalid grammar. expected {expected} found `{found}`")]
+    #[error("Syntax Error. expected LABEL|DIRECTIVE|MNEMONIC")]
+    SyntaxError,
+    #[error("Invalid grammar. expected {expected} {}", on_invalid_grammar(.found))]
     InvalidGrammar {
         #[source]
         expected: RuleError,
-        found: String,
+        found: Option<String>,
     },
-    #[error("Syntax Error. expected LABEL|DIRECTIVE|MNEMONIC")]
-    SyntaxError,
+    #[error("Invalid line. Multiple {0}s encountered. Only 1 {0} is allowed")]
+    InvalidLine(Single),
+    #[error("Duplicate label {0}")]
+    DuplicateLabel(String),
 }
+
+// struct Line
 
 // Parser with grammar checking
 pub struct Parser<'a> {
     lexemes: Lexemes,
-    current: usize,
+    index: usize,
     source: &'a [u8],
 }
 
@@ -57,7 +86,7 @@ impl<'a> Parser<'a> {
     pub fn new(source: &'a [u8], lexemes: Lexemes) -> Self {
         Parser {
             lexemes,
-            current: 0,
+            index: 0,
             source,
         }
     }
@@ -67,25 +96,24 @@ impl<'a> Parser<'a> {
     }
 
     fn peek(&self) -> Option<&Token> {
-        self.lexemes.get_token(self.current + 1)
+        self.lexemes.get_token(self.index + 1)
     }
 
     pub fn remainder(&self) -> &[Token] {
         // safety: Read until the end. guaranteed to be safe
-        &self.lexemes.buffer()[self.current..]
+        &self.lexemes.tokens()[self.index..]
     }
 
     /// peek the current line
     fn peek_line(&self) -> LexemesSlice<'_> {
-        //safety: unwrap safe because guaranteed (Token::Eol || Token::Eof) is always present
+        //safety: unwrap is safe because guaranteed (Token::Eol || Token::Eof) is always present
         let pos = self.nearest_break().unwrap();
         // upper bound is the index of Eol||Eof because we don't take them in
-        self.lexemes.slice(self.current..self.current + pos)
+        self.lexemes.slice(self.index..self.index + pos)
     }
 
     fn eat(&mut self) -> Option<Token> {
-        // Token::Eof
-        let token = self.lexemes.buffer()[self.current];
+        let token = self.lexemes.tokens()[self.index];
 
         if token == Token::Eof {
             return None;
@@ -106,8 +134,9 @@ impl<'a> Parser<'a> {
         self.advance_by(pos);
     }
 
+    #[inline(always)]
     fn advance_by(&mut self, n: usize) {
-        self.current += n;
+        self.index += n;
     }
 
     fn advance(&mut self) {
@@ -125,7 +154,7 @@ impl<'a> Parser<'a> {
     }
 
     fn current_span(&self) -> &Range<usize> {
-        self.get_span(self.current)
+        self.get_span(self.index)
     }
 
     fn current_source(&self) -> &[u8] {
@@ -134,12 +163,12 @@ impl<'a> Parser<'a> {
         self.get_source(span)
     }
 
-    pub fn parse(&mut self) -> Result<bool, ParserError> {
+    pub fn parse(&mut self) -> Result<(), ParserError> {
         while let Some(token) = self.eat() {
             self.walk(token)?;
         }
 
-        Ok(true)
+        Ok(())
     }
 
     fn walk(&mut self, token: Token) -> Result<(), ParserError> {
@@ -200,6 +229,13 @@ impl<'a> Parser<'a> {
             }
             Token::Label => {
                 println!("Label");
+                let lexemes = self.peek_line();
+                if let Some(lex) = lexemes.find(|token| *token == Token::Label) {
+                    return Err(ParserError::InvalidLine(Single::Label));
+                }
+
+                // Record the label in the symbol table with the current position
+                // self.symbol_table.insert(label.clone(), self.position);
                 self.advance_line();
 
                 // let name = self.current_source();
@@ -213,38 +249,43 @@ impl<'a> Parser<'a> {
                 //         is_global: false,
                 //     },
                 // );
-                // ast.nodes.push(AstNode::LabelDefinition { name, position });
             }
             Token::Identifier(IdentifierType::Mnemonic(mnemonic_type)) => {
                 let rule = grammar::InstructionRule::new(mnemonic_type);
+                let mut rule_iter = rule.iter();
                 let mut lexemes = self.peek_line();
-                let rule_iter = rule.iter();
+                let mut zipped = rule_iter.by_ref().zip(&mut lexemes);
 
-                if let Some(mismatch) = rule_iter
-                    .zip(&mut lexemes)
-                    .find(|(ty, lex)| lex.token().to_owned() != **ty)
-                {
+                if let Some(mismatch) = zipped.find(|(ty, lex)| lex.token().to_owned() != **ty) {
                     let (ty, lexeme) = mismatch;
 
                     return Err(ParserError::InvalidGrammar {
-                        expected: RuleError::InvalidInstruction(*ty).into(),
-                        found: String::from_utf8(
-                            self.get_source(lexeme.span().to_owned()).to_vec(),
-                        )
-                        .unwrap(),
+                        expected: RuleError::InvalidInstruction(*ty),
+                        found: Some(
+                            String::from_utf8(self.get_source(lexeme.span().to_owned()).to_vec())
+                                .unwrap(),
+                        ),
                     });
                 };
 
-                if let Some(remainder) = &lexemes.next() {
-                    let span = remainder.span();
-                    println!("leftover: {:?}", remainder.token());
-                    return Err(ParserError::InvalidGrammar {
-                        expected: RuleError::InvalidInstruction(OperandTokenType::Eol).into(),
-                        found: String::from_utf8(self.get_source(span.to_owned()).to_vec())
-                            .unwrap(),
-                    });
-                }
-                self.advance_by(rule.len());
+                let residue = rule.len().saturating_sub(lexemes.len());
+                match (residue > 0, &lexemes.next()) {
+                    (true, None) => Err(ParserError::InvalidGrammar {
+                        expected: RuleError::InvalidInstruction(rule.get(rule.len() - residue)),
+                        found: None,
+                    }),
+                    (false, Some(lex)) => Err(ParserError::InvalidGrammar {
+                        expected: RuleError::InvalidInstruction(OperandTokenType::Eol),
+                        found: Some(
+                            String::from_utf8(self.get_source(lex.span().to_owned()).to_vec())
+                                .unwrap(),
+                        ),
+                    }),
+                    _ => {
+                        self.advance_by(rule.len());
+                        Ok(())
+                    }
+                }?;
 
                 // ast.nodes.push(AstNode::Instruction { mnemonic, operands });
             }
@@ -273,7 +314,7 @@ impl<'a> Parser<'a> {
 }
 
 #[cfg(test)]
-mod test_super {
+mod test {
     use std::{fs::File, io::Read};
 
     use crate::lexer::Lexer;
@@ -281,34 +322,7 @@ mod test_super {
     use super::*;
 
     #[test]
-    fn t_parser() -> Result<(), Box<dyn std::error::Error>> {
-        // let lexemes = vec![
-        //     Token::Directive(".text".to_string()),
-        //     Token::Eol,
-        //     Token::Mnemonic("add".to_string()),
-        //     Token::Register(1),
-        //     Token::Comma,
-        //     Token::Register(2),
-        //     Token::Comma,
-        //     Token::Register(3),
-        //     Token::Eol,
-        //     Token::Label("loop".to_string()),
-        //     Token::Eol,
-        //     Token::Mnemonic("addi".to_string()),
-        //     Token::Register(4),
-        //     Token::Comma,
-        //     Token::Register(0),
-        //     Token::Comma,
-        //     Token::Immediate(10),
-        //     Token::Eol,
-        //     // Invalid example (missing comma)
-        //     Token::Mnemonic("add".to_string()),
-        //     Token::Register(1),
-        //     Token::Register(2),
-        //     Token::Eol,
-        //     Token::EOF,
-        // ];
-
+    fn t_parser() {
         let lex = Lexer::new();
 
         let source = match File::open("test.asm") {
@@ -335,11 +349,9 @@ mod test_super {
         // }
 
         let mut parser = Parser::new(source.as_ref(), lexemes);
-        assert!(parser.parse()?);
-        // match parser.parse() {
-        //     Ok(res) => println!("res: {:?}", res),
-        //     Err(e) => eprintln!("Parse error: {}", e),
-        // }
-        Ok(())
+        assert!(match parser.parse() {
+            Ok(_) => true,
+            Err(e) => panic!("{e}"),
+        })
     }
 }

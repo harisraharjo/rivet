@@ -76,14 +76,3 @@ pub enum TokenType {
     /// End Of File
     Eof,
 }
-
-// struct Immediate;
-
-// impl PartialEq<Immediate> for Token {
-//     fn eq(&self, _: &Immediate) -> bool {
-//         match self {
-//             Self::LiteralBinary | Self::LiteralDecimal | Self::LiteralHex => true,
-//             _ => false,
-//         }
-//     }
-// }

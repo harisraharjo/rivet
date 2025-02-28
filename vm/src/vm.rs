@@ -168,17 +168,10 @@ impl VM {
                 Ok(())
             }
             Instruction::AddI { dest, src, value } => {
-                // println!("");
-                // println!("Addi");
-                // println!("Imm: {:?}", value);
                 let v: u32 = value.into();
-                // println!("Imm_u32: {v}");
-                // println!("src reg: {:?}", src);
+
                 let src = self.cpu.registers.get(src);
-                // println!("src val: {:?}", src);
                 let result = src.wrapping_add(v);
-                // println!("src wrapping_add imm_u32: {result}");
-                // println!("Storing to dest reg: {:?}", dest);
                 self.cpu.registers.set(dest, result);
                 Ok(())
             }

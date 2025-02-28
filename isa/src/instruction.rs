@@ -5,7 +5,7 @@ use crate::{
 use shared::{DecodeError, EnumCount, EnumVariants, VMInstruction};
 
 #[derive(Debug, PartialEq, Eq, VMInstruction, EnumCount)]
-// TODO: if fields got re-arranged, make sure to re-arrange the bit arrangements
+// TODO: if fields got re-arranged, make sure to also re-arrange the bits e.g `(..5, 5, 5)`
 pub enum Instruction {
     // ---Binary Operators---
     #[isa(0x1, 5, 5, 5)]
@@ -109,33 +109,11 @@ pub enum Instruction {
         src2: Register,
         src3: Register,
     },
-    // // Pseudo
-    // /// Load Immediate
-    // #[isa(0xff, 5, 19)]
-    // Li { dest: Register, value: Immediate19 },
     // #[isa(0xff,5,5,5)]
     // Syscall { number: u32 },
     // #[isa(0x0,5,5,5)]
     // Halt,
 }
-
-// impl Instruction {
-// pub fn mnemonics(&self) -> i32 {
-//     T::variants()
-// }
-// }
-
-// pub struct ParseInstructionError(usize);
-// impl From<usize> for Instruction {
-//     fn from(value: usize) -> Self {
-//         Self::VARIANT_COUNT
-//     }
-//     // type Error = ParseInstructionError;
-
-//     // fn try_from(value: usize) -> Result<Self, Self::Error> {
-
-//     // }
-// }
 
 pub trait Codec {
     fn decode(src: u32, bit_accumulation: u32, bit_mask: u32) -> Self

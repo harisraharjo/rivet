@@ -14,18 +14,21 @@ pub struct InstructionRule<'a> {
 impl<'a> InstructionRule<'a> {
     pub fn new(mnemonic: Mnemonic) -> InstructionRule<'a> {
         let ty = OperandRuleType::from(mnemonic);
-        println!("Ins type: {:?}", ty);
         InstructionRule {
             ty,
             sequence: Self::generate_sequence(ty),
         }
     }
 
+    pub fn get(&self, index: usize) -> OperandTokenType {
+        self.sequence[index]
+    }
+
     pub fn len(&self) -> usize {
         self.sequence.len()
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = &OperandTokenType> + use<'_> {
+    pub fn iter(&self) -> impl Iterator<Item = &OperandTokenType> + ExactSizeIterator + use<'_> {
         self.sequence.iter()
     }
 
@@ -86,14 +89,6 @@ pub enum RuleError {
     InvalidInstruction(OperandTokenType),
 }
 
-// impl RuleError {
-//     pub fn span(&self) -> &Range<usize> {
-//         match self {
-//             RuleError::InvalidInstruction(range, ..) => &range,
-//         }
-//     }
-// }
-
 #[derive(EnumCount, Copy, Clone, Debug)]
 pub enum OperandTokenType {
     Register,
@@ -112,8 +107,8 @@ impl Display for OperandTokenType {
             f,
             "{}",
             match self {
-                OperandTokenType::Register => "x1|x2..x31",
-                OperandTokenType::Comma => ",",
+                OperandTokenType::Register => "register",
+                OperandTokenType::Comma => "comma",
                 OperandTokenType::Label => "label",
                 OperandTokenType::Immediate => "decimal|hex|binary",
                 OperandTokenType::ParenL => "(",

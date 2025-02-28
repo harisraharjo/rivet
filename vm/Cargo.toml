@@ -5,7 +5,6 @@ edition = "2024"
 
 [dependencies]
 anyhow = "1.0.95"
-bitvec = "1.0.1"
 log = "0.4.22"
 shared={ path = "../shared"}
 isa = { path = "../isa"}
