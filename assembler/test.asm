@@ -4,7 +4,7 @@
 
 .string "Etoo"
 
-main:
+main: x1
     # 0x1000MP # invalid literal bin
     # 99beto // invalid literal decimal
     # 0b11kl // invalid literal Binary

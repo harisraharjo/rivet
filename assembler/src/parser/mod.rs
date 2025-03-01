@@ -13,7 +13,10 @@ use thiserror::Error;
 //     DuplicateLabel(String),
 // }
 
-use crate::token::{IdentifierType, Lexemes, LexemesSlice, Token};
+use crate::{
+    lexer::{Lexemes, LexemesSlice},
+    token::{IdentifierType, Token},
+};
 
 // #[derive(Debug)]
 // enum DataValue {
@@ -33,21 +36,6 @@ enum Single {
     #[error("directive")]
     Directive,
 }
-
-// #[derive(Default, Debug, Clone, PartialEq, Error)]
-// pub enum LexingError {
-//     #[error("Invalid Integer at {0}")]
-//     InvalidInteger(usize),
-//     #[error("Unknown directive {0} at {1}")]
-//     UnknownDirective(String, usize),
-//     #[error("Invalid suffix {0} at {1}")]
-//     InvalidSuffix(String, usize),
-//     #[error("Invalid Ascii Character at {0}")]
-//     NonAsciiCharacter(usize),
-//     #[default]
-//     #[error("Unknown Syntax")]
-//     UnknownSyntax,
-// }
 
 fn on_invalid_grammar<'a>(found: &Option<String>) -> String {
     if let Some(v) = found {
@@ -228,39 +216,48 @@ impl<'a> Parser<'a> {
                 self.advance_line();
             }
             Token::Label => {
-                println!("Label");
                 let lexemes = self.peek_line();
+
+                // find duplicate label first because a label can exists at the end of the line
                 if let Some(lex) = lexemes.find(|token| *token == Token::Label) {
                     return Err(ParserError::InvalidLine(Single::Label));
                 }
 
+                match lexemes.peekable().peek().unwrap().token() {
+                    Token::Identifier(IdentifierType::Mnemonic(_)) => {}
+                    Token::Eol => {}
+                    Token::Eof => {}
+                    Token::Directive(_) => {}
+                    token @ _ => {
+                        return Err(ParserError::InvalidGrammar {
+                            expected: RuleError::InvalidLabelSequence,
+                            found: Some(format!("{}", token.to_owned())),
+                        });
+                    }
+                }
+
                 // Record the label in the symbol table with the current position
                 // self.symbol_table.insert(label.clone(), self.position);
-                self.advance_line();
+                // self.advance_line();
 
                 // let name = self.current_source();
                 // self.advance(); // Consume label
                 // self.expect(Token::Eol, "Expected newline after label")?;
                 // let position = ast.nodes.len();
-                // ast.symbols.insert(
-                //     name.clone(),
-                //     SymbolInfo {
-                //         position,
-                //         is_global: false,
-                //     },
-                // );
             }
             Token::Identifier(IdentifierType::Mnemonic(mnemonic_type)) => {
                 let rule = grammar::InstructionRule::new(mnemonic_type);
-                let mut rule_iter = rule.iter();
                 let mut lexemes = self.peek_line();
-                let mut zipped = rule_iter.by_ref().zip(&mut lexemes);
 
-                if let Some(mismatch) = zipped.find(|(ty, lex)| lex.token().to_owned() != **ty) {
+                if let Some(mismatch) = rule
+                    .iter()
+                    .zip(&mut lexemes)
+                    .find(|(ty, lex)| lex.token().to_owned() != **ty)
+                {
                     let (ty, lexeme) = mismatch;
 
                     return Err(ParserError::InvalidGrammar {
-                        expected: RuleError::InvalidInstruction(*ty),
+                        expected: RuleError::InvalidInstructionSequence(*ty),
                         found: Some(
                             String::from_utf8(self.get_source(lexeme.span().to_owned()).to_vec())
                                 .unwrap(),
@@ -271,11 +268,13 @@ impl<'a> Parser<'a> {
                 let residue = rule.len().saturating_sub(lexemes.len());
                 match (residue > 0, &lexemes.next()) {
                     (true, None) => Err(ParserError::InvalidGrammar {
-                        expected: RuleError::InvalidInstruction(rule.get(rule.len() - residue)),
+                        expected: RuleError::InvalidInstructionSequence(
+                            rule.get(rule.len() - residue),
+                        ),
                         found: None,
                     }),
                     (false, Some(lex)) => Err(ParserError::InvalidGrammar {
-                        expected: RuleError::InvalidInstruction(OperandTokenType::Eol),
+                        expected: RuleError::InvalidInstructionSequence(OperandTokenType::Eol),
                         found: Some(
                             String::from_utf8(self.get_source(lex.span().to_owned()).to_vec())
                                 .unwrap(),

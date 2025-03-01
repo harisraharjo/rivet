@@ -1,7 +1,8 @@
 mod helper;
 
+use std::fmt::Display;
+
 use logos::Logos;
-use std::ops::Range;
 
 pub use helper::{IdentifierType, LexingError};
 use helper::{LiteralIntegerType, State, on_directive, on_ident, on_literal_integer, on_newline};
@@ -62,6 +63,34 @@ pub enum Token {
     // CommentBlockEnd,
 }
 
+impl Display for Token {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let value = match self {
+            Token::Identifier(identifier_type) => match identifier_type {
+                IdentifierType::Mnemonic(mnemonic) => "INSTRUCTION",
+                IdentifierType::Register(_) => "REGISTER",
+                IdentifierType::Symbol => "SYMBOL",
+            },
+            Token::Label => "LABEL",
+            Token::Directive(_) => "DIRECTIVE",
+            Token::LiteralString => todo!(),
+            Token::LiteralDecimal => "DECIMAL",
+            Token::LiteralHex => "HEX",
+            Token::LiteralBinary => "BINARY",
+            Token::Positive => "POSITIVE",
+            Token::ParenR => "PARENTHESES",
+            Token::ParenL => "PARENTHESES",
+            Token::QuoteSingle => "SINGLE QUOTE",
+            Token::Comma => "COMMA",
+            Token::Colon => "COLON",
+            Token::Eol => "EOL",
+            Token::Eof => "EOF",
+            Token::CommentSingleLine => "",
+        };
+        write!(f, "{}", value)
+    }
+}
+
 impl Token {
     pub const fn register() -> Token {
         Token::Identifier(IdentifierType::Register(isa::Register::X0))
@@ -70,10 +99,6 @@ impl Token {
     pub fn symbol() -> Token {
         Token::Identifier(IdentifierType::Symbol)
     }
-
-    // pub fn symbol() -> Token {
-    //     Token::Identifier(IdentifierType::Mn)
-    // }
 }
 
 impl TryFrom<&Token> for symbol_table::SymbolType {
@@ -85,162 +110,5 @@ impl TryFrom<&Token> for symbol_table::SymbolType {
             Token::Identifier(IdentifierType::Symbol) => Ok(symbol_table::SymbolType::Constant),
             _ => Err(LexingError::UnknownSyntax),
         }
-    }
-}
-
-/// Structure of Arrays
-pub struct Lexemes {
-    tokens: Vec<Token>,
-    spans: Vec<Range<usize>>,
-}
-
-impl Lexemes {
-    pub fn new(capacity: usize) -> Lexemes {
-        Lexemes {
-            tokens: Vec::with_capacity(capacity),
-            spans: Vec::with_capacity(capacity),
-        }
-    }
-
-    pub fn get_token(&self, index: usize) -> Option<&Token> {
-        self.tokens.get(index)
-    }
-
-    pub fn get_span(&self, index: usize) -> &Range<usize> {
-        &self.spans[index]
-    }
-
-    pub fn push(&mut self, token: Token, span: Range<usize>) {
-        self.tokens.push(token);
-        self.spans.push(span);
-    }
-
-    pub fn shrink_to_fit(&mut self) {
-        self.tokens.shrink_to_fit();
-        self.spans.shrink_to_fit();
-    }
-
-    #[inline(always)]
-    pub fn tokens(&self) -> &[Token] {
-        &self.tokens
-    }
-
-    pub fn spans(&self) -> &[Range<usize>] {
-        &self.spans
-    }
-
-    pub fn iter(&self) -> impl Iterator<Item = (&Token, &Range<usize>)> {
-        self.tokens.iter().zip(&self.spans)
-    }
-
-    fn iter_mut(&mut self) -> impl Iterator<Item = (&mut Range<usize>, &Token)> {
-        self.spans.iter_mut().zip(&self.tokens)
-    }
-
-    pub fn symbols(&self) -> impl Iterator<Item = (&Token, &Range<usize>)> {
-        self.iter().filter(|&(token, ..)| {
-            *token == Token::Label || *token == Token::Identifier(IdentifierType::Symbol)
-        })
-    }
-
-    pub fn len(&self) -> usize {
-        self.tokens.len()
-    }
-
-    pub fn seal(&mut self) {
-        if let Some(last_span) = self.spans.last() {
-            let end = last_span.end;
-            self.spans.push(end..end);
-            self.tokens.push(Token::Eof);
-            self.shrink_to_fit();
-        }
-    }
-
-    pub fn slice(&self, index: Range<usize>) -> LexemesSlice<'_> {
-        LexemesSlice::new(&self.tokens[index.clone()], &self.spans[index])
-    }
-}
-
-pub struct LexemesSlice<'a> {
-    tokens: &'a [Token],
-    spans: &'a [Range<usize>],
-    index: usize,
-}
-
-impl<'a> LexemesSlice<'a> {
-    fn new(tokens: &'a [Token], spans: &'a [Range<usize>]) -> LexemesSlice<'a> {
-        LexemesSlice {
-            tokens,
-            spans,
-            index: 0,
-        }
-    }
-
-    /// find a token within a slice. short-circuiting
-    pub fn find(&self, predicate: fn(&Token) -> bool) -> Option<Lexeme<'a>> {
-        self.tokens
-            .iter()
-            .position(predicate)
-            .and_then(|pos| Some(Lexeme::new(&self.tokens[pos], &self.spans[pos])))
-    }
-
-    pub fn len(&self) -> usize {
-        self.tokens.len()
-    }
-}
-
-impl<'a> Iterator for LexemesSlice<'a> {
-    type Item = Lexeme<'a>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.index >= self.tokens.len() {
-            return None;
-        }
-
-        let lexeme = Lexeme {
-            token: &self.tokens[self.index],
-            span: &self.spans[self.index],
-        };
-
-        self.index += 1;
-        Some(lexeme)
-    }
-
-    // Override size_hint for clarity (optional, since default works)
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        let remaining = self.tokens.len() - self.index;
-        (remaining, Some(remaining))
-    }
-}
-
-impl ExactSizeIterator for LexemesSlice<'_> {
-    fn len(&self) -> usize {
-        self.tokens.len() - self.index
-        // // // Note: This assertion is overly defensive, but it checks the invariant
-        // // // guaranteed by the trait. If this trait were rust-internal,
-        // // // we could use debug_assert!; assert_eq! will check all Rust user
-        // // // implementations too.
-        // // std::assert_eq!(upper, Some(lower));
-        // lower
-    }
-}
-
-#[derive(Debug)]
-pub struct Lexeme<'a> {
-    token: &'a Token,
-    span: &'a Range<usize>,
-}
-
-impl<'a> Lexeme<'a> {
-    fn new(token: &'a Token, span: &'a Range<usize>) -> Self {
-        Self { token, span }
-    }
-
-    pub fn token(&self) -> &Token {
-        self.token
-    }
-
-    pub fn span(&self) -> &Range<usize> {
-        self.span
     }
 }

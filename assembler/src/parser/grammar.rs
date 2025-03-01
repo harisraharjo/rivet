@@ -86,7 +86,9 @@ impl<'a> InstructionRule<'a> {
 #[derive(Error, Debug)]
 pub enum RuleError {
     #[error("`{0}`")]
-    InvalidInstruction(OperandTokenType),
+    InvalidInstructionSequence(OperandTokenType),
+    #[error("directive|instruction|break")]
+    InvalidLabelSequence,
 }
 
 #[derive(EnumCount, Copy, Clone, Debug)]
@@ -197,7 +199,6 @@ pub enum DirectiveRule {
     L,
     S,
 }
-
 // pub trait RuleType {
 //     type Error;
 //     fn validate(&self, tokens: &[Token]) -> Result<(), Self::Error>;
