@@ -1,7 +1,7 @@
 pub mod grammar;
 mod token;
 
-use grammar::{OperandTokenType, RuleError};
+use grammar::{OperandTokenType, RuleError, Sections};
 use std::{fmt::Debug, ops::Range};
 use thiserror::Error;
 
@@ -61,13 +61,21 @@ pub enum ParserError {
     DuplicateLabel(String),
 }
 
-// struct Line
+pub struct Obj {
+    /// Collection of all sections in the object file.
+    sections: Sections,
+    /// Index of the current section being assembled.
+    current_section: usize,
+    /// Section header string table content (built during assembly).
+    shstrtab: Vec<u8>,
+}
 
 // Parser with grammar checking
 pub struct Parser<'a> {
     lexemes: Lexemes,
     index: usize,
     source: &'a [u8],
+    // sections: Sections,
 }
 
 impl<'a> Parser<'a> {
@@ -76,6 +84,7 @@ impl<'a> Parser<'a> {
             lexemes,
             index: 0,
             source,
+            // sections: Sections::new(),
         }
     }
 
@@ -96,7 +105,7 @@ impl<'a> Parser<'a> {
     fn peek_line(&self) -> LexemesSlice<'_> {
         //safety: unwrap is safe because guaranteed (Token::Eol || Token::Eof) is always present
         let pos = self.nearest_break().unwrap();
-        // upper bound is the index of Eol||Eof because we don't take them in
+        // upper bound is at the index of Eol||Eof because we don't take them in
         self.lexemes.slice(self.index..self.index + pos)
     }
 
@@ -163,27 +172,52 @@ impl<'a> Parser<'a> {
         println!("Parsing...");
         match token {
             Token::Directive(dir_type) => {
+                use crate::asm::directive::DirectiveFolder;
                 println!("Directive : {:?}", dir_type);
-                self.advance_line();
-                // self.advance(); // Consume directive
-                // let name = self.current_source();
-                // let mut args = Vec::new();
+                let line = self.peek_line();
+                // if line.contains(&Token::Directive(dir_type)) {
+                //     return Err(ParserError::InvalidLine(Single::Directive));
+                // }
 
-                // while let Some(&token) = self.peek() {
-                //     // Token::Eol Token::Eof
-                //     match self.advance() {
-                //         Token::Symbol(s) => args.push(s),
-                //         Token::Immediate(i) => args.push(i.to_string()),
-                //         Token::Comma => continue,
-                //         t => {
-                //             return Err(format!(
-                //                 "Invalid argument for directive {}: {:?}",
-                //                 name, t
-                //             ));
+                let folder = DirectiveFolder::from(dir_type);
+                match folder {
+                    DirectiveFolder::Section(ty) => {
+
+                        // let section =
+                    }
+                    DirectiveFolder::Symbol(ty) => todo!(),
+                    DirectiveFolder::Data(ty) => todo!(),
+                    DirectiveFolder::Alignment(ty) => todo!(),
+                    DirectiveFolder::Allocation(ty) => todo!(),
+                    DirectiveFolder::Misc(ty) => todo!(),
+                }
+
+                // self.advance_line();
+                // if let Some(Token::Symbol(name)) = self.peek() {
+                //     let section_name = name.clone();
+                //     self.advance(); // Consume section name
+                //     self.current_section = section_name;
+
+                //     // Check for optional flags
+                //     self.section_flags = None;
+                //     if self.peek() == Some(&Token::Comma) {
+                //         self.advance(); // Consume comma
+                //         if let Some(Token::Symbol(flags)) = self.peek() {
+                //             let flags = flags.clone();
+                //             self.advance(); // Consume flags
+                //             // Validate flags (optional)
+                //             if !flags.chars().all(|c| "axwrMSI".contains(c)) {
+                //                 return Err(format!("Invalid section flags: {}", flags));
+                //             }
+                //             self.section_flags = Some(flags);
+                //         } else {
+                //             return Err("Expected section flags after comma".to_string());
                 //         }
                 //     }
+                //     self.expect(Token::Newline, "Expected newline after .section")?;
+                // } else {
+                //     return Err("Expected section name after .section".to_string());
                 // }
-                // self.expect(Token::Eol, "Expected newline after directive")?;
 
                 // match name.as_str() {
                 //     ".globl" => {
@@ -223,7 +257,7 @@ impl<'a> Parser<'a> {
                     return Err(ParserError::InvalidLine(Single::Label));
                 }
 
-                match lexemes.peekable().peek().unwrap().token() {
+                match lexemes.peek().unwrap().token() {
                     Token::Identifier(IdentifierType::Mnemonic(_)) => {}
                     Token::Eol => {}
                     Token::Eof => {}
@@ -238,14 +272,10 @@ impl<'a> Parser<'a> {
 
                 // Record the label in the symbol table with the current position
                 // self.symbol_table.insert(label.clone(), self.position);
-                // self.advance_line();
-
-                // let name = self.current_source();
-                // self.advance(); // Consume label
-                // self.expect(Token::Eol, "Expected newline after label")?;
-                // let position = ast.nodes.len();
+                // self.advance();
             }
             Token::Identifier(IdentifierType::Mnemonic(mnemonic_type)) => {
+                println!("Instruction time");
                 let rule = grammar::InstructionRule::new(mnemonic_type);
                 let mut lexemes = self.peek_line();
 

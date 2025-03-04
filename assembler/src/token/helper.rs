@@ -20,12 +20,16 @@ impl Default for Cell {
 #[derive(Default, Debug)]
 pub struct State {
     cell: Cell,
-    // in_block_comments: bool,
+    last_token: Token, // in_block_comments: bool,
 }
 
 impl State {
     pub fn advance_row(&mut self) {
         self.cell.row += 1;
+    }
+
+    pub fn set_last_token(&mut self, token: Token) {
+        self.last_token = token;
     }
 }
 
@@ -163,14 +167,19 @@ pub(super) fn on_directive(lex: &mut logos::Lexer<Token>) -> Result<DirectiveTyp
     let slice = lex.slice();
     let variants = DirectiveType::variants();
 
-    //safety: we read the end of the slice so it's always safe
-    let target = unsafe { slice.get_unchecked(1..) };
+    // start from index 1 because the dot `.` is at index 0
+    let target = slice.get(1..).unwrap();
     if let Some(i) = variants.iter().position(|v| v.as_bytes() == target) {
         return Ok(
             // Safety: guaranteed to be safe because `i` is an actual index from the selected variant and DirectiveTypes variants are all unit variant.
             unsafe { std::mem::transmute::<u8, DirectiveType>(i as u8) },
         );
     };
+
+    // acknowledge user defined section if and only if the prev token is `.section`
+    if lex.extras.last_token == Token::Directive(DirectiveType::Section) {
+        return Ok(DirectiveType::CustomSection);
+    }
 
     Err(LexingError::UnknownDirective(
         String::from_utf8(slice.to_vec()).unwrap(),

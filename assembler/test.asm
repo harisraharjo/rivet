@@ -1,10 +1,12 @@
     # This is a comment
     // This is also a comment
-.section .data 10
+# .section .data 10
 
-.string "Etoo"
+.section .my_custom
 
-main: x1
+# .string "Etoo"
+
+# main: add x1, x2, x3
     # 0x1000MP # invalid literal bin
     # 99beto // invalid literal decimal
     # 0b11kl // invalid literal Binary
@@ -19,4 +21,3 @@ main: x1
     # lw x1, 10(x5)
     # sw x1, 111(x5)
     # lui x1, 0x1212
-    add x1, x2, x3

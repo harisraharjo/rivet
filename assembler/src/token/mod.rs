@@ -9,7 +9,7 @@ use helper::{LiteralIntegerType, State, on_directive, on_ident, on_literal_integ
 
 use crate::{asm::directive::DirectiveType, symbol_table};
 
-#[derive(Logos, Debug, PartialEq, Copy, Clone)]
+#[derive(Logos, Debug, PartialEq, Copy, Clone, Default)]
 #[logos(source = [u8])]
 #[logos(skip r"[ \t\f]+")] // Ignore this regex pattern between tokens
 #[logos(extras = State)]
@@ -49,6 +49,7 @@ pub enum Token {
     // QuoteDouble,
     #[token(b":")]
     Colon,
+    #[default]
     #[token(b"\n", on_newline, priority = 2)]
     Eol,
     Eof,
@@ -67,7 +68,7 @@ impl Display for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let value = match self {
             Token::Identifier(identifier_type) => match identifier_type {
-                IdentifierType::Mnemonic(mnemonic) => "INSTRUCTION",
+                IdentifierType::Mnemonic(_) => "INSTRUCTION",
                 IdentifierType::Register(_) => "REGISTER",
                 IdentifierType::Symbol => "SYMBOL",
             },

@@ -1,6 +1,6 @@
-use shared::EnumVariants;
+use shared::{EnumCount, EnumVariants};
 
-#[derive(EnumVariants, Debug, Clone, Copy, PartialEq)]
+#[derive(EnumVariants, Debug, Clone, Copy, PartialEq, EnumCount)]
 pub enum DirectiveType {
     // Symbol dir
     Set, //.set name, expression -> for creating symbol/add symbol to the symbol table as local symbol
@@ -26,44 +26,61 @@ pub enum DirectiveType {
     P2align, //p2,[pad_val=0],max -> align to power of 2
 
     // Section dir
-    Section, //[{.text,.data,.rodata,.bss} or user defined name] -> e.g. .section .data -> turn the .data section in memory into the active section, hence,..
-    //all the information processed by the assembler after this directive is added to the .data section
-
-    //Predefined section
+    Section, //[{.text,.data,.rodata,.bss} or user defined name] -> e.g. .section .data -> turn the .data section in memory into the active section, hence,.. all the information processed by the assembler after this directive is added to the .data section
     Text,
     Data,
     Rodata,
     Bss,
+    CustomSection,
 
     // Allocation dir
     Comm,  //symbol_name,size,align -> emit common object to .bss section
     LComm, //symbol_name,size,align -> emit common object to .bss section //for global
 
     // Misc dir
-    Skip, // .skip N -> advances the location counter by N units and can be used to allocate space for variables on the .bss section
-    // which actually can't be added any data to it by the program.
+    Skip, // .skip N -> advances the location counter by N units and can be used to allocate space for variables on the .bss section which actually can't be added any data to it by the program.
     Option, // {rvc,norvc,pic,nopic,push,pop} -> RISC-V options
-    Macro,  //name arg1 [, argn] -> begin macro
-    Endm,   // end macro
-    File,   // filename -> emit filename FILE LOCAL symbol table
-    Ident,  //string,
-    Size,   //symbol, symbol
-    Type,   //symbol, @function
+    File, // filename -> emit filename FILE LOCAL symbol table
+    Ident, //string,
+    Size, //symbol, symbol
+    Type, //symbol, @function
 }
 
-// impl From<usize> for DirectiveType {
-//     fn from(value: usize) -> Self {
-//         let ff = DirectiveType::Align as usize;
-//     }
+// pub enum SectionType {
+//     Custom,
+//     Text,
+//     Data,
+//     Rodata,
+//     Bss,
 // }
 
-// #[derive(Debug, PartialEq, Eq)]
-// struct ParseDirectiveError;
+pub enum DirectiveFolder {
+    Symbol(DirectiveType),
+    Data(DirectiveType),
+    Alignment(DirectiveType),
+    Section(DirectiveType),
+    Allocation(DirectiveType),
+    Misc(DirectiveType),
+}
 
-// impl FromStr for DirectiveType {
-//     type Err = ParseDirectiveError;
+impl DirectiveFolder {
+    pub fn rule(&self) -> i32 {
+        1
+    }
+}
 
-//     fn from_str(s: &str) -> Result<Self, Self::Err> {
-//         let ff = Self::variants();
-//     }
-// }
+impl From<DirectiveType> for DirectiveFolder {
+    fn from(value: DirectiveType) -> Self {
+        use DirectiveType::*;
+        match value {
+            Set | Equ | Globl => DirectiveFolder::Symbol(value),
+            Byte | Half | Word | Dword | String | Asciz | Ascii | Incbin | Zero => {
+                DirectiveFolder::Data(value)
+            }
+            Align | Balign | P2align => DirectiveFolder::Alignment(value),
+            Section | Text | Data | Rodata | Bss | CustomSection => DirectiveFolder::Section(value),
+            Comm | LComm => DirectiveFolder::Allocation(value),
+            Skip | Option | File | Ident | Size | Type => DirectiveFolder::Misc(value),
+        }
+    }
+}
