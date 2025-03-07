@@ -1,7 +1,7 @@
 pub mod grammar;
 mod token;
 
-use grammar::{OperandTokenType, RuleError, Sections};
+use grammar::{OperandTokenType, RuleError};
 use std::{fmt::Debug, ops::Range};
 use thiserror::Error;
 
@@ -14,6 +14,7 @@ use thiserror::Error;
 // }
 
 use crate::{
+    asm::section::{Section, Sections},
     lexer::{Lexemes, LexemesSlice},
     token::{IdentifierType, Token},
 };
@@ -61,21 +62,21 @@ pub enum ParserError {
     DuplicateLabel(String),
 }
 
-pub struct Obj {
-    /// Collection of all sections in the object file.
-    sections: Sections,
-    /// Index of the current section being assembled.
-    current_section: usize,
-    /// Section header string table content (built during assembly).
-    shstrtab: Vec<u8>,
-}
+// pub struct Obj {
+//     /// Collection of all sections in the object file.
+//     sections: Sections,
+//     /// Index of the current section being assembled.
+//     current_section: usize,
+//     /// Section header string table content (built during assembly).
+//     shstrtab: Vec<u8>,
+// }
 
 // Parser with grammar checking
 pub struct Parser<'a> {
     lexemes: Lexemes,
     index: usize,
     source: &'a [u8],
-    // sections: Sections,
+    sections: Sections,
 }
 
 impl<'a> Parser<'a> {
@@ -84,7 +85,7 @@ impl<'a> Parser<'a> {
             lexemes,
             index: 0,
             source,
-            // sections: Sections::new(),
+            sections: Sections::default(),
         }
     }
 
@@ -172,24 +173,26 @@ impl<'a> Parser<'a> {
         println!("Parsing...");
         match token {
             Token::Directive(dir_type) => {
-                use crate::asm::directive::DirectiveFolder;
+                use crate::asm::directive::DirectiveType::*;
                 println!("Directive : {:?}", dir_type);
-                let line = self.peek_line();
+
+                // let line = self.peek_line();
                 // if line.contains(&Token::Directive(dir_type)) {
                 //     return Err(ParserError::InvalidLine(Single::Directive));
                 // }
 
-                let folder = DirectiveFolder::from(dir_type);
-                match folder {
-                    DirectiveFolder::Section(ty) => {
-
-                        // let section =
+                match dir_type {
+                    Section | Text | Data | Rodata | Bss | CustomSection => {
+                        self.sections
+                            .switch(dir_type, self.current_span().to_owned());
                     }
-                    DirectiveFolder::Symbol(ty) => todo!(),
-                    DirectiveFolder::Data(ty) => todo!(),
-                    DirectiveFolder::Alignment(ty) => todo!(),
-                    DirectiveFolder::Allocation(ty) => todo!(),
-                    DirectiveFolder::Misc(ty) => todo!(),
+                    Set | Equ | Globl => todo!(),
+                    Byte | Half | Word | Dword | String | Asciz | Ascii | Incbin | Zero => {
+                        todo!()
+                    }
+                    Align | Balign | P2align => todo!(),
+                    Comm | LComm => todo!(),
+                    Skip | Option | File | Ident | Size | Type => todo!(),
                 }
 
                 // self.advance_line();

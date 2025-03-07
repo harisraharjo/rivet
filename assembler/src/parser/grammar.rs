@@ -5,7 +5,7 @@ use shared::EnumCount;
 use thiserror::Error;
 
 use crate::{
-    asm::directive::DirectiveFolder,
+    // asm::directive::DirectiveFolder,
     token::{IdentifierType, Token},
 };
 
@@ -161,87 +161,6 @@ impl From<Mnemonic> for OperandRuleType {
             Lw => Self::RIR,
             Sw => Self::RIR,
             Syscall => Self::R3,
-        }
-    }
-}
-
-pub struct Sections {
-    section: Vec<Section>,
-    progbits: Vec<u8>,
-    no_bits: Vec<u32>,
-}
-
-impl Default for Sections {
-    fn default() -> Self {
-        Self {
-            section: Vec::new(),
-            progbits: Default::default(),
-            no_bits: Default::default(),
-        }
-    }
-}
-
-/// Range in the source `&[u8]` where the section name resides.
-pub type SourceSpan = Range<usize>;
-/// Represents a section in the assembler, mapping to an ELF section header.
-#[derive(Debug)]
-struct Section {
-    /// Offset into .shstrtab where the section name resides.
-    name: SourceSpan,
-    /// Type of the section (e.g., Progbits, Nobits).
-    section_type: SectionType,
-    // /// Flags indicating section properties (e.g., ALLOC, EXECINSTR).
-    // flags: SectionFlags,
-    // /// Alignment requirement (power of 2, e.g., 4 for .text).
-    // alignment: u32,
-    /// span for the real content in `Sections`
-    span: Range<usize>, // /// Content or size, depending on section type.
-                        // content: ContentType,
-}
-
-impl Section {
-    // pub fn new(ty: ,name: SourceSpan) -> Self {
-    //     let (section_type, flags) = match name {
-    //         ".text" => (SectionType::Progbits, SectionFlags::ALLOC | SectionFlags::EXECINSTR),
-    //         ".data" => (SectionType::Progbits, SectionFlags::ALLOC | SectionFlags::WRITE),
-    //         ".bss" => (SectionType::Nobits, SectionFlags::ALLOC | SectionFlags::WRITE),
-    //         ".rodata" => (SectionType::Progbits, SectionFlags::ALLOC),
-    //         _ => (SectionType::Progbits, SectionFlags::ALLOC),
-    //     };
-
-    //     Section {
-    //         name,
-    //         section_type,
-    //         flags,
-    //         alignment: if name == ".text" { 4 } else { 1 },
-    //         content: match section_type {
-    //             SectionType::Nobits => SectionContent::Nobits(0),
-    //             _ => SectionContent::Progbits(Vec::new()),
-    //         },
-    //     }
-    // }
-}
-
-/// Represents the type of a section in an ELF object file.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum SectionType {
-    Progbits,
-    /// Uninitialized data (e.g., .bss), occupies no space in the file.
-    Nobits,
-    /// Symbol table (e.g., .symtab).
-    Symtab,
-}
-
-impl From<DirectiveFolder> for Section {
-    fn from(value: DirectiveFolder) -> Self {
-        use DirectiveFolder::*;
-        match value {
-            Section(ty) => todo!(),
-            Symbol(ty) => todo!(),
-            Data(ty) => todo!(),
-            Alignment(ty) => todo!(),
-            Allocation(ty) => todo!(),
-            Misc(ty) => todo!(),
         }
     }
 }

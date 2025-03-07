@@ -2,7 +2,7 @@
     // This is also a comment
 # .section .data 10
 
-.section .my_custom
+.section .data
 
 # .string "Etoo"
 

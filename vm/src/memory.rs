@@ -138,7 +138,6 @@ impl ReadWrite<u32> for LinearMemory {
     }
 
     fn write(&mut self, address: usize, value: u32) -> Result<(), MemoryError> {
-        // println!("\x1b[93mMem len Before {}\x1b[0m", self.buffer.len());
         let v = value.to_le_bytes();
         // let unit = unsafe {
         //     std::slice::from_raw_parts_mut(
@@ -161,16 +160,16 @@ impl ReadWrite<u32> for LinearMemory {
         //     };
         // }
 
-        println!(
-            "\x1b[93mMem b4: {:?}\x1b[0m",
-            &self.buffer[address..address + 4]
-        );
+        // println!(
+        //     "\x1b[93mMem b4: {:?}\x1b[0m",
+        //     &self.buffer[address..address + 4]
+        // );
 
-        self.bulk_writes::<4>(address, &v);
-        println!(
-            "\x1b[93mMem after: {:?}\x1b[0m",
-            &self.buffer[address..address + 4]
-        );
+        // self.bulk_writes::<4>(address, &v);
+        // println!(
+        //     "\x1b[93mMem after: {:?}\x1b[0m",
+        //     &self.buffer[address..address + 4]
+        // );
 
         Ok(())
     }

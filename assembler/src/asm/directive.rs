@@ -54,33 +54,33 @@ pub enum DirectiveType {
 //     Bss,
 // }
 
-pub enum DirectiveFolder {
-    Symbol(DirectiveType),
-    Data(DirectiveType),
-    Alignment(DirectiveType),
-    Section(DirectiveType),
-    Allocation(DirectiveType),
-    Misc(DirectiveType),
-}
+// pub enum DirectiveFolder {
+//     Symbol(DirectiveType),
+//     Data(DirectiveType),
+//     Alignment(DirectiveType),
+//     Section(DirectiveType),
+//     Allocation(DirectiveType),
+//     Misc(DirectiveType),
+// }
 
-impl DirectiveFolder {
-    pub fn rule(&self) -> i32 {
-        1
-    }
-}
+// impl DirectiveFolder {
+//     pub const fn unwrap(&self) -> i32 {
+//         self.
+//     }
+// }
 
-impl From<DirectiveType> for DirectiveFolder {
-    fn from(value: DirectiveType) -> Self {
-        use DirectiveType::*;
-        match value {
-            Set | Equ | Globl => DirectiveFolder::Symbol(value),
-            Byte | Half | Word | Dword | String | Asciz | Ascii | Incbin | Zero => {
-                DirectiveFolder::Data(value)
-            }
-            Align | Balign | P2align => DirectiveFolder::Alignment(value),
-            Section | Text | Data | Rodata | Bss | CustomSection => DirectiveFolder::Section(value),
-            Comm | LComm => DirectiveFolder::Allocation(value),
-            Skip | Option | File | Ident | Size | Type => DirectiveFolder::Misc(value),
-        }
-    }
-}
+// impl From<DirectiveType> for DirectiveFolder {
+//     fn from(value: DirectiveType) -> Self {
+//         use DirectiveType::*;
+//         match value {
+//             Set | Equ | Globl => DirectiveFolder::Symbol(value),
+//             Byte | Half | Word | Dword | String | Asciz | Ascii | Incbin | Zero => {
+//                 DirectiveFolder::Data(value)
+//             }
+//             Align | Balign | P2align => DirectiveFolder::Alignment(value),
+//             Section | Text | Data | Rodata | Bss | CustomSection => DirectiveFolder::Section(value),
+//             Comm | LComm => DirectiveFolder::Allocation(value),
+//             Skip | Option | File | Ident | Size | Type => DirectiveFolder::Misc(value),
+//         }
+//     }
+// }

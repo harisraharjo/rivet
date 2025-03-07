@@ -196,22 +196,14 @@ impl VM {
             }
             Instruction::Sw { dest, src, offset } => {
                 // Alignment check (RISC-V requires alignment for LW/SW/LH/SH)
-                println!("");
-                println!("Store word");
 
-                println!("dest reg: {:?}", dest);
                 let dest = self.cpu.registers.get(dest);
-                println!("Dest value: {dest}");
                 let offset = u32::from(offset);
-                println!("Offset: {}", u32::from(offset));
                 // TODO: dest and offset potential to be minus
                 let address = offset + dest;
-                println!("offset + dest: {address}");
                 self.memory
                     .alignment_check(std::mem::size_of::<u32>(), address)?;
                 let value = self.cpu.registers.get(src);
-                println!("src reg: {:?}", src);
-                println!("src value: {:?}", value);
                 self.memory.write(address, value)?;
                 Ok(())
             }
