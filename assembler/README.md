@@ -1,9 +1,6 @@
 # Assembler (WIP :construction:)
+An assembler based on GNU Assembler
 
-### TODO
-- Block comment
-- Octal
-- Assembling. ch4.6
 # RISCV Assembly language
 ## Directive
 The `.byte`, `.half`, `.word`, and `.dword` directives add one or more values to the active section. Their

@@ -33,6 +33,8 @@ pub enum Token {
     #[regex(r#"0b[01]+(?:\w+)?"#, on_literal_integer::<{LiteralIntegerType::Binary as u8}>)]
     LiteralBinary,
 
+    #[token(b"-")]
+    Negative,
     #[token(b"+")]
     Positive,
     #[token(b")")]
@@ -74,11 +76,12 @@ impl Display for Token {
             },
             Token::Label => "LABEL",
             Token::Directive(_) => "DIRECTIVE",
-            Token::LiteralString => todo!(),
+            Token::LiteralString => "STRING",
             Token::LiteralDecimal => "DECIMAL",
             Token::LiteralHex => "HEX",
             Token::LiteralBinary => "BINARY",
             Token::Positive => "POSITIVE",
+            Token::Negative => "NEGATIVE",
             Token::ParenR => "PARENTHESES",
             Token::ParenL => "PARENTHESES",
             Token::QuoteSingle => "SINGLE QUOTE",

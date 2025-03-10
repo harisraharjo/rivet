@@ -16,14 +16,14 @@ impl Sections {
         self.active = match ty {
             DirectiveType::Data => {
                 let active_section = ActiveSection::Data;
-                self.base[active_section as u8 as usize]
+                self.base[active_section as usize]
                     .name
                     .get_or_insert(source_span);
                 active_section
             }
             DirectiveType::Rodata => {
                 let active_section = ActiveSection::Rodata;
-                self.base[active_section as u8 as usize]
+                self.base[active_section as usize]
                     .name
                     .get_or_insert(source_span);
                 active_section
@@ -34,7 +34,7 @@ impl Sections {
             }
             _ => {
                 let active_section = ActiveSection::Text;
-                self.base[active_section as u8 as usize]
+                self.base[active_section as usize]
                     .name
                     .get_or_insert(source_span);
                 active_section
@@ -43,7 +43,7 @@ impl Sections {
     }
 
     pub fn insert(&self, data: u8) -> i32 {
-        if let Some(s) = self.base.get(self.active as u8 as usize) {
+        if let Some(s) = self.base.get(self.active as usize) {
             return 1;
         };
 
@@ -72,16 +72,6 @@ impl Default for Sections {
         //     _ => Flag::ALLOC,
         // };
     }
-}
-
-#[derive(Debug, Default, Clone, Copy, EnumCount)]
-pub enum ActiveSection {
-    #[default]
-    Text,
-    Data,
-    Rodata,
-    Bss,
-    // CustomSection(usize),
 }
 
 /// Range in the source `&[u8]` where the section name resides.
@@ -151,6 +141,16 @@ impl Default for Section<Nobits> {
     }
 }
 
+#[derive(Debug, Default, Clone, Copy, EnumCount)]
+pub enum ActiveSection {
+    #[default]
+    Text,
+    Data,
+    Rodata,
+    Bss,
+    // CustomSection(usize),
+}
+
 use bitflags::bitflags;
 use shared::EnumCount;
 
@@ -184,11 +184,69 @@ impl Alignment {
     }
 }
 
-pub trait ContentType {}
+/// Represents an expression parsed from lexemes.
+#[derive(Debug)]
+enum Expr {
+    Literal(i32),                     // Resolved numeric literal, e.g., 42
+    Symbol(Range<usize>),             // Unresolved symbol, e.g., "foo" at 5..8
+    BinaryOp(ExprSide, Op, ExprSide), // e.g., foo + 4
+}
 
 #[derive(Debug)]
+enum ExprSide {
+    Symbol,
+    Literal,
+}
+
+/// Supported operators in expressions.
+#[derive(Debug)]
+enum Op {
+    Add,
+    Sub,
+    Mul,
+    Div,
+}
+
+// pub struct Elementary<T> where T {
+//     ty: DirectiveType,
+//     data: T
+// }
+
+/// Represents data parsed into a section, using spans for strings.
+#[derive(Debug)]
+enum Element {
+    Word(u32),                 // .word 0x12345678
+    Byte(u8),                  // .byte 0xFF
+    Half(u16),                 // .half 0x1234
+    String(Range<usize>),      // .asciz "hello" (span into source)
+    Instruction(Range<usize>), // e.g., "lw x5, 0(x6)" (span into source)
+    Align(u32),                // New for .align, .p2align, .balign
+    Skip(u32),                 // For .skip size
+}
+
+// impl Element {
+//     pub fn new() -> Element {
+//         // match value {
+//         //     DirectiveType::Byte => Self::Byte(Default::default()),
+//         //     DirectiveType::Half => Self::Half(Default::default()),
+//         //     DirectiveType::Word => Self::Word(Default::default()),
+//         //     DirectiveType::String => Self::String(Default::default()),
+//         //     DirectiveType::Asciz => Self::String(Default::default()),
+//         //     DirectiveType::Ascii => Self::String(Default::default()),
+//         //     DirectiveType::Align => Self::Align(Default::default()),
+//         //     DirectiveType::Balign => Self::Align(Default::default()),
+//         //     DirectiveType::P2align => Self::Align(Default::default()),
+//         //     DirectiveType::Skip => Self::Skip(Default::default()),
+
+//         // }
+//         Element {}
+//     }
+// }
+
+pub trait ContentType {}
+#[derive(Debug)]
 pub struct Progbits {
-    buffer: Vec<u8>,
+    buffer: Vec<Element>,
 }
 impl ContentType for Progbits {}
 // impl Progbits {

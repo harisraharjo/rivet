@@ -1,29 +1,44 @@
+use std::fmt::Display;
+
 use shared::{EnumCount, EnumVariants};
 
 #[derive(EnumVariants, Debug, Clone, Copy, PartialEq, EnumCount)]
 pub enum DirectiveType {
     // Symbol dir
-    Set, //.set name, expression -> for creating symbol/add symbol to the symbol table as local symbol
-    Equ, //.equ name, expression -> for creating symbol/add symbol to the symbol table as local symbol
-    Globl, //.globl name -> turn local symbols into global ones
+    /// Create symbol/add symbol to the symbol table as local symbol\
+    ///`.set name, expression`
+    Set,
+    ///`.equ name, expression` Create symbol/add symbol to the symbol table as local symbol. Same as `Set`
+    Equ,
+    ///`.globl name` Turn local symbols into global ones
+    Globl,
 
     // Data dir
-    Byte,   //.byte expression [, expression]* -> Emit one or more 8-bit comma separated words
-    Half,   //.half expression [, expression]* -> Emit one or more 16-bit comma separated words
-    Word, //.word expression [, expression]* -> Emit one or more 32-bit comma separated words e.g. .word 10 -> assemble a 32-bit value (10) and add it to the active section
-    Dword, //.dword expression [, expression]* -> Emit one or more 64-bit comma separated words
-    String, //.string string -> Emit NULL terminated string
-    Asciz, //.asciz string -> Emit NULL terminated string (alias for .string)
-    Ascii, //.ascii string -> Emit string without NULL character
-    Incbin, //.incbin filename -> emit the included file as a binary sequence of octets
-    Zero, //.zero integer -> zero bytes
+    ///`.byte expression [, expression]*` -> Emit one or more 8-bit comma separated words
+    Byte,
+    ///`.half expression [, expression]*` -> Emit one or more 16-bit comma separated words
+    Half,
+    ///`.word expression [, expression]*` -> Emit one or more 32-bit comma separated words\
+    /// Ex: \
+    /// `.word 10` -> assemble a 32-bit value (10) and add it to the active section
+    Word,
+    ///`.string string` -> Emit NULL terminated string
+    String,
+    ///`.asciz string` -> Emit NULL terminated string (alias for .string)
+    Asciz,
+    ///`.ascii string` -> Emit string without NULL character
+    Ascii,
+    // Incbin, //.incbin filename -> emit the included file as a binary sequence of octets
+    // Zero, //.zero integer -> zero bytes
 
     // Alignment dir
-    Align, //.align N -> To keep the memory align 4 bytes. This is the proper way of ensuring the location counter is aligned
-    // and not by doing .skip N where N is the number to make it aligned. It will checks if the location counter is a multiple of 2N,
-    // if it is, it has no effect on the program, otherwise, it advances the location counter to the next value that is a multiple of 2N
-    Balign,  //b,[pad_val=0] -> byte align
-    P2align, //p2,[pad_val=0],max -> align to power of 2
+    ///`.align N` -> To keep the memory align 4 bytes. Use this to aligned the location counter `Skip`.\
+    /// It will checks if the location counter is a multiple of `2N`, if it is, it has no effect on the program, otherwise, it advances the location counter to the next value that is a multiple of `2N`
+    Align,
+    ///`b,[pad_val=0]` -> byte align
+    Balign,
+    /// `p2,[pad_val=0],max` -> align to power of 2
+    P2align,
 
     // Section dir
     Section, //[{.text,.data,.rodata,.bss} or user defined name] -> e.g. .section .data -> turn the .data section in memory into the active section, hence,.. all the information processed by the assembler after this directive is added to the .data section
@@ -31,28 +46,29 @@ pub enum DirectiveType {
     Data,
     Rodata,
     Bss,
-    CustomSection,
+    // CustomSection,
 
     // Allocation dir
-    Comm,  //symbol_name,size,align -> emit common object to .bss section
-    LComm, //symbol_name,size,align -> emit common object to .bss section //for global
+    /// `symbol, size, align` -> emit common object to .bss section (local)
+    Comm,
+    /// `symbol, size, align` -> emit common object to .bss section (global)
+    LComm,
 
     // Misc dir
-    Skip, // .skip N -> advances the location counter by N units and can be used to allocate space for variables on the .bss section which actually can't be added any data to it by the program.
-    Option, // {rvc,norvc,pic,nopic,push,pop} -> RISC-V options
-    File, // filename -> emit filename FILE LOCAL symbol table
-    Ident, //string,
-    Size, //symbol, symbol
-    Type, //symbol, @function
+    /// `.skip N` -> advances the location counter by N units and can be used to allocate space for variables on the .bss section which actually can't be added any data to it by the program.
+    Skip,
+    // Option, // {rvc,norvc,pic,nopic,push,pop} -> RISC-V options
+    // File,   // filename -> emit filename FILE LOCAL symbol table
+    // Ident,  //string,
+    // Size,   //symbol, symbol
+    // Type,   //symbol, @function
 }
 
-// pub enum SectionType {
-//     Custom,
-//     Text,
-//     Data,
-//     Rodata,
-//     Bss,
-// }
+impl Display for DirectiveType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, ".{}", Self::variants()[*self as usize])
+    }
+}
 
 // pub enum DirectiveFolder {
 //     Symbol(DirectiveType),
