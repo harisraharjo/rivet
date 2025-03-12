@@ -6,9 +6,15 @@ use crate::asm::directive::DirectiveType;
 use super::Token;
 
 #[derive(Debug)]
-struct Cell {
+pub struct Cell {
     row: usize,
     column: usize,
+}
+
+impl Cell {
+    pub fn row(&self) -> usize {
+        self.row
+    }
 }
 
 impl Default for Cell {
@@ -20,6 +26,7 @@ impl Default for Cell {
 #[derive(Default, Debug)]
 pub struct State {
     cell: Cell,
+    // last_span: Range<usize>,
     last_token: Token, // in_block_comments: bool,
 }
 
@@ -31,21 +38,27 @@ impl State {
     pub fn set_last_token(&mut self, token: Token) {
         self.last_token = token;
     }
+
+    pub fn cell(&self) -> &Cell {
+        &self.cell
+    }
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Error)]
 pub enum LexingError {
-    #[error("Invalid Integer at {0}")]
-    InvalidInteger(usize),
+    // #[error("Integer error: {0} at {1}")]
+    // IntegerError(#[source] ParseIntError, usize),
     #[error("Unknown directive {0} at {1}")]
     UnknownDirective(String, usize),
     #[error("Invalid suffix {0} at {1}")]
     InvalidSuffix(String, usize),
     #[error("Invalid Ascii Character at {0}")]
     NonAsciiCharacter(usize),
+    #[error("Unknown Syntax {0} at row {0}")]
+    UnknownSyntax(String, usize),
     #[default]
-    #[error("Unknown Syntax")]
-    UnknownSyntax,
+    #[error("")]
+    Error,
 }
 
 // pub(super) fn on_block_comment(lex: &mut logos::Lexer<Token>) -> logos::Skip {
@@ -139,17 +152,32 @@ impl LiteralIntegerType {
             _ => 2,
         }
     }
+
+    const fn base(id: u8) -> u32 {
+        let ty =  // Safety: guaranteed to be safe because `i` is an actual index from the selected variant and DirectiveTypes variants are all unit variant.
+            unsafe { std::mem::transmute::<u8, LiteralIntegerType>(id) };
+        match ty {
+            LiteralIntegerType::Decimal => 10,
+            LiteralIntegerType::Hex => 16,
+            LiteralIntegerType::Binary => 2,
+        }
+    }
 }
 
 pub(super) fn on_literal_integer<const TYPE: u8>(
     lex: &mut logos::Lexer<Token>,
 ) -> Result<(), LexingError> {
+    // assert!(TYPE <= LiteralIntegerType::COUNT);
     let mut slice = lex.slice();
-    if slice[0] == b"-"[0] {
+    if !slice.is_ascii() {
+        return Err(LexingError::NonAsciiCharacter(lex.extras.cell.row));
+    }
+
+    if slice[0] == b'-' {
         slice = slice.get(1..).unwrap();
     }
 
-    //safety: we read the end of the slice so it's always safe
+    //safety: we read until the end so it's always safe
     let target = unsafe { slice.get_unchecked(LiteralIntegerType::skip_by(TYPE)..) };
     let callback = LiteralIntegerType::cb(TYPE);
     if let Some(i) = target.iter().position(callback) {
@@ -160,6 +188,11 @@ pub(super) fn on_literal_integer<const TYPE: u8>(
         ));
     }
 
+    // //safety: GUARANTEED to be safe bcs It's already valid ascii
+    // let s = unsafe { std::str::from_utf8_unchecked(slice) };
+
+    // Ok(u64::from_str_radix(s, LiteralIntegerType::base(TYPE))
+    //     .map_err(|e| LexingError::IntegerError(e, lex.extras.cell.column))?)
     Ok(())
 }
 

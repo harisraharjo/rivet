@@ -17,14 +17,27 @@ impl Lexer {
 
         while let Some(sequence) = lex.next() {
             lex.extras.advance_row();
-            let token = sequence?;
+            let token = sequence.map_err(|e| match e {
+                LexingError::Error => {
+                    let slice = unsafe { input.get_unchecked(lex.span()) };
+                    if !slice.is_ascii() {
+                        LexingError::NonAsciiCharacter(lex.extras.cell().row())
+                    } else {
+                        LexingError::UnknownSyntax(
+                            String::from_utf8(slice.to_vec()).unwrap(),
+                            lex.extras.cell().row(),
+                        )
+                    }
+                }
+                _ => e,
+            })?;
             lex.extras.set_last_token(token);
 
-            // println!(
-            //     "Lexeme: {:?} as {:?}",
-            //     String::from_utf8(unsafe { input.get_unchecked(span.clone()).to_vec() }).unwrap(),
-            //     token
-            // );
+            println!(
+                "Lexeme: {:?} as {:?}",
+                String::from_utf8(unsafe { input.get_unchecked(lex.span()).to_vec() }).unwrap(),
+                token
+            );
             lexemes.push(token, lex.span());
         }
 
@@ -150,6 +163,10 @@ impl<'a> LexemesSlice<'a> {
     pub fn contains(&self, token: &Token) -> bool {
         self.tokens.contains(token)
     }
+
+    pub fn tokens(&self) -> &'a [Token] {
+        self.tokens
+    }
 }
 
 impl<'a> Iterator for LexemesSlice<'a> {
@@ -207,7 +224,6 @@ impl<'a> Lexeme<'a> {
 mod test {
     use super::*;
     use crate::symbol_table::{Symbol, SymbolTable};
-    use std::{fs::File, io::Read};
 
     #[test]
     fn t_tokenize() {

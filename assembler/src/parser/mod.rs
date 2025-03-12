@@ -8,25 +8,11 @@ use std::{
 };
 use thiserror::Error;
 
-// #[derive(Error, Debug)]
-// pub enum ParseError {
-//     #[error("Undefined symbol: {0}")]
-//     UndefinedSymbol(String),
-//     #[error("Duplicate label: {0}")]
-//     DuplicateLabel(String),
-// }
-
 use crate::{
     asm::{directive::DirectiveType, section::Sections},
     lexer::{Lexemes, LexemesSlice},
     token::{IdentifierType, Token},
 };
-
-// #[derive(Debug)]
-// enum DataValue {
-//     Word(u32),
-//     // Add more current_source types as needed
-// }
 
 // #[derive(Debug)]
 // struct SymbolInfo {
@@ -50,21 +36,21 @@ fn on_invalid_grammar<'a>(found: &Option<String>) -> String {
 }
 
 #[derive(Debug)]
-enum TodoParser {
+enum Todo {
     // #[errortra]
     Dir(DirectiveType),
     // #[error("symbol")]
     Symbol,
 }
 
-impl Display for TodoParser {
+impl Display for Todo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
             "{}",
             match self {
-                TodoParser::Dir(directive_type) => format!("{directive_type}"),
-                TodoParser::Symbol => "symbol".to_string(),
+                Todo::Dir(directive_type) => format!("{directive_type}"),
+                Todo::Symbol => "symbol".to_string(),
             }
         )
     }
@@ -83,20 +69,12 @@ pub enum ParserError {
     #[error("Invalid line. Multiple {0}s encountered. Only 1 {0} is allowed")]
     InvalidLine(Single),
     #[error("{0} is still work in progress. Stay tuned!")]
-    UnimplementedFeature(TodoParser),
+    UnimplementedFeature(Todo),
     #[error("Duplicate label {0}")]
     DuplicateLabel(String),
+    //     #[error("Undefined symbol: {0}")]
+    //     UndefinedSymbol(String),
 }
-
-// pub struct Obj {
-//     /// Collection of all sections in the object file.
-//     sections: Sections,
-//     /// Index of the current section being assembled.
-//     current_section: usize,
-//     /// Section header string table content (built during assembly).
-//     shstrtab: Vec<u8>,
-// }
-
 // Parser with grammar checking
 pub struct Parser<'a> {
     lexemes: Lexemes,
@@ -210,29 +188,29 @@ impl<'a> Parser<'a> {
                 match dir_type {
                     Section | Text | Data | Rodata | Bss => {
                         self.sections
-                            .switch(dir_type, self.current_span().to_owned());
+                            .switch(dir_type, &self.current_span().to_owned());
                     }
                     Byte | Half | Word => {
-                        return Err(ParserError::UnimplementedFeature(TodoParser::Dir(dir_type)));
+                        return Err(ParserError::UnimplementedFeature(Todo::Dir(dir_type)));
                         // let ff = dir_type as usize;
                         // self.sections.insert(data);
                         // todo!()
                     }
                     String | Asciz | Ascii => {
-                        return Err(ParserError::UnimplementedFeature(TodoParser::Dir(dir_type)));
+                        return Err(ParserError::UnimplementedFeature(Todo::Dir(dir_type)));
                         // todo!()
                     }
                     Align | Balign | P2align => {
-                        return Err(ParserError::UnimplementedFeature(TodoParser::Dir(dir_type)));
+                        return Err(ParserError::UnimplementedFeature(Todo::Dir(dir_type)));
                     }
                     Set | Equ | Globl => {
-                        return Err(ParserError::UnimplementedFeature(TodoParser::Dir(dir_type)));
+                        return Err(ParserError::UnimplementedFeature(Todo::Dir(dir_type)));
                     }
                     Comm | LComm => {
-                        return Err(ParserError::UnimplementedFeature(TodoParser::Dir(dir_type)));
+                        return Err(ParserError::UnimplementedFeature(Todo::Dir(dir_type)));
                     }
                     Skip => {
-                        return Err(ParserError::UnimplementedFeature(TodoParser::Dir(dir_type)));
+                        return Err(ParserError::UnimplementedFeature(Todo::Dir(dir_type)));
                     }
                 }
 
@@ -291,7 +269,7 @@ impl<'a> Parser<'a> {
                 // }
             }
             Token::Identifier(IdentifierType::Symbol) => {
-                return Err(ParserError::UnimplementedFeature(TodoParser::Symbol));
+                return Err(ParserError::UnimplementedFeature(Todo::Symbol));
                 // self.advance_line();
             }
             Token::Label => {
@@ -319,34 +297,15 @@ impl<'a> Parser<'a> {
                 // self.symbol_table.insert(label.clone(), self.position);
                 // self.advance();
             }
-            Token::Identifier(IdentifierType::Mnemonic(mnemonic_type)) => {
-                let rule = grammar::InstructionRule::new(mnemonic_type);
+            Token::Identifier(IdentifierType::Mnemonic(mnemonic)) => {
+                let rule = grammar::InstructionRule::new(mnemonic);
                 let mut lexemes = self.peek_line();
-
-                //          let section = &mut self.sections[self.current_section];
-                // if let SectionContent::Progbits(vec) = &mut section.content {
-                //     vec.push(ParsedData::Instruction(instr_span));
-                // }
-
-                for (ty, lexeme) in rule.iter().zip(&mut lexemes) {
-                    let token = *lexeme.token();
-                    if token != *ty {
-                        return Err(ParserError::InvalidGrammar {
-                            expected: RuleError::InvalidInstructionSequence(*ty),
-                            found: Some(
-                                String::from_utf8(
-                                    self.get_source(lexeme.span().to_owned()).to_vec(),
-                                )
-                                .unwrap(),
-                            ),
-                        });
-                    }
-                }
 
                 if let Some(mismatch) = rule
                     .iter()
                     .zip(&mut lexemes)
-                    .find(|(ty, lex)| lex.token().to_owned() != **ty)
+                    .filter(|(ty, lex)| lex.token().to_owned() != **ty)
+                    .next()
                 {
                     let (ty, lexeme) = mismatch;
 
@@ -359,11 +318,12 @@ impl<'a> Parser<'a> {
                     });
                 };
 
-                let residue = rule.len().saturating_sub(lexemes.len());
+                let rule_len = rule.len();
+                let residue = rule_len.saturating_sub(lexemes.len());
                 match (residue > 0, &lexemes.next()) {
                     (true, None) => Err(ParserError::InvalidGrammar {
                         expected: RuleError::InvalidInstructionSequence(
-                            rule.get(rule.len() - residue),
+                            rule.get(rule_len - residue),
                         ),
                         found: None,
                     }),
@@ -375,12 +335,16 @@ impl<'a> Parser<'a> {
                         ),
                     }),
                     _ => {
-                        self.advance_by(rule.len());
+                        let tokens = lexemes.tokens().to_vec();
+                        println!("{:?}", tokens);
+                        // self.sections.insert(Element::Instruction {
+                        //     mnemonic,
+                        //     operands: todo!(),
+                        // });
+                        self.advance_by(rule_len);
                         Ok(())
                     }
                 }?;
-
-                // ast.nodes.push(AstNode::Instruction { mnemonic, operands });
             }
             Token::Eol => {
                 println!("=== eol ===");
@@ -408,8 +372,6 @@ impl<'a> Parser<'a> {
 
 #[cfg(test)]
 mod test {
-    use std::{fs::File, io::Read};
-
     use crate::lexer::Lexer;
 
     use super::*;
@@ -420,15 +382,15 @@ mod test {
 
         let raw_source = r#"
         .section .data
-        main: add x1, x2, x3
-            0x1000MP # invalid literal bin
-            99beto // invalid literal decimal
-            0b11kl // invalid literal Binary
-            lw x5, 0x1000(x0)
+        main:
+            // 0x1000MP # invalid literal bin
+            // 99beto // invalid literal decimal
+            // 0b11kl // invalid literal Binary
+            lw x5, -0b1000(x0)
+            add x1, x2, x
             
             addi x5, x6, 10
             # my_symbol x11, x22, 11 //this is a wrong instruction pattern
-            # sw x7, 0x2000(x9) // invalid literal Hex
             # eds0110xFF //valid symbol
             # addi x6, 0x2000(x4)
             # lui x6, 0b111(x4)

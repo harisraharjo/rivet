@@ -30,7 +30,7 @@ pub enum Token {
     LiteralDecimal,
     #[regex(r#"-?0x[0-9a-fA-F]+(?:\w+)?"#, on_literal_integer::<{LiteralIntegerType::Hex as u8}>)]
     LiteralHex,
-    #[regex(r#"0b[01]+(?:\w+)?"#, on_literal_integer::<{LiteralIntegerType::Binary as u8}>)]
+    #[regex(r#"-?0b[01]+(?:\w+)?"#, on_literal_integer::<{LiteralIntegerType::Binary as u8}>)]
     LiteralBinary,
 
     #[token(b"-")]
@@ -70,26 +70,26 @@ impl Display for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let value = match self {
             Token::Identifier(identifier_type) => match identifier_type {
-                IdentifierType::Mnemonic(_) => "INSTRUCTION",
-                IdentifierType::Register(_) => "REGISTER",
-                IdentifierType::Symbol => "SYMBOL",
+                IdentifierType::Mnemonic(_) => "instruction",
+                IdentifierType::Register(_) => "register",
+                IdentifierType::Symbol => "symbol",
             },
-            Token::Label => "LABEL",
-            Token::Directive(_) => "DIRECTIVE",
-            Token::LiteralString => "STRING",
-            Token::LiteralDecimal => "DECIMAL",
-            Token::LiteralHex => "HEX",
-            Token::LiteralBinary => "BINARY",
-            Token::Positive => "POSITIVE",
-            Token::Negative => "NEGATIVE",
-            Token::ParenR => "PARENTHESES",
-            Token::ParenL => "PARENTHESES",
-            Token::QuoteSingle => "SINGLE QUOTE",
+            Token::Label => "label",
+            Token::Directive(_) => "directive",
+            Token::LiteralString => "string",
+            Token::LiteralDecimal => "decimal",
+            Token::LiteralHex => "hex",
+            Token::LiteralBinary => "binary",
+            Token::Positive => "+",
+            Token::Negative => "-",
+            Token::ParenR => ")",
+            Token::ParenL => "(",
+            Token::QuoteSingle => "single quote",
             Token::Comma => "COMMA",
             Token::Colon => "COLON",
             Token::Eol => "EOL",
             Token::Eof => "EOF",
-            Token::CommentSingleLine => "",
+            Token::CommentSingleLine => "#|//",
         };
         write!(f, "{}", value)
     }
@@ -112,7 +112,7 @@ impl TryFrom<&Token> for symbol_table::SymbolType {
         match *value {
             Token::Label => Ok(symbol_table::SymbolType::Label),
             Token::Identifier(IdentifierType::Symbol) => Ok(symbol_table::SymbolType::Constant),
-            _ => Err(LexingError::UnknownSyntax),
+            _ => Err(LexingError::Error),
         }
     }
 }

@@ -6,13 +6,13 @@
 
 .string "Etoo"
 
-main: add x1, x2, x3
-    0x1000MP # invalid literal bin
-    99beto // invalid literal decimal
-    0b11kl // invalid literal Binary
+main: 
+    # 0x1000MP # invalid literal bin
+    # 99beto // invalid literal decimal
+    # 0b11kl // invalid literal Binary
     lw x5, 0x1000(x0)
-    
     addi x5, x6, 10
+    add x1, x2, x3
     # my_symbol x11, x22, 11 //this is a wrong instruction pattern
     # sw x7, 0x2000(x9) // invalid literal Hex
     # eds0110xFF //valid symbol

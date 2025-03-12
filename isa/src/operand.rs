@@ -21,7 +21,7 @@ impl From<ImmediateType> for u32 {
     }
 }
 
-// TODO: Make generic immediate or make it u32 instead
+// TODO: make it u32 instead?
 #[derive(Debug, PartialEq, Eq, Default)]
 pub struct Immediate<const BIT: u32>(i32);
 pub type Immediate14 = Immediate<14>;

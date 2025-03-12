@@ -1,10 +1,13 @@
+use crate::instruction::PseudoInstruction;
+
 use super::directive::DirectiveType;
 use std::ops::Range;
 
 pub struct Sections {
+    // names: Vec<SourceSpan>,
     ///  \[Text, Data, Rodata, Bss]
-    //1 to exclude bss
-    base: [Section<Progbits>; ActiveSection::VARIANT_COUNT - 1],
+    base: [Section<Progbits>; ActiveSection::progbits_len()],
+    // base_span: [Range<usize>; ActiveSection::progbits_len()],
     bss: Section<Nobits>,
     //TODO: support user defined section
     // custom: Vec<Section<Progbits>>,
@@ -12,43 +15,37 @@ pub struct Sections {
 }
 
 impl Sections {
-    pub fn switch(&mut self, ty: DirectiveType, source_span: SourceSpan) {
+    pub fn switch(&mut self, ty: DirectiveType, source_span: &SourceSpan) {
         self.active = match ty {
             DirectiveType::Data => {
                 let active_section = ActiveSection::Data;
-                self.base[active_section as usize]
-                    .name
-                    .get_or_insert(source_span);
+                self.base[active_section as usize].insert_name(source_span);
                 active_section
             }
             DirectiveType::Rodata => {
                 let active_section = ActiveSection::Rodata;
-                self.base[active_section as usize]
-                    .name
-                    .get_or_insert(source_span);
+                self.base[active_section as usize].insert_name(source_span);
                 active_section
             }
             DirectiveType::Bss => {
-                self.bss.name.get_or_insert(source_span);
+                self.bss.insert_name(source_span);
                 ActiveSection::Bss
             }
             _ => {
                 let active_section = ActiveSection::Text;
-                self.base[active_section as usize]
-                    .name
-                    .get_or_insert(source_span);
+                self.base[active_section as usize].insert_name(source_span);
                 active_section
             } // DirectiveType::CustomSection => todo!(),
         };
     }
 
-    pub fn insert(&self, data: u8) -> i32 {
-        if let Some(s) = self.base.get(self.active as usize) {
-            return 1;
+    pub fn insert(&mut self, element: Element) {
+        if let Some(s) = self.base.get_mut(self.active as usize) {
+            s.insert(element);
+            return;
         };
 
-        return 1;
-        // self.bss
+        self.bss.insert(element);
     }
 }
 
@@ -83,7 +80,7 @@ where
     T: ContentType,
 {
     /// Range in the source &[u8] where the section name resides.
-    name: Option<SourceSpan>,
+    name: SourceSpan,
     // /// Type of the section (e.g., Progbits, Nobits).
     // attr: SectionAttribute,
     /// Flags indicating section properties (e.g., ALLOC, EXECINSTR).
@@ -102,7 +99,7 @@ where
 {
     pub const fn new(
         ty: DirectiveType,
-        name: Option<SourceSpan>,
+        name: SourceSpan,
         flags: Flag,
         // alignment: Alignment,
         content: T,
@@ -115,12 +112,19 @@ where
             content,
         }
     }
+
+    fn insert_name(&mut self, span: &SourceSpan) {
+        if self.name.end != 0 {
+            self.name.start = span.start;
+            self.name.end = span.end;
+        };
+    }
 }
 
 impl Default for Section<Progbits> {
     fn default() -> Self {
         Self {
-            name: Default::default(),
+            name: 0..0,
             alignment: Alignment::new(DirectiveType::Text),
             flags: Flag::ALLOC,
             ty: DirectiveType::Text,
@@ -132,11 +136,30 @@ impl Default for Section<Progbits> {
 impl Default for Section<Nobits> {
     fn default() -> Self {
         Self {
-            name: Default::default(),
+            name: 0..0,
             alignment: Alignment::new(DirectiveType::Bss),
             flags: Flag::ALLOC | Flag::WRITE,
             ty: DirectiveType::Bss,
             content: Nobits::default(),
+        }
+    }
+}
+
+impl Section<Progbits> {
+    pub fn insert(&mut self, element: Element) {
+        self.content.buffer.push(element);
+    }
+}
+
+impl Section<Nobits> {
+    pub fn insert(&mut self, element: Element) {
+        self.content.0 = match element {
+            Element::Word(d) => d,
+            Element::Byte(d) => d as u32,
+            Element::Half(d) => d as u32,
+            Element::Skip(d) => d,
+            Element::Align(d) => d,
+            _ => self.content.0,
         }
     }
 }
@@ -149,6 +172,12 @@ pub enum ActiveSection {
     Rodata,
     Bss,
     // CustomSection(usize),
+}
+
+impl ActiveSection {
+    const fn progbits_len() -> usize {
+        Self::VARIANT_COUNT - 1
+    }
 }
 
 use bitflags::bitflags;
@@ -207,41 +236,17 @@ enum Op {
     Div,
 }
 
-// pub struct Elementary<T> where T {
-//     ty: DirectiveType,
-//     data: T
-// }
-
 /// Represents data parsed into a section, using spans for strings.
 #[derive(Debug)]
-enum Element {
-    Word(u32),                 // .word 0x12345678
-    Byte(u8),                  // .byte 0xFF
-    Half(u16),                 // .half 0x1234
-    String(Range<usize>),      // .asciz "hello" (span into source)
-    Instruction(Range<usize>), // e.g., "lw x5, 0(x6)" (span into source)
-    Align(u32),                // New for .align, .p2align, .balign
-    Skip(u32),                 // For .skip size
+pub enum Element {
+    Word(u32),                      // .word 0x12345678
+    Byte(u8),                       // .byte 0xFF
+    Half(u16),                      // .half 0x1234
+    String(Range<usize>),           // .asciz "hello" (span into source)
+    Instruction(PseudoInstruction), // e.g., "lw x5, 0(x6)" (span into source)
+    Align(u32),                     // New for .align, .p2align, .balign
+    Skip(u32),                      // For .skip size
 }
-
-// impl Element {
-//     pub fn new() -> Element {
-//         // match value {
-//         //     DirectiveType::Byte => Self::Byte(Default::default()),
-//         //     DirectiveType::Half => Self::Half(Default::default()),
-//         //     DirectiveType::Word => Self::Word(Default::default()),
-//         //     DirectiveType::String => Self::String(Default::default()),
-//         //     DirectiveType::Asciz => Self::String(Default::default()),
-//         //     DirectiveType::Ascii => Self::String(Default::default()),
-//         //     DirectiveType::Align => Self::Align(Default::default()),
-//         //     DirectiveType::Balign => Self::Align(Default::default()),
-//         //     DirectiveType::P2align => Self::Align(Default::default()),
-//         //     DirectiveType::Skip => Self::Skip(Default::default()),
-
-//         // }
-//         Element {}
-//     }
-// }
 
 pub trait ContentType {}
 #[derive(Debug)]

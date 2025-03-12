@@ -4,10 +4,7 @@ use isa::instruction::{InstructionType, Mnemonic};
 use shared::EnumCount;
 use thiserror::Error;
 
-use crate::{
-    // asm::directive::DirectiveFolder,
-    token::{IdentifierType, Token},
-};
+use crate::token::{IdentifierType, Token};
 
 pub struct InstructionRule<'a> {
     ty: OperandRuleType,
@@ -36,14 +33,15 @@ impl<'a> InstructionRule<'a> {
     }
 
     fn generate_sequence(ty: OperandRuleType) -> &'a [OperandTokenType] {
+        // TODO: support symbol for intermediate
         use OperandTokenType::*;
         match ty {
             OperandRuleType::R3 => [Register, Comma, Register, Comma, Register].as_slice(),
-            OperandRuleType::R2I => [Register, Comma, Register, Comma, Immediate].as_slice(),
+            OperandRuleType::R2I => [Register, Comma, Register, Comma, SymbolOrLiteral].as_slice(),
             OperandRuleType::R2L => [Register, Comma, Register, Comma, Label].as_slice(),
-            OperandRuleType::RI => [Register, Comma, Immediate].as_slice(),
+            OperandRuleType::RI => [Register, Comma, SymbolOrLiteral].as_slice(),
             OperandRuleType::RIR => {
-                [Register, Comma, Immediate, ParenL, Register, ParenR].as_slice()
+                [Register, Comma, SymbolOrLiteral, ParenL, Register, ParenR].as_slice()
             }
             OperandRuleType::RL => [Register, Comma, Label].as_slice(),
         }
@@ -63,9 +61,10 @@ pub enum OperandTokenType {
     Register,
     Comma,
     Label,
-    Immediate,
+    SymbolOrLiteral,
     ParenL,
     ParenR,
+    Negative,
     // Symbol,
     Eol,
 }
@@ -73,20 +72,23 @@ pub enum OperandTokenType {
 impl Display for OperandTokenType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use OperandTokenType::*;
-        write!(
-            f,
-            "{}",
-            match self {
-                Register => "register",
-                Comma => "comma",
-                Label => "label",
-                Immediate => "decimal|hex|binary",
-                ParenL => "(",
-                ParenR => ")",
-                Eol => "eol", //"\\n|\\r"
-                              // Symbol => "symbol",
-            }
-        )
+        match self {
+            Register => Token::register().fmt(f),
+            Comma => Token::Comma.fmt(f),
+            Label => Token::Label.fmt(f),
+            ParenL => Token::ParenL.fmt(f),
+            ParenR => Token::ParenR.fmt(f),
+            Eol => Token::Eol.fmt(f),
+            SymbolOrLiteral => write!(
+                f,
+                "{}|{}|{}|{}",
+                Token::symbol(),
+                Token::LiteralDecimal,
+                Token::LiteralHex,
+                Token::LiteralBinary
+            ),
+            Negative => Token::Negative.fmt(f),
+        }
     }
 }
 
@@ -95,11 +97,11 @@ impl PartialEq<OperandTokenType> for Token {
         use OperandTokenType::*;
         match (self, other) {
             (Token::Identifier(IdentifierType::Register(_)), Register) => true,
-            (Token::Identifier(IdentifierType::Symbol), Immediate) => true,
+            (Token::Identifier(IdentifierType::Symbol), SymbolOrLiteral) => true,
             (Token::Label, Label) => true,
-            (Token::LiteralDecimal, Immediate) => true,
-            (Token::LiteralHex, Immediate) => true,
-            (Token::LiteralBinary, Immediate) => true,
+            (Token::LiteralDecimal, SymbolOrLiteral) => true,
+            (Token::LiteralHex, SymbolOrLiteral) => true,
+            (Token::LiteralBinary, SymbolOrLiteral) => true,
             (Token::ParenR, ParenR) => true,
             (Token::ParenL, ParenL) => true,
             (Token::Comma, Comma) => true,
