@@ -154,7 +154,7 @@ impl LiteralIntegerType {
         }
     }
 
-    /// filter the slices prefix
+    /// filter the bytes
     pub fn filter<'a>(bytes: &'a [u8], mut head: usize) -> &'a [u8] {
         if Self::is_signed(bytes[0]) {
             head += 1;
@@ -164,8 +164,6 @@ impl LiteralIntegerType {
     }
 
     pub const fn base(&self) -> u32 {
-        // let ty =  // Safety: guaranteed to be safe because `i` is an actual index from the selected variant and DirectiveTypes variants are all unit variant.
-        //     unsafe { std::mem::transmute::<u8, LiteralIntegerType>(id) };
         match self {
             LiteralIntegerType::Decimal => 10,
             LiteralIntegerType::Hex => 16,
@@ -201,16 +199,11 @@ pub(super) fn on_literal_integer<const TYPE: u8>(
     if let Some(i) = target.iter().position(callback) {
         return Err(LexingError::InvalidSuffix(
             //safety: we read until the end so it's always safe
-            String::from_utf8(unsafe { target.get_unchecked(i..target.len()).to_vec() }).unwrap(),
+            String::from_utf8(target.get(i..target.len()).unwrap().to_vec()).unwrap(),
             lex.extras.cell.column,
         ));
     }
 
-    // //safety: GUARANTEED to be safe bcs It's already valid ascii
-    // let s = unsafe { std::str::from_utf8_unchecked(slice) };
-
-    // Ok(u64::from_str_radix(s, LiteralIntegerType::base(TYPE))
-    //     .map_err(|e| LexingError::IntegerError(e, lex.extras.cell.column))?)
     Ok(())
 }
 

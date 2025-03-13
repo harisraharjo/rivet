@@ -168,6 +168,7 @@ impl<'a> LexemesSlice<'a> {
         self.tokens[idx]
     }
 
+    /// reset the iterator index
     pub fn reset(&mut self) {
         self.index = 0;
     }

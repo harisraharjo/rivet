@@ -131,6 +131,7 @@ pub trait Codec {
     }
 }
 
+#[derive(Debug)]
 pub enum InstructionType {
     /// Register - Register
     Arithmetic, //r,r,r
@@ -148,13 +149,6 @@ pub enum InstructionType {
     J, //r,i
     /// Upper immediate
     U, //r,i
-}
-
-impl From<u8> for InstructionType {
-    fn from(value: u8) -> Self {
-        // Safety: guaranteed to be safe because both have the same sizes (unit).
-        unsafe { std::mem::transmute::<u8, InstructionType>(value) }
-    }
 }
 
 #[cfg(test)]

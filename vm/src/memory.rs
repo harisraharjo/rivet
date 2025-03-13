@@ -1,5 +1,3 @@
-// use std::{marker::PhantomData, ops::Range};
-
 use std::{
     fmt::{Debug, Display},
     ops::{Index, IndexMut, Range},
@@ -124,7 +122,7 @@ impl ReadWrite<u16> for LinearMemory {
     }
 
     fn write(&mut self, address: usize, value: u16) -> Result<(), MemoryError> {
-        self.bulk_writes::<2>(address, &value.to_le_bytes());
+        self.bulk_writes::<{ std::mem::size_of::<u16>() }>(address, &value.to_le_bytes());
         Ok(())
     }
 }
@@ -138,7 +136,7 @@ impl ReadWrite<u32> for LinearMemory {
     }
 
     fn write(&mut self, address: usize, value: u32) -> Result<(), MemoryError> {
-        let v = value.to_le_bytes();
+        self.bulk_writes::<{ std::mem::size_of::<u32>() }>(address, &value.to_le_bytes());
         // let unit = unsafe {
         //     std::slice::from_raw_parts_mut(
         //         self.buffer.as_mut_ptr().add(address) as *mut MaybeUninit<u8>,

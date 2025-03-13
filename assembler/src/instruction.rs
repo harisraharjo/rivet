@@ -41,10 +41,7 @@ impl<'a> From<(&mut LexemesSlice<'a>, OperandRuleType, Source<'a>)> for Operands
         let mut iter = lexemes
             //`step_by(2)` to skip noises e.g. Comma, ParenL, ParenR
             .step_by(2)
-            .map(|lexeme| -> OperandType {
-                println!("Lexeme: {:?}", lexeme);
-                (lexeme, rule, source).into()
-            });
+            .map(|lexeme| -> OperandType { (lexeme, rule, source).into() });
 
         Self {
             dest: iter.next().unwrap(),
@@ -85,6 +82,12 @@ impl<'a> From<(Lexeme<'a>, OperandRuleType, Source<'a>)> for OperandType {
                     LiteralIntegerType::filter(src, LiteralIntegerType::head_len(int_ty as u8));
                 let src_str = std::str::from_utf8(target).unwrap();
                 // todo: should not unwrap to check if it's inside
+
+                // //safety: GUARANTEED to be safe bcs It's already valid ascii
+                // let s = unsafe { std::str::from_utf8_unchecked(slice) };
+
+                // Ok(u64::from_str_radix(s, LiteralIntegerType::base(TYPE))
+                //     .map_err(|e| LexingError::IntegerError(e, lex.extras.cell.column))?)
                 let imm = i32::from_str_radix(src_str, int_ty.base()).unwrap();
 
                 match rule {
