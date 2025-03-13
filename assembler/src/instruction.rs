@@ -62,7 +62,7 @@ pub enum OperandType {
     Literal14(isa::operand::Immediate14),
     Literal19(isa::operand::Immediate19),
     #[default]
-    None,
+    Unknown,
 }
 
 impl<'a> From<(Lexeme<'a>, OperandRuleType, Source<'a>)> for OperandType {
@@ -78,31 +78,21 @@ impl<'a> From<(Lexeme<'a>, OperandRuleType, Source<'a>)> for OperandType {
             }
             (Identifier(token::IdentifierType::Register(r)), _) => Self::Register(r),
             (Label, _) => Self::Label(lexeme.span().to_owned()),
-            (LiteralDecimal | LiteralHex | LiteralBinary, RI) => {
+            (LiteralDecimal | LiteralHex | LiteralBinary, R2I | RIR | RI) => {
                 let src = source.get(lexeme.span().to_owned()).unwrap();
                 let int_ty = LiteralIntegerType::from(token);
                 let target =
                     LiteralIntegerType::filter(src, LiteralIntegerType::head_len(int_ty as u8));
                 let src_str = std::str::from_utf8(target).unwrap();
-                let base = int_ty.base();
-                // todo: should not unwrap
-                let imm = i32::from_str_radix(src_str, base).unwrap();
-                Self::Literal19(Immediate19::new(imm))
-            }
-            (LiteralDecimal | LiteralHex | LiteralBinary, R2I | RIR) => {
-                let src = source.get(lexeme.span().to_owned()).unwrap();
-                let int_ty = LiteralIntegerType::from(token);
-                let target =
-                    LiteralIntegerType::filter(src, LiteralIntegerType::head_len(int_ty as u8));
-                let src_str = std::str::from_utf8(target).unwrap();
-                println!("SRC: {:?}", src_str);
-                let base = int_ty.base();
-                // todo: should not unwrap
-                let imm = i32::from_str_radix(src_str, base).unwrap();
+                // todo: should not unwrap to check if it's inside
+                let imm = i32::from_str_radix(src_str, int_ty.base()).unwrap();
 
-                Self::Literal14(Immediate14::new(imm))
+                match rule {
+                    R2I | RIR => Self::Literal14(Immediate14::new(imm)),
+                    _ => Self::Literal19(Immediate19::new(imm)),
+                }
             }
-            _ => Self::None,
+            _ => Self::Unknown,
         }
     }
 }

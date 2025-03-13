@@ -302,10 +302,11 @@ impl<'a> Parser<'a> {
                 // self.advance();
             }
             Token::Identifier(IdentifierType::Mnemonic(mnemonic)) => {
-                let rule = grammar::InstructionRule::new(mnemonic);
                 let mut lexemes = self.peek_line();
+                let mut rule = grammar::InstructionRule::new(mnemonic);
+                let sequence = rule.sequence();
 
-                if let Some(mismatch) = rule
+                if let Some(mismatch) = sequence
                     .iter()
                     .zip(lexemes.by_ref())
                     .filter(|(ty, lex)| lex.token().to_owned() != **ty)
@@ -322,13 +323,13 @@ impl<'a> Parser<'a> {
                     });
                 };
 
-                let rule_len = rule.len();
-                let residue = rule_len.saturating_sub(lexemes.len());
+                let seq_len = sequence.len();
+                let residue = seq_len.saturating_sub(lexemes.len());
                 match (residue > 0, &lexemes.next()) {
                     (true, None) => {
                         return Err(ParserError::UnexpectedToken {
                             expected: RuleError::InvalidInstructionSequence(
-                                rule.get(rule_len - residue),
+                                sequence[seq_len - residue],
                             ),
                             found: None,
                         });
@@ -353,7 +354,7 @@ impl<'a> Parser<'a> {
                 // let pseudo = PseudoInstruction
 
                 self.sections.insert(Element::Instruction(ins));
-                self.advance_by(rule_len);
+                self.advance_by(seq_len);
             }
             Token::Eol => {
                 println!("=== eol ===");

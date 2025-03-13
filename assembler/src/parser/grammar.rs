@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{fmt::Display, marker::PhantomData};
 
 use isa::instruction::{InstructionType, Mnemonic};
 use shared::EnumCount;
@@ -6,51 +6,154 @@ use thiserror::Error;
 
 use crate::token::{IdentifierType, Token};
 
-pub struct InstructionRule<'a> {
+pub struct InstructionRule {
+    sequence: [OperandTokenType; OperandTokenType::token_count()],
     ty: OperandRuleType,
-    sequence: &'a [OperandTokenType],
+    // sequence: &'a [OperandTokenType],
 }
 
-impl<'a> InstructionRule<'a> {
-    pub fn new(mnemonic: Mnemonic) -> InstructionRule<'a> {
+impl InstructionRule {
+    pub fn new(mnemonic: Mnemonic) -> InstructionRule {
+        use OperandTokenType::*;
         let ty = OperandRuleType::from(mnemonic);
         InstructionRule {
+            sequence: [Register, Comma, SymbolOrLiteral, Label, ParenL, ParenR],
             ty,
-            sequence: Self::generate_sequence(ty),
+            // sequence: Self::generate_sequence(ty),
         }
     }
 
-    pub fn get(&self, index: usize) -> OperandTokenType {
-        self.sequence[index]
-    }
+    // pub fn get(&self, index: usize) -> OperandTokenType {
+    //     self.sequence[index]
+    // }
 
-    pub fn len(&self) -> usize {
-        self.sequence.len()
-    }
+    // pub fn len(&self) -> usize {
+    //     self.sequence.len()
+    // }
 
-    pub fn iter(&self) -> impl Iterator<Item = &OperandTokenType> + ExactSizeIterator + use<'_> {
-        self.sequence.iter()
-    }
+    // pub fn iter(&self) -> impl Iterator<Item = &OperandTokenType> + ExactSizeIterator + use<'_> {
+    //     self.sequence.iter()
+    // }
+
+    // pub fn iter_real(&self) -> OperandTokenIter {
+    //     OperandTokenIter::new(self.ty)
+    // }
 
     pub fn ty(&self) -> OperandRuleType {
         self.ty
     }
 
-    fn generate_sequence(ty: OperandRuleType) -> &'a [OperandTokenType] {
-        // TODO: support symbol for intermediate
+    pub fn sequence(&mut self) -> &[OperandTokenType] {
         use OperandTokenType::*;
-        match ty {
-            OperandRuleType::R3 => [Register, Comma, Register, Comma, Register].as_slice(),
-            OperandRuleType::R2I => [Register, Comma, Register, Comma, SymbolOrLiteral].as_slice(),
-            OperandRuleType::RI => [Register, Comma, SymbolOrLiteral].as_slice(),
-            OperandRuleType::RIR => {
-                [Register, Comma, SymbolOrLiteral, ParenL, Register, ParenR].as_slice()
+        let last_id: usize = match self.ty {
+            OperandRuleType::R3 => {
+                // [Register, Comma, Register, Comma, Register]
+                self.sequence[2] = Register;
+                self.sequence[3] = Comma;
+                self.sequence[4] = Register;
+                4
             }
-            OperandRuleType::R2L => [Register, Comma, Register, Comma, Label].as_slice(),
-            OperandRuleType::RL => [Register, Comma, Label].as_slice(),
-        }
+            OperandRuleType::R2I => {
+                // [Register, Comma, Register, Comma, SymbolOrLiteral]
+                self.sequence[2] = Register;
+                self.sequence[3] = Comma;
+                self.sequence[4] = SymbolOrLiteral;
+                4
+            }
+            OperandRuleType::RI => {
+                // [Register, Comma, SymbolOrLiteral]
+                self.sequence[2] = SymbolOrLiteral;
+                2
+            }
+            OperandRuleType::RIR => {
+                // [Register, Comma, SymbolOrLiteral, ParenL, Register, ParenR]
+                self.sequence[2] = SymbolOrLiteral;
+                self.sequence[3] = ParenL;
+                self.sequence[4] = Register;
+                self.sequence[5] = ParenR;
+                5
+            }
+            OperandRuleType::R2L => {
+                // [Register, Comma, Register, Comma, Label]
+                self.sequence[2] = Register;
+                self.sequence[3] = Comma;
+                self.sequence[4] = Label;
+                4
+            }
+            OperandRuleType::RL => {
+                // [Register, Comma, Label]
+                self.sequence[2] = Label;
+                2
+            }
+        };
+
+        self.sequence.get(0..last_id + 1).unwrap()
+        // match ty {
+        //     OperandRuleType::R3 => [Register, Comma, Register, Comma, Register].as_slice(),
+        //     OperandRuleType::R2I => [Register, Comma, Register, Comma, SymbolOrLiteral].as_slice(),
+        //     OperandRuleType::RI => [Register, Comma, SymbolOrLiteral].as_slice(),
+        //     OperandRuleType::RIR => {
+        //         [Register, Comma, SymbolOrLiteral, ParenL, Register, ParenR].as_slice()
+        //     }
+        //     OperandRuleType::R2L => [Register, Comma, Register, Comma, Label].as_slice(),
+        //     OperandRuleType::RL => [Register, Comma, Label].as_slice(),
+        // }
     }
 }
+
+// struct OperandTokenIter<'a> {
+//     sequence: &'a [OperandTokenType],
+//     pointer: usize,
+//     index: usize,
+// }
+
+// impl<'a> OperandTokenIter<'a> {
+//     fn new(ty: OperandRuleType, sequence: &'a mut [OperandTokenType]) -> OperandTokenIter<'a> {
+//         match ty {
+//             OperandRuleType::R3 => {
+//                 // [Register, Comma, Register, Comma, Register]
+//                 sequence[2] = OperandTokenType::Register;
+//                 sequence[3] = OperandTokenType::Comma;
+//                 sequence[4] = OperandTokenType::Register;
+//             }
+//             OperandRuleType::R2I => {
+//                 // [Register, Comma, Register, Comma, SymbolOrLiteral]
+//                 sequence[2] = OperandTokenType::Register;
+//                 sequence[3] = OperandTokenType::Comma;
+//                 sequence[4] = OperandTokenType::SymbolOrLiteral;
+//             }
+//             OperandRuleType::RI => {
+//                 // [Register, Comma, SymbolOrLiteral]
+//                 sequence[2] = OperandTokenType::SymbolOrLiteral;
+//             }
+//             OperandRuleType::RIR => {
+//                 // [Register, Comma, SymbolOrLiteral, ParenL, Register, ParenR]
+//                 sequence[2] = OperandTokenType::SymbolOrLiteral;
+//                 sequence[3] = OperandTokenType::ParenL;
+//                 sequence[4] = OperandTokenType::Register;
+//                 sequence[5] = OperandTokenType::ParenR;
+//             }
+//             OperandRuleType::R2L => {
+//                 // [Register, Comma, Register, Comma, Label]
+//                 sequence[2] = OperandTokenType::Register;
+//                 sequence[3] = OperandTokenType::Comma;
+//                 sequence[4] = OperandTokenType::Label;
+//             }
+//             OperandRuleType::RL => {
+//                 // [Register, Comma, Label]
+//                 sequence[2] = OperandTokenType::Label;
+//             }
+//         };
+
+//         Self {
+//             sequence,
+//             pointer: 0,
+//             index: 0,
+//         }
+//     }
+// }
+
+struct PointerIter {}
 
 #[derive(Error, Debug)]
 pub enum RuleError {
@@ -68,9 +171,16 @@ pub enum OperandTokenType {
     SymbolOrLiteral,
     ParenL,
     ParenR,
-    Negative,
+    // Negative,
     // Symbol,
     Eol,
+}
+
+impl OperandTokenType {
+    const fn token_count() -> usize {
+        // 1 to remove Eol
+        OperandTokenType::VARIANT_COUNT - 1
+    }
 }
 
 impl Display for OperandTokenType {
@@ -91,7 +201,7 @@ impl Display for OperandTokenType {
                 Token::LiteralHex,
                 Token::LiteralBinary
             ),
-            Negative => Token::Negative.fmt(f),
+            // Negative => Token::Negative.fmt(f),
         }
     }
 }
@@ -100,16 +210,14 @@ impl PartialEq<OperandTokenType> for Token {
     fn eq(&self, other: &OperandTokenType) -> bool {
         use OperandTokenType::*;
         match (self, other) {
-            (Token::Identifier(IdentifierType::Register(_)), Register) => true,
-            (Token::Identifier(IdentifierType::Symbol), SymbolOrLiteral) => true,
-            (Token::Label, Label) => true,
-            (Token::LiteralDecimal, SymbolOrLiteral) => true,
-            (Token::LiteralHex, SymbolOrLiteral) => true,
-            (Token::LiteralBinary, SymbolOrLiteral) => true,
-            (Token::ParenR, ParenR) => true,
-            (Token::ParenL, ParenL) => true,
-            (Token::Comma, Comma) => true,
-            (Token::Eol, Eol) => true,
+            (Token::Identifier(IdentifierType::Register(_)), Register)
+            | (Token::Identifier(IdentifierType::Symbol), SymbolOrLiteral)
+            | (Token::Label, Label)
+            | (Token::LiteralDecimal | Token::LiteralHex | Token::LiteralBinary, SymbolOrLiteral)
+            | (Token::ParenR, ParenR)
+            | (Token::ParenL, ParenL)
+            | (Token::Comma, Comma)
+            | (Token::Eol, Eol) => true,
             _ => false,
         }
     }
