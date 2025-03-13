@@ -33,30 +33,9 @@ enum Single {
 
 fn on_invalid_grammar<'a>(found: &Option<String>) -> String {
     if let Some(v) = found {
-        format!("found {v}")
+        format!(" found {v}")
     } else {
         Default::default()
-    }
-}
-
-#[derive(Debug)]
-enum Todo {
-    // #[errortra]
-    Dir(DirectiveType),
-    // #[error("symbol")]
-    Symbol,
-}
-
-impl Display for Todo {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                Todo::Dir(directive_type) => format!("{directive_type}"),
-                Todo::Symbol => "symbol".to_string(),
-            }
-        )
     }
 }
 
@@ -64,7 +43,7 @@ impl Display for Todo {
 pub enum ParserError {
     #[error("Syntax Error. expected LABEL|DIRECTIVE|MNEMONIC")]
     SyntaxError,
-    #[error("Unexpected Token. expected {expected} {}", on_invalid_grammar(.found))]
+    #[error("Expected {expected}{}", on_invalid_grammar(.found))]
     UnexpectedToken {
         #[source]
         expected: RuleError,
@@ -345,9 +324,11 @@ impl<'a> Parser<'a> {
                     }
                     _ => {}
                 };
+                let rule_ty = rule.ty();
+                drop(rule);
 
                 lexemes.reset();
-                let operands = Operands::from((&mut lexemes, rule.ty(), self.source));
+                let operands = Operands::from((&mut lexemes, rule_ty, self.source));
                 println!("Operands: {:?}", operands);
                 let ins = crate::instruction::Instruction::new(mnemonic, operands);
 
@@ -380,6 +361,27 @@ impl<'a> Parser<'a> {
     // }
 }
 
+#[derive(Debug)]
+enum Todo {
+    // #[errortra]
+    Dir(DirectiveType),
+    // #[error("symbol")]
+    Symbol,
+}
+
+impl Display for Todo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Todo::Dir(directive_type) => format!("{directive_type}"),
+                Todo::Symbol => "symbol".to_string(),
+            }
+        )
+    }
+}
+
 #[cfg(test)]
 mod test {
     use crate::lexer::Lexer;
@@ -393,7 +395,6 @@ mod test {
         let raw_source = r#"
         .section .data
         main:
-            lw x5, -0b1000(x0)
             
             addi x5, x6, my_symbol
             # my_symbol x11, x22, 11 //this is a wrong instruction pattern

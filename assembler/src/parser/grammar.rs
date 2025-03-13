@@ -1,10 +1,18 @@
-use std::{fmt::Display, marker::PhantomData};
+use std::fmt::Display;
 
 use isa::instruction::{InstructionType, Mnemonic};
 use shared::EnumCount;
 use thiserror::Error;
 
 use crate::token::{IdentifierType, Token};
+
+#[derive(Error, Debug)]
+pub enum RuleError {
+    #[error("`{0}`")]
+    InvalidInstructionSequence(OperandTokenType),
+    #[error("directive|instruction|break")]
+    InvalidLabelSequence,
+}
 
 pub struct InstructionRule {
     sequence: [OperandTokenType; OperandTokenType::token_count()],
@@ -15,29 +23,11 @@ pub struct InstructionRule {
 impl InstructionRule {
     pub fn new(mnemonic: Mnemonic) -> InstructionRule {
         use OperandTokenType::*;
-        let ty = OperandRuleType::from(mnemonic);
         InstructionRule {
             sequence: [Register, Comma, SymbolOrLiteral, Label, ParenL, ParenR],
-            ty,
-            // sequence: Self::generate_sequence(ty),
+            ty: OperandRuleType::from(mnemonic),
         }
     }
-
-    // pub fn get(&self, index: usize) -> OperandTokenType {
-    //     self.sequence[index]
-    // }
-
-    // pub fn len(&self) -> usize {
-    //     self.sequence.len()
-    // }
-
-    // pub fn iter(&self) -> impl Iterator<Item = &OperandTokenType> + ExactSizeIterator + use<'_> {
-    //     self.sequence.iter()
-    // }
-
-    // pub fn iter_real(&self) -> OperandTokenIter {
-    //     OperandTokenIter::new(self.ty)
-    // }
 
     pub fn ty(&self) -> OperandRuleType {
         self.ty
@@ -88,79 +78,7 @@ impl InstructionRule {
         };
 
         self.sequence.get(0..last_id + 1).unwrap()
-        // match ty {
-        //     OperandRuleType::R3 => [Register, Comma, Register, Comma, Register].as_slice(),
-        //     OperandRuleType::R2I => [Register, Comma, Register, Comma, SymbolOrLiteral].as_slice(),
-        //     OperandRuleType::RI => [Register, Comma, SymbolOrLiteral].as_slice(),
-        //     OperandRuleType::RIR => {
-        //         [Register, Comma, SymbolOrLiteral, ParenL, Register, ParenR].as_slice()
-        //     }
-        //     OperandRuleType::R2L => [Register, Comma, Register, Comma, Label].as_slice(),
-        //     OperandRuleType::RL => [Register, Comma, Label].as_slice(),
-        // }
     }
-}
-
-// struct OperandTokenIter<'a> {
-//     sequence: &'a [OperandTokenType],
-//     pointer: usize,
-//     index: usize,
-// }
-
-// impl<'a> OperandTokenIter<'a> {
-//     fn new(ty: OperandRuleType, sequence: &'a mut [OperandTokenType]) -> OperandTokenIter<'a> {
-//         match ty {
-//             OperandRuleType::R3 => {
-//                 // [Register, Comma, Register, Comma, Register]
-//                 sequence[2] = OperandTokenType::Register;
-//                 sequence[3] = OperandTokenType::Comma;
-//                 sequence[4] = OperandTokenType::Register;
-//             }
-//             OperandRuleType::R2I => {
-//                 // [Register, Comma, Register, Comma, SymbolOrLiteral]
-//                 sequence[2] = OperandTokenType::Register;
-//                 sequence[3] = OperandTokenType::Comma;
-//                 sequence[4] = OperandTokenType::SymbolOrLiteral;
-//             }
-//             OperandRuleType::RI => {
-//                 // [Register, Comma, SymbolOrLiteral]
-//                 sequence[2] = OperandTokenType::SymbolOrLiteral;
-//             }
-//             OperandRuleType::RIR => {
-//                 // [Register, Comma, SymbolOrLiteral, ParenL, Register, ParenR]
-//                 sequence[2] = OperandTokenType::SymbolOrLiteral;
-//                 sequence[3] = OperandTokenType::ParenL;
-//                 sequence[4] = OperandTokenType::Register;
-//                 sequence[5] = OperandTokenType::ParenR;
-//             }
-//             OperandRuleType::R2L => {
-//                 // [Register, Comma, Register, Comma, Label]
-//                 sequence[2] = OperandTokenType::Register;
-//                 sequence[3] = OperandTokenType::Comma;
-//                 sequence[4] = OperandTokenType::Label;
-//             }
-//             OperandRuleType::RL => {
-//                 // [Register, Comma, Label]
-//                 sequence[2] = OperandTokenType::Label;
-//             }
-//         };
-
-//         Self {
-//             sequence,
-//             pointer: 0,
-//             index: 0,
-//         }
-//     }
-// }
-
-struct PointerIter {}
-
-#[derive(Error, Debug)]
-pub enum RuleError {
-    #[error("`{0}`")]
-    InvalidInstructionSequence(OperandTokenType),
-    #[error("directive|instruction|break")]
-    InvalidLabelSequence,
 }
 
 #[derive(EnumCount, Copy, Clone, Debug)]
