@@ -1,4 +1,4 @@
-use crate::instruction::PseudoInstruction;
+use crate::instruction::Instruction;
 
 use super::directive::DirectiveType;
 use std::ops::Range;
@@ -239,13 +239,13 @@ enum Op {
 /// Represents data parsed into a section, using spans for strings.
 #[derive(Debug)]
 pub enum Element {
-    Word(u32),                      // .word 0x12345678
-    Byte(u8),                       // .byte 0xFF
-    Half(u16),                      // .half 0x1234
-    String(Range<usize>),           // .asciz "hello" (span into source)
-    Instruction(PseudoInstruction), // e.g., "lw x5, 0(x6)" (span into source)
-    Align(u32),                     // New for .align, .p2align, .balign
-    Skip(u32),                      // For .skip size
+    Word(u32),                // .word 0x12345678
+    Byte(u8),                 // .byte 0xFF
+    Half(u16),                // .half 0x1234
+    String(Range<usize>),     // .asciz "hello" (span into source)
+    Instruction(Instruction), // e.g., "lw x5, 0(x6)" (span into source)
+    Align(u32),               // New for .align, .p2align, .balign
+    Skip(u32),                // For .skip size
 }
 
 pub trait ContentType {}

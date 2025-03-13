@@ -26,7 +26,6 @@ impl Default for Cell {
 #[derive(Default, Debug)]
 pub struct State {
     cell: Cell,
-    // last_span: Range<usize>,
     last_token: Token, // in_block_comments: bool,
 }
 
@@ -54,7 +53,7 @@ pub enum LexingError {
     InvalidSuffix(String, usize),
     #[error("Invalid Ascii Character at {0}")]
     NonAsciiCharacter(usize),
-    #[error("Unknown Syntax {0} at row {0}")]
+    #[error("Unknown syntax {0} at row {0}")]
     UnknownSyntax(String, usize),
     #[default]
     #[error("")]
@@ -85,6 +84,11 @@ impl IdentifierType {
         isa::instruction::Mnemonic::variants()
     }
 
+    // #[inline(always)]
+    // fn pseudo_mnemonics<'a>() -> [&'a str; crate::instruction::PseudoMnemonic::VARIANT_COUNT] {
+    //     crate::instruction::PseudoMnemonic::variants()
+    // }
+
     #[inline(always)]
     fn registers<'a>() -> [&'a str; isa::Register::VARIANT_COUNT] {
         isa::Register::variants()
@@ -111,14 +115,8 @@ impl From<&[u8]> for IdentifierType {
     }
 }
 
-pub(super) fn on_ident(lex: &mut logos::Lexer<Token>) -> Result<IdentifierType, LexingError> {
-    let value = lex.slice();
-    if !value.is_ascii() {
-        // let cow = String::from_utf8_lossy(value);
-        return Err(LexingError::NonAsciiCharacter(lex.extras.cell.row));
-    }
-
-    Ok(value.into())
+pub(super) fn on_ident(lex: &mut logos::Lexer<Token>) -> IdentifierType {
+    lex.slice().into()
 }
 
 fn on_decimal(b: &u8) -> bool {
@@ -131,10 +129,12 @@ fn on_hex(b: &u8) -> bool {
     !b.is_ascii_hexdigit()
 }
 
+#[derive(Debug, Clone, Copy)]
 pub enum LiteralIntegerType {
     Decimal,
     Hex,
     Binary,
+    Unknown,
 }
 
 impl LiteralIntegerType {
@@ -146,20 +146,46 @@ impl LiteralIntegerType {
         }
     }
 
-    const fn skip_by(id: u8) -> usize {
+    /// The length of the "head" e.g. hex: `0x`, bin: `0b`
+    pub const fn head_len(id: u8) -> usize {
         match id {
-            0 => 1,
+            0 => id as usize,
             _ => 2,
         }
     }
 
-    const fn base(id: u8) -> u32 {
-        let ty =  // Safety: guaranteed to be safe because `i` is an actual index from the selected variant and DirectiveTypes variants are all unit variant.
-            unsafe { std::mem::transmute::<u8, LiteralIntegerType>(id) };
-        match ty {
+    /// filter the slices prefix
+    pub fn filter<'a>(bytes: &'a [u8], mut head: usize) -> &'a [u8] {
+        if Self::is_signed(bytes[0]) {
+            head += 1;
+        }
+
+        bytes.get(head..).unwrap()
+    }
+
+    pub const fn base(&self) -> u32 {
+        // let ty =  // Safety: guaranteed to be safe because `i` is an actual index from the selected variant and DirectiveTypes variants are all unit variant.
+        //     unsafe { std::mem::transmute::<u8, LiteralIntegerType>(id) };
+        match self {
             LiteralIntegerType::Decimal => 10,
             LiteralIntegerType::Hex => 16,
             LiteralIntegerType::Binary => 2,
+            LiteralIntegerType::Unknown => 0,
+        }
+    }
+
+    fn is_signed(byte: u8) -> bool {
+        byte == b'-'
+    }
+}
+
+impl From<Token> for LiteralIntegerType {
+    fn from(value: Token) -> Self {
+        match value {
+            Token::LiteralDecimal => Self::Decimal,
+            Token::LiteralHex => Self::Hex,
+            Token::LiteralBinary => Self::Binary,
+            _ => Self::Unknown,
         }
     }
 }
@@ -168,17 +194,9 @@ pub(super) fn on_literal_integer<const TYPE: u8>(
     lex: &mut logos::Lexer<Token>,
 ) -> Result<(), LexingError> {
     // assert!(TYPE <= LiteralIntegerType::COUNT);
-    let mut slice = lex.slice();
-    if !slice.is_ascii() {
-        return Err(LexingError::NonAsciiCharacter(lex.extras.cell.row));
-    }
 
-    if slice[0] == b'-' {
-        slice = slice.get(1..).unwrap();
-    }
+    let target = LiteralIntegerType::filter(lex.slice(), LiteralIntegerType::head_len(TYPE));
 
-    //safety: we read until the end so it's always safe
-    let target = unsafe { slice.get_unchecked(LiteralIntegerType::skip_by(TYPE)..) };
     let callback = LiteralIntegerType::cb(TYPE);
     if let Some(i) = target.iter().position(callback) {
         return Err(LexingError::InvalidSuffix(

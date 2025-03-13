@@ -4,8 +4,9 @@ use std::fmt::Display;
 
 use logos::Logos;
 
+pub use helper::LiteralIntegerType;
 pub use helper::{IdentifierType, LexingError};
-use helper::{LiteralIntegerType, State, on_directive, on_ident, on_literal_integer, on_newline};
+use helper::{State, on_directive, on_ident, on_literal_integer, on_newline};
 
 use crate::{asm::directive::DirectiveType, symbol_table};
 
@@ -96,12 +97,12 @@ impl Display for Token {
 }
 
 impl Token {
-    pub const fn register() -> Token {
-        Token::Identifier(IdentifierType::Register(isa::Register::X0))
+    pub const fn register() -> Self {
+        Self::Identifier(IdentifierType::Register(isa::Register::X0))
     }
 
-    pub fn symbol() -> Token {
-        Token::Identifier(IdentifierType::Symbol)
+    pub fn symbol() -> Self {
+        Self::Identifier(IdentifierType::Symbol)
     }
 }
 

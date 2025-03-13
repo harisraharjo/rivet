@@ -32,17 +32,21 @@ impl<'a> InstructionRule<'a> {
         self.sequence.iter()
     }
 
+    pub fn ty(&self) -> OperandRuleType {
+        self.ty
+    }
+
     fn generate_sequence(ty: OperandRuleType) -> &'a [OperandTokenType] {
         // TODO: support symbol for intermediate
         use OperandTokenType::*;
         match ty {
             OperandRuleType::R3 => [Register, Comma, Register, Comma, Register].as_slice(),
             OperandRuleType::R2I => [Register, Comma, Register, Comma, SymbolOrLiteral].as_slice(),
-            OperandRuleType::R2L => [Register, Comma, Register, Comma, Label].as_slice(),
             OperandRuleType::RI => [Register, Comma, SymbolOrLiteral].as_slice(),
             OperandRuleType::RIR => {
                 [Register, Comma, SymbolOrLiteral, ParenL, Register, ParenR].as_slice()
             }
+            OperandRuleType::R2L => [Register, Comma, Register, Comma, Label].as_slice(),
             OperandRuleType::RL => [Register, Comma, Label].as_slice(),
         }
     }

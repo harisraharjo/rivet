@@ -9,7 +9,11 @@ use std::{
 use thiserror::Error;
 
 use crate::{
-    asm::{directive::DirectiveType, section::Sections},
+    asm::{
+        directive::DirectiveType,
+        section::{Element, Sections},
+    },
+    instruction::Operands,
     lexer::{Lexemes, LexemesSlice},
     token::{IdentifierType, Token},
 };
@@ -60,8 +64,8 @@ impl Display for Todo {
 pub enum ParserError {
     #[error("Syntax Error. expected LABEL|DIRECTIVE|MNEMONIC")]
     SyntaxError,
-    #[error("Invalid grammar. expected {expected} {}", on_invalid_grammar(.found))]
-    InvalidGrammar {
+    #[error("Unexpected Token. expected {expected} {}", on_invalid_grammar(.found))]
+    UnexpectedToken {
         #[source]
         expected: RuleError,
         found: Option<String>,
@@ -280,16 +284,16 @@ impl<'a> Parser<'a> {
                     return Err(ParserError::InvalidLine(Single::Label));
                 }
 
-                match lexemes.peek().unwrap().token() {
-                    Token::Identifier(IdentifierType::Mnemonic(_)) => {}
-                    Token::Eol => {}
-                    Token::Eof => {}
-                    Token::Directive(_) => {}
-                    token @ _ => {
-                        return Err(ParserError::InvalidGrammar {
-                            expected: RuleError::InvalidLabelSequence,
-                            found: Some(format!("{}", token.to_owned())),
-                        });
+                if let Some(l) = lexemes.peek() {
+                    match l.token() {
+                        Token::Identifier(IdentifierType::Mnemonic(_)) => {}
+                        Token::Directive(_) => {}
+                        token @ _ => {
+                            return Err(ParserError::UnexpectedToken {
+                                expected: RuleError::InvalidLabelSequence,
+                                found: Some(format!("{}", *token)),
+                            });
+                        }
                     }
                 }
 
@@ -303,13 +307,13 @@ impl<'a> Parser<'a> {
 
                 if let Some(mismatch) = rule
                     .iter()
-                    .zip(&mut lexemes)
+                    .zip(lexemes.by_ref())
                     .filter(|(ty, lex)| lex.token().to_owned() != **ty)
                     .next()
                 {
                     let (ty, lexeme) = mismatch;
 
-                    return Err(ParserError::InvalidGrammar {
+                    return Err(ParserError::UnexpectedToken {
                         expected: RuleError::InvalidInstructionSequence(*ty),
                         found: Some(
                             String::from_utf8(self.get_source(lexeme.span().to_owned()).to_vec())
@@ -321,30 +325,35 @@ impl<'a> Parser<'a> {
                 let rule_len = rule.len();
                 let residue = rule_len.saturating_sub(lexemes.len());
                 match (residue > 0, &lexemes.next()) {
-                    (true, None) => Err(ParserError::InvalidGrammar {
-                        expected: RuleError::InvalidInstructionSequence(
-                            rule.get(rule_len - residue),
-                        ),
-                        found: None,
-                    }),
-                    (false, Some(lex)) => Err(ParserError::InvalidGrammar {
-                        expected: RuleError::InvalidInstructionSequence(OperandTokenType::Eol),
-                        found: Some(
-                            String::from_utf8(self.get_source(lex.span().to_owned()).to_vec())
-                                .unwrap(),
-                        ),
-                    }),
-                    _ => {
-                        let tokens = lexemes.tokens().to_vec();
-                        println!("{:?}", tokens);
-                        // self.sections.insert(Element::Instruction {
-                        //     mnemonic,
-                        //     operands: todo!(),
-                        // });
-                        self.advance_by(rule_len);
-                        Ok(())
+                    (true, None) => {
+                        return Err(ParserError::UnexpectedToken {
+                            expected: RuleError::InvalidInstructionSequence(
+                                rule.get(rule_len - residue),
+                            ),
+                            found: None,
+                        });
                     }
-                }?;
+                    (false, Some(lex)) => {
+                        return Err(ParserError::UnexpectedToken {
+                            expected: RuleError::InvalidInstructionSequence(OperandTokenType::Eol),
+                            found: Some(
+                                String::from_utf8(self.get_source(lex.span().to_owned()).to_vec())
+                                    .unwrap(),
+                            ),
+                        });
+                    }
+                    _ => {}
+                };
+
+                lexemes.reset();
+                let operands = Operands::from((&mut lexemes, rule.ty(), self.source));
+                println!("Operands: {:?}", operands);
+                let ins = crate::instruction::Instruction::new(mnemonic, operands);
+
+                // let pseudo = PseudoInstruction
+
+                self.sections.insert(Element::Instruction(ins));
+                self.advance_by(rule_len);
             }
             Token::Eol => {
                 println!("=== eol ===");
@@ -383,13 +392,9 @@ mod test {
         let raw_source = r#"
         .section .data
         main:
-            // 0x1000MP # invalid literal bin
-            // 99beto // invalid literal decimal
-            // 0b11kl // invalid literal Binary
             lw x5, -0b1000(x0)
-            add x1, x2, x
             
-            addi x5, x6, 10
+            addi x5, x6, my_symbol
             # my_symbol x11, x22, 11 //this is a wrong instruction pattern
             # eds0110xFF //valid symbol
             # addi x6, 0x2000(x4)
@@ -397,6 +402,9 @@ mod test {
             lw x1, 10(x5)
             sw x1, 111(x5)
             lui x1, 0x1212
+            // 0x1000MP # invalid literal bin
+            // 99beto // invalid literal decimal
+            // 0b11kl // invalid literal Binary
         "#;
 
         let source = raw_source.to_string();

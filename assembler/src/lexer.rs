@@ -19,15 +19,11 @@ impl Lexer {
             lex.extras.advance_row();
             let token = sequence.map_err(|e| match e {
                 LexingError::Error => {
-                    let slice = unsafe { input.get_unchecked(lex.span()) };
-                    if !slice.is_ascii() {
-                        LexingError::NonAsciiCharacter(lex.extras.cell().row())
-                    } else {
-                        LexingError::UnknownSyntax(
-                            String::from_utf8(slice.to_vec()).unwrap(),
-                            lex.extras.cell().row(),
-                        )
-                    }
+                    let slice = input.get(lex.span()).unwrap();
+                    LexingError::UnknownSyntax(
+                        String::from_utf8(slice.to_vec()).unwrap(),
+                        lex.extras.cell().row(),
+                    )
                 }
                 _ => e,
             })?;
@@ -89,6 +85,10 @@ impl Lexemes {
         &self.spans
     }
 
+    pub fn slice(&self, index: Range<usize>) -> LexemesSlice<'_> {
+        LexemesSlice::new(&self.tokens[index.clone()], &self.spans[index])
+    }
+
     pub fn iter(&self) -> impl Iterator<Item = (&Token, &Range<usize>)> {
         self.tokens.iter().zip(&self.spans)
     }
@@ -115,10 +115,6 @@ impl Lexemes {
             self.tokens.push(Token::Eof);
             self.shrink_to_fit();
         }
-    }
-
-    pub fn slice(&self, index: Range<usize>) -> LexemesSlice<'_> {
-        LexemesSlice::new(&self.tokens[index.clone()], &self.spans[index])
     }
 }
 
@@ -166,6 +162,14 @@ impl<'a> LexemesSlice<'a> {
 
     pub fn tokens(&self) -> &'a [Token] {
         self.tokens
+    }
+
+    pub fn get_token(&self, idx: usize) -> Token {
+        self.tokens[idx]
+    }
+
+    pub fn reset(&mut self) {
+        self.index = 0;
     }
 }
 
