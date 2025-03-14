@@ -1,5 +1,11 @@
+use thiserror::Error;
+
 use crate::instruction::Codec;
-use std::ops::{BitAnd, Shl};
+use std::{
+    fmt::Display,
+    num::IntErrorKind,
+    ops::{BitAnd, Shl},
+};
 
 pub(crate) enum ImmediateType {
     B14,
@@ -21,25 +27,51 @@ impl From<ImmediateType> for u32 {
     }
 }
 
+#[derive(Debug, Error)]
+pub enum ImmediateValueError {
+    #[error("Immediate value error: {0}")]
+    ParseError(IntError),
+}
+
+#[derive(Debug)]
+pub struct IntError(IntErrorKind);
+
+impl Display for IntError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let _str = match self.0 {
+            IntErrorKind::PosOverflow => "value is too large",
+            IntErrorKind::NegOverflow => "value is too small",
+            // IntErrorKind::Empty => todo!(),
+            // IntErrorKind::InvalidDigit => todo!(),
+            // IntErrorKind::Zero => todo!(),
+            _ => "",
+        };
+        write!(f, "{_str}")
+    }
+}
+
 // TODO: make it u32 instead?
 #[derive(Debug, PartialEq, Eq, Default)]
 pub struct Immediate<const BIT: u32>(i32);
-pub type Immediate14 = Immediate<14>;
-pub type Immediate19 = Immediate<19>;
+pub type Immediate14 = Immediate<{ ImmediateType::B14.length() }>;
+pub type Immediate19 = Immediate<{ ImmediateType::B19.length() }>;
 
 impl<const BIT: u32> Immediate<BIT> {
-    const _BIT: () = if BIT == 14 || BIT == 19 {
-        ()
-    } else {
-        panic!("Immediate only support 14 & 19 Bit");
+    const _BIT: () = {
+        let var1 = ImmediateType::B14.length();
+        let var2 = ImmediateType::B19.length();
+
+        if BIT == var1 || BIT == var2 {
+            ()
+        } else {
+            panic!("Immediate only support 14 & 19 Bit");
+        }
     };
 
     pub fn new(value: i32) -> Self {
         let _ = Self::_BIT;
 
-        let max = (1 << (BIT - 1)) - 1; //i32
-        // let max = (1 << BIT) - 1; //u32
-        let min = -(max + 1);
+        let (min, max) = Self::bound();
         assert!(
             value >= min && value <= max,
             "the value does not fit into `{}` bit",
@@ -47,6 +79,29 @@ impl<const BIT: u32> Immediate<BIT> {
         );
 
         Immediate(value)
+    }
+
+    fn bound() -> (i32, i32) {
+        let max = (1 << (BIT - 1)) - 1; //i32
+        // let max = (1 << BIT) - 1; //u32
+        let min = -(max + 1);
+        (min, max)
+    }
+
+    fn check_bound(value: i32) -> Result<i32, ImmediateValueError> {
+        let (min, max) = Self::bound();
+
+        if value < min {
+            Err(ImmediateValueError::ParseError(IntError(
+                IntErrorKind::NegOverflow,
+            )))
+        } else if value > max {
+            Err(ImmediateValueError::ParseError(IntError(
+                IntErrorKind::PosOverflow,
+            )))
+        } else {
+            Ok(value)
+        }
     }
 
     pub fn value(&self) -> i32 {
@@ -71,6 +126,22 @@ impl<const BIT: u32> Immediate<BIT> {
 
 impl Immediate<{ ImmediateType::B14.length() }> {}
 impl Immediate<{ ImmediateType::B19.length() }> {}
+
+impl TryFrom<i32> for Immediate<14> {
+    type Error = ImmediateValueError;
+
+    fn try_from(value: i32) -> Result<Self, Self::Error> {
+        Ok(Self(Self::check_bound(value)?))
+    }
+}
+
+impl TryFrom<i32> for Immediate<19> {
+    type Error = ImmediateValueError;
+
+    fn try_from(value: i32) -> Result<Self, Self::Error> {
+        Ok(Self(Self::check_bound(value)?))
+    }
+}
 
 impl<const BIT: u32> Codec for Immediate<BIT> {
     fn decode(src: u32, bit_accumulation: u32, bit_mask: u32) -> Self
@@ -140,6 +211,7 @@ mod test_super {
     #[test]
     fn t_imm() {
         let imm = Immediate14::new(-31);
+
         let result = imm.encode(0x3FFF, 18);
         assert_eq!(result, 0xFF840000);
 

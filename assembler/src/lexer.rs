@@ -18,13 +18,10 @@ impl Lexer {
         while let Some(sequence) = lex.next() {
             lex.extras.advance_row();
             let token = sequence.map_err(|e| match e {
-                LexingError::Error => {
-                    let slice = input.get(lex.span()).unwrap();
-                    LexingError::UnknownSyntax(
-                        String::from_utf8(slice.to_vec()).unwrap(),
-                        lex.extras.cell().row(),
-                    )
-                }
+                LexingError::Error => LexingError::UnknownSyntax(
+                    String::from_utf8(input.get(lex.span()).unwrap().to_vec()).unwrap(),
+                    lex.extras.cell().row(),
+                ),
                 _ => e,
             })?;
             lex.extras.set_last_token(token);

@@ -159,6 +159,13 @@ pub enum OperandRuleType {
     RL,
 }
 
+impl OperandRuleType {
+    /// Function to remind that there are noises e.g. `Comma, ParenL, ParenR` in every `X`id
+    pub(crate) const fn noises_in_every() -> usize {
+        2
+    }
+}
+
 impl From<InstructionType> for OperandRuleType {
     fn from(value: InstructionType) -> Self {
         use InstructionType::*;

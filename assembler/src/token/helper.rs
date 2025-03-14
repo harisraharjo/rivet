@@ -172,7 +172,7 @@ impl LiteralIntegerType {
         }
     }
 
-    fn is_signed(byte: u8) -> bool {
+    pub fn is_signed(byte: u8) -> bool {
         byte == b'-'
     }
 }

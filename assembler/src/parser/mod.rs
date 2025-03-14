@@ -4,6 +4,7 @@ mod token;
 use grammar::{OperandTokenType, RuleError};
 use std::{
     fmt::{Debug, Display},
+    i32,
     ops::Range,
 };
 use thiserror::Error;
@@ -13,7 +14,7 @@ use crate::{
         directive::DirectiveType,
         section::{Element, Sections},
     },
-    instruction::Operands,
+    instruction::{OperandError, Operands},
     lexer::{Lexemes, LexemesSlice},
     token::{IdentifierType, Token},
 };
@@ -55,6 +56,8 @@ pub enum ParserError {
     UnimplementedFeature(Todo),
     #[error("Duplicate label {0}")]
     DuplicateLabel(String),
+    #[error(transparent)]
+    ValueError(#[from] OperandError),
     //     #[error("Undefined symbol: {0}")]
     //     UndefinedSymbol(String),
 }
@@ -328,10 +331,10 @@ impl<'a> Parser<'a> {
                 drop(rule);
 
                 lexemes.reset();
-                let operands = Operands::from((&mut lexemes, rule_ty, self.source));
-                println!("Operands: {:?}", operands);
+                let operands = Operands::try_from((&mut lexemes, rule_ty, self.source))?;
                 let ins = crate::instruction::Instruction::new(mnemonic, operands);
 
+                println!("Instruction IR: {:?}", ins);
                 // let pseudo = PseudoInstruction
 
                 self.sections.insert(Element::Instruction(ins));
@@ -371,14 +374,10 @@ enum Todo {
 
 impl Display for Todo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                Todo::Dir(directive_type) => format!("{directive_type}"),
-                Todo::Symbol => "symbol".to_string(),
-            }
-        )
+        match self {
+            Todo::Dir(directive_type) => Display::fmt(directive_type, f),
+            Todo::Symbol => write!(f, "{}", "symbol"),
+        }
     }
 }
 
@@ -397,10 +396,10 @@ mod test {
         main:
             
             addi x5, x6, my_symbol
-            # my_symbol x11, x22, 11 //this is a wrong instruction pattern
-            # eds0110xFF //valid symbol
-            # addi x6, 0x2000(x4)
-            # lui x6, 0b111(x4)
+            // my_symbol x11, x22, 11 //this is a wrong instruction pattern
+            // eds0110xFF //valid symbol
+            // sw x6, -2147483647(x4) //error too small imm value
+            add x6, x0, x4
             lw x1, 10(x5)
             sw x1, 111(x5)
             lui x1, 0x1212

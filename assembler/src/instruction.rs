@@ -2,6 +2,7 @@ use std::ops::Range;
 
 use isa::operand::{Immediate14, Immediate19};
 use shared::{EnumCount, EnumVariants};
+use thiserror::Error;
 
 use crate::{
     lexer::{Lexeme, LexemesSlice},
@@ -28,6 +29,12 @@ impl Instruction {
     }
 }
 
+#[derive(Debug, Error)]
+pub enum OperandError {
+    #[error(transparent)]
+    ImmediateError(#[from] isa::operand::ImmediateValueError),
+}
+
 #[derive(Debug)]
 pub struct Operands {
     dest: OperandType,
@@ -36,18 +43,21 @@ pub struct Operands {
 }
 
 pub type Source<'a> = &'a [u8];
-impl<'a> From<(&mut LexemesSlice<'a>, OperandRuleType, Source<'a>)> for Operands {
-    fn from((lexemes, rule, source): (&mut LexemesSlice<'a>, OperandRuleType, Source<'a>)) -> Self {
-        let mut iter = lexemes
-            //`step_by(2)` to skip noises e.g. Comma, ParenL, ParenR
-            .step_by(2)
-            .map(|lexeme| -> OperandType { (lexeme, rule, source).into() });
+impl<'a> TryFrom<(&mut LexemesSlice<'a>, OperandRuleType, Source<'a>)> for Operands {
+    type Error = OperandError;
 
-        Self {
-            dest: iter.next().unwrap(),
-            src1: iter.next().unwrap(),
-            src2: iter.next().unwrap_or_default(),
-        }
+    fn try_from(
+        (lexemes, rule, source): (&mut LexemesSlice<'a>, OperandRuleType, Source<'a>),
+    ) -> Result<Self, Self::Error> {
+        let mut iter = lexemes
+            .step_by(OperandRuleType::noises_in_every())
+            .map(|lexeme| -> Result<OperandType, _> { (lexeme, rule, source).try_into() });
+
+        Ok(Self {
+            dest: iter.next().unwrap().unwrap(),
+            src1: iter.next().unwrap()?,
+            src2: iter.next().unwrap_or(Ok(Default::default()))?,
+        })
     }
 }
 
@@ -59,11 +69,15 @@ pub enum OperandType {
     Literal14(isa::operand::Immediate14),
     Literal19(isa::operand::Immediate19),
     #[default]
-    Unknown,
+    None,
 }
 
-impl<'a> From<(Lexeme<'a>, OperandRuleType, Source<'a>)> for OperandType {
-    fn from((lexeme, rule, source): (Lexeme<'a>, OperandRuleType, Source<'a>)) -> Self {
+impl<'a> TryFrom<(Lexeme<'a>, OperandRuleType, Source<'a>)> for OperandType {
+    type Error = OperandError;
+
+    fn try_from(
+        (lexeme, rule, source): (Lexeme<'a>, OperandRuleType, Source<'a>),
+    ) -> Result<Self, Self::Error> {
         use OperandRuleType::*;
         use token::Token::*;
 
@@ -71,31 +85,35 @@ impl<'a> From<(Lexeme<'a>, OperandRuleType, Source<'a>)> for OperandType {
 
         match (token, rule) {
             (Identifier(token::IdentifierType::Symbol), _) => {
-                Self::Symbol(lexeme.span().to_owned())
+                Ok(Self::Symbol(lexeme.span().to_owned()))
             }
-            (Identifier(token::IdentifierType::Register(r)), _) => Self::Register(r),
-            (Label, _) => Self::Label(lexeme.span().to_owned()),
+            (Identifier(token::IdentifierType::Register(r)), _) => Ok(Self::Register(r)),
+            (Label, _) => Ok(Self::Label(lexeme.span().to_owned())),
             (LiteralDecimal | LiteralHex | LiteralBinary, R2I | RIR | RI) => {
                 let src = source.get(lexeme.span().to_owned()).unwrap();
+                let signed_byte = src[0];
                 let int_ty = LiteralIntegerType::from(token);
-                let target =
+                let bytes =
                     LiteralIntegerType::filter(src, LiteralIntegerType::head_len(int_ty as u8));
-                let src_str = std::str::from_utf8(target).unwrap();
-                // todo: should not unwrap to check if it's inside
 
-                // //safety: GUARANTEED to be safe bcs It's already valid ascii
-                // let s = unsafe { std::str::from_utf8_unchecked(slice) };
+                let target = if LiteralIntegerType::is_signed(signed_byte) {
+                    let mut vec = vec![0; bytes.len() + 1];
+                    vec[0] = b'-';
+                    vec[1..].copy_from_slice(bytes);
+                    vec
+                } else {
+                    bytes.to_owned()
+                };
 
-                // Ok(u64::from_str_radix(s, LiteralIntegerType::base(TYPE))
-                //     .map_err(|e| LexingError::IntegerError(e, lex.extras.cell.column))?)
+                let src_str = std::str::from_utf8(target.as_slice()).unwrap();
                 let imm = i32::from_str_radix(src_str, int_ty.base()).unwrap();
 
                 match rule {
-                    R2I | RIR => Self::Literal14(Immediate14::new(imm)),
-                    _ => Self::Literal19(Immediate19::new(imm)),
+                    R2I | RIR => Ok(Self::Literal14(Immediate14::try_from(imm)?)),
+                    _ => Ok(Self::Literal19(Immediate19::try_from(imm)?)),
                 }
             }
-            _ => Self::Unknown,
+            _ => Ok(Self::None),
         }
     }
 }
