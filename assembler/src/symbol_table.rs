@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::Debug, ops::Range};
+use std::{borrow::Cow, collections::HashMap, fmt::Debug, ops::Range};
 
 #[derive(Debug, Default, PartialEq, Eq)]
 pub enum SymbolType {
@@ -9,8 +9,8 @@ pub enum SymbolType {
 
 #[derive(Default, Debug, PartialEq, Eq)]
 pub enum Scope {
-    Local,
     #[default]
+    Local,
     Global,
 }
 // .equ GREETING, msg where msg is defined as .ascii "Hello, World!"
@@ -37,23 +37,24 @@ impl Symbol {
 //     Address(u32),       // Labels resolved to addresses
 // }
 
+pub type RawSymbolName<'a> = Cow<'a, [u8]>;
 #[derive(Debug)]
-pub struct SymbolTable {
-    entries: HashMap<Range<usize>, Symbol>,
+pub struct SymbolTable<'a> {
+    entries: HashMap<RawSymbolName<'a>, Symbol>,
 }
 
-impl SymbolTable {
-    pub fn new() -> SymbolTable {
+impl<'a> SymbolTable<'a> {
+    pub fn new() -> SymbolTable<'a> {
         SymbolTable {
             entries: HashMap::new(),
         }
     }
 
-    pub fn insert(&mut self, k: Range<usize>, v: Symbol) {
+    pub fn insert(&mut self, k: RawSymbolName<'a>, v: Symbol) {
         self.entries.insert(k, v);
     }
 
-    pub fn contains_key(&self, key: &Range<usize>) -> bool {
+    pub fn contains_key(&self, key: &RawSymbolName<'a>) -> bool {
         self.entries.contains_key(key)
     }
 }

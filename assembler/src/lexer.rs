@@ -224,6 +224,8 @@ impl<'a> Lexeme<'a> {
 
 #[cfg(test)]
 mod test {
+    use std::borrow::Cow;
+
     use super::*;
     use crate::symbol_table::{Symbol, SymbolTable};
 
@@ -253,11 +255,11 @@ mod test {
         let mut symbol_table = SymbolTable::new();
         let mut test_spans = Vec::new();
 
-        let source = raw_source.to_string();
-        let tokens = lex.tokenize(source.as_bytes()).unwrap();
+        let source = raw_source.as_bytes();
+        let tokens = lex.tokenize(source).unwrap();
         for (token, span) in tokens.symbols() {
             symbol_table.insert(
-                span.to_owned(),
+                Cow::Borrowed(source.get(span.to_owned()).unwrap()),
                 Symbol::new(Default::default(), None, token.try_into().unwrap()),
             );
             test_spans.push(span);
@@ -267,7 +269,9 @@ mod test {
 
         for span in test_spans {
             // let key_slice = &buffer[span.start..span.end];
-            assert!(symbol_table.contains_key(&span));
+            assert!(
+                symbol_table.contains_key(&Cow::Borrowed(source.get(span.to_owned()).unwrap()))
+            );
         }
     }
 }

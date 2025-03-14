@@ -15,4 +15,5 @@
 /Cargo.lock
 /lib/macros/Cargo.lock
 
-/.vscode
+
+.vscode/

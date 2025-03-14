@@ -1,7 +1,7 @@
 pub mod grammar;
 mod token;
 
-use grammar::{OperandTokenType, RuleError};
+use grammar::{OperandRuleType, OperandTokenType, RuleError};
 use std::{
     fmt::{Debug, Display},
     i32,
@@ -14,7 +14,7 @@ use crate::{
         directive::DirectiveType,
         section::{Element, Sections},
     },
-    instruction::{OperandError, Operands},
+    instruction::{OperandError, OperandType, Operands},
     lexer::{Lexemes, LexemesSlice},
     token::{IdentifierType, Token},
 };
@@ -331,11 +331,19 @@ impl<'a> Parser<'a> {
                 drop(rule);
 
                 lexemes.reset();
-                let operands = Operands::try_from((&mut lexemes, rule_ty, self.source))?;
-                let ins = crate::instruction::Instruction::new(mnemonic, operands);
+                let mut operands = Operands::new();
+                let iter = lexemes.step_by(OperandRuleType::noises_in_every()).map(
+                    |lexeme| -> Result<OperandType, _> {
+                        (lexeme, rule_ty, self.source).try_into()
+                    },
+                );
 
+                for (res, op) in iter.zip(operands.iter_mut()) {
+                    *op = res?;
+                }
+
+                let ins = crate::instruction::Instruction::new(mnemonic, operands);
                 println!("Instruction IR: {:?}", ins);
-                println!("Is resolved: {:?}", ins.is_resolved());
 
                 // let pseudo = PseudoInstruction
                 self.sections.insert(Element::Instruction(ins));
@@ -409,11 +417,11 @@ mod test {
             // 0b11kl // invalid literal Binary
         "#;
 
-        let source = raw_source.to_string();
+        let source = raw_source.as_bytes();
 
         // let mut symbol_table = SymbolTable::new();
 
-        let lexemes = lex.tokenize(source.as_bytes()).unwrap();
+        let lexemes = lex.tokenize(source).unwrap();
         // for (&token, span) in lexemes.symbols() {
         //     symbol_table.insert(
         //         span.to_owned(),
@@ -421,7 +429,7 @@ mod test {
         //     );
         // }
 
-        let mut parser = Parser::new(source.as_ref(), lexemes);
+        let mut parser = Parser::new(source, lexemes);
         assert!(match parser.parse() {
             Ok(_) => true,
             Err(e) => panic!("{e}"),

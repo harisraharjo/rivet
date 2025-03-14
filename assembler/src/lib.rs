@@ -5,6 +5,8 @@ mod parser;
 mod symbol_table;
 mod token;
 
+use std::borrow::Cow;
+
 use lexer::Lexer;
 // use parser::Parser;
 use symbol_table::{Symbol, SymbolTable};
@@ -18,26 +20,25 @@ pub enum AssemblerError {
 }
 
 pub struct Assembler {
-    symbol_table: SymbolTable,
     // lexer: Lexer,
     // parser: Parser<'a>,
 }
 
 impl Assembler {
     pub fn new() -> Assembler {
-        Assembler {
-            symbol_table: SymbolTable::new(),
+        Self {
+            // symbol_table: SymbolTable::new(),
             // lexer: Lexer::new(),
         }
     }
 
     pub fn assemble<'source>(&mut self, source: &'source [u8]) -> Result<(), AssemblerError> {
+        let mut symbol_table = SymbolTable::new();
         let tokens = Lexer::new().tokenize(source)?;
 
         for (token, span) in tokens.symbols() {
-            self.symbol_table.insert(
-                //safety: guaranteed to be safe because tokens derivate from the source
-                span.to_owned(),
+            symbol_table.insert(
+                Cow::Borrowed(source.get(span.to_owned()).unwrap()),
                 Symbol::new(Default::default(), None, token.try_into().unwrap()),
             )
         }

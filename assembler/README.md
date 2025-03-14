@@ -1,4 +1,4 @@
-# Assembler (WIP :construction:)
+# RIVET Assembler (WIP :construction:)
 An assembler based on GNU Assembler
 
 # RISCV Assembly language

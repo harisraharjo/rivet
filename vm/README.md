@@ -1,1 +1,1 @@
-# riscd Virtual Machine  (WIP :construction:)
+# RIVET Virtual Machine  (WIP :construction:)

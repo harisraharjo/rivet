@@ -28,6 +28,10 @@ impl Instruction {
         Instruction { mnemonic, operands }
     }
 
+    // pub fn symbols(&self) -> i32 {
+    //     1
+    // }
+
     pub fn is_resolved(&self) -> bool {
         !self.operands.0.iter().any(|o| {
             let od = core::mem::discriminant(o);
@@ -43,28 +47,31 @@ pub enum OperandError {
     ImmediateError(#[from] isa::operand::ImmediateValueError),
 }
 
+pub(crate) enum OperandsIndex {
+    Dest,
+    Src1,
+    Src2,
+}
+
 #[derive(Debug)]
 /// `[dest, src1, src2]`
 pub struct Operands([OperandType; 3]);
 
-type Source<'a> = &'a [u8];
-impl<'a> TryFrom<(&mut LexemesSlice<'a>, OperandRuleType, Source<'a>)> for Operands {
-    type Error = OperandError;
+impl Operands {
+    pub fn new() -> Operands {
+        Operands(Default::default())
+    }
 
-    fn try_from(
-        (lexemes, rule, source): (&mut LexemesSlice<'a>, OperandRuleType, Source<'a>),
-    ) -> Result<Self, Self::Error> {
-        let mut iter = lexemes
-            .step_by(OperandRuleType::noises_in_every())
-            .map(|lexeme| -> Result<OperandType, _> { (lexeme, rule, source).try_into() });
+    pub fn insert(&mut self, idx: OperandsIndex, data: OperandType) {
+        self.0[idx as usize] = data;
+    }
 
-        Ok(Self([
-            iter.next().unwrap().unwrap(),
-            iter.next().unwrap()?,
-            iter.next().unwrap_or(Ok(Default::default()))?,
-        ]))
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut OperandType> {
+        self.0.iter_mut()
     }
 }
+
+type Source<'a> = &'a [u8];
 
 #[derive(Debug, Default)]
 pub enum OperandType {
