@@ -335,8 +335,9 @@ impl<'a> Parser<'a> {
                 let ins = crate::instruction::Instruction::new(mnemonic, operands);
 
                 println!("Instruction IR: {:?}", ins);
-                // let pseudo = PseudoInstruction
+                println!("Is resolved: {:?}", ins.is_resolved());
 
+                // let pseudo = PseudoInstruction
                 self.sections.insert(Element::Instruction(ins));
                 self.advance_by(seq_len);
             }

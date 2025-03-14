@@ -1,6 +1,6 @@
-# riscd
+# RIVET
 
-This is a monorepo for RISCV inspired 32 bit virtual machine.
+This is a monorepo for RISCV inspired 32 bit Virtual Execution Tool.
 
 ## Project Structure
 [Instruction Set Architecture](./isa/README.md)

@@ -27,6 +27,14 @@ impl Instruction {
     pub fn new(mnemonic: isa::instruction::Mnemonic, operands: Operands) -> Instruction {
         Instruction { mnemonic, operands }
     }
+
+    pub fn is_resolved(&self) -> bool {
+        !self.operands.0.iter().any(|o| {
+            let od = core::mem::discriminant(o);
+            od == core::mem::discriminant(&OperandType::Symbol(0..0))
+                || od == core::mem::discriminant(&OperandType::Label(0..0))
+        })
+    }
 }
 
 #[derive(Debug, Error)]
@@ -36,13 +44,10 @@ pub enum OperandError {
 }
 
 #[derive(Debug)]
-pub struct Operands {
-    dest: OperandType,
-    src1: OperandType,
-    src2: OperandType,
-}
+/// `[dest, src1, src2]`
+pub struct Operands([OperandType; 3]);
 
-pub type Source<'a> = &'a [u8];
+type Source<'a> = &'a [u8];
 impl<'a> TryFrom<(&mut LexemesSlice<'a>, OperandRuleType, Source<'a>)> for Operands {
     type Error = OperandError;
 
@@ -53,11 +58,11 @@ impl<'a> TryFrom<(&mut LexemesSlice<'a>, OperandRuleType, Source<'a>)> for Opera
             .step_by(OperandRuleType::noises_in_every())
             .map(|lexeme| -> Result<OperandType, _> { (lexeme, rule, source).try_into() });
 
-        Ok(Self {
-            dest: iter.next().unwrap().unwrap(),
-            src1: iter.next().unwrap()?,
-            src2: iter.next().unwrap_or(Ok(Default::default()))?,
-        })
+        Ok(Self([
+            iter.next().unwrap().unwrap(),
+            iter.next().unwrap()?,
+            iter.next().unwrap_or(Ok(Default::default()))?,
+        ]))
     }
 }
 
