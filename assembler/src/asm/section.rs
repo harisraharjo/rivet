@@ -4,49 +4,64 @@ use super::directive::DirectiveType;
 use std::ops::Range;
 
 pub struct Sections {
-    // names: Vec<SourceSpan>,
     ///  \[Text, Data, Rodata, Bss]
-    base: [Section<Progbits>; ActiveSection::progbits_len()],
-    // base_span: [Range<usize>; ActiveSection::progbits_len()],
+    progbits: Vec<Section<Progbits>>,
     bss: Section<Nobits>,
     //TODO: support user defined section
     // custom: Vec<Section<Progbits>>,
-    active: ActiveSection,
+    active: SectionType,
+    offsets: Vec<u32>,
 }
 
 impl Sections {
     pub fn switch(&mut self, ty: DirectiveType, source_span: &SourceSpan) {
         self.active = match ty {
             DirectiveType::Data => {
-                let active_section = ActiveSection::Data;
-                self.base[active_section as usize].insert_name(source_span);
+                let active_section = SectionType::Data;
+                self.progbits[active_section as usize].insert_name(source_span);
                 active_section
             }
             DirectiveType::Rodata => {
-                let active_section = ActiveSection::Rodata;
-                self.base[active_section as usize].insert_name(source_span);
+                let active_section = SectionType::Rodata;
+                self.progbits[active_section as usize].insert_name(source_span);
                 active_section
             }
             DirectiveType::Bss => {
                 self.bss.insert_name(source_span);
-                ActiveSection::Bss
+                SectionType::Bss
             }
             _ => {
-                let active_section = ActiveSection::Text;
-                self.base[active_section as usize].insert_name(source_span);
+                let active_section = SectionType::Text;
+                self.progbits[active_section as usize].insert_name(source_span);
                 active_section
             } // DirectiveType::CustomSection => todo!(),
         };
     }
 
-    pub fn insert(&mut self, element: Element) {
-        if let Some(s) = self.base.get_mut(self.active as usize) {
-            s.insert(element);
-            return;
-        };
-
-        self.bss.insert(element);
+    pub fn current_section(&mut self) -> CurrentSection<'_> {
+        CurrentSection { sections: self }
     }
+
+    // pub fn insert(&mut self, element: Element) {
+    //     if let Some(s) = self.progbits.get_mut(self.active as usize) {
+    //         s.insert(element);
+    //         return;
+    //     };
+
+    //     self.bss.insert(element);
+    // }
+
+    // pub fn active_section(&self) -> SectionType {
+    //     self.active
+    // }
+
+    // pub fn current_offset(&self) -> u32 {
+    //     self.offsets[self.active as usize]
+    // }
+
+    // pub fn increase_offset_by(&mut self, v: u32) {
+    //     self.offsets[self.active as usize] += v;
+    // }
 }
 
 impl Default for Sections {
@@ -55,10 +70,12 @@ impl Default for Sections {
         text.flags.insert(Flag::EXECINSTR);
         let mut data = Section::<Progbits>::default();
         data.flags.insert(Flag::WRITE);
+
         Self {
-            base: [text, data, Default::default()],
+            progbits: vec![text, data, Default::default()],
             bss: Default::default(),
-            active: ActiveSection::Text,
+            active: SectionType::Text,
+            offsets: vec![0; SectionType::VARIANT_COUNT],
         }
         // let flags = match ty {
         //     Text => (Flag::ALLOC | Flag::EXECINSTR),
@@ -68,6 +85,37 @@ impl Default for Sections {
         //     Rodata => Flag::ALLOC,
         //     _ => Flag::ALLOC,
         // };
+    }
+}
+
+pub struct CurrentSection<'a> {
+    sections: &'a mut Sections,
+}
+
+impl CurrentSection<'_> {
+    pub fn insert(&mut self, element: Element) {
+        if let Some(s) = self
+            .sections
+            .progbits
+            .get_mut(self.sections.active as usize)
+        {
+            s.insert(element);
+            return;
+        };
+
+        self.sections.bss.insert(element);
+    }
+
+    pub fn offset(&self) -> u32 {
+        self.sections.offsets[self.sections.active as usize]
+    }
+
+    pub fn increase_offset_by(&mut self, v: u32) {
+        self.sections.offsets[self.sections.active as usize] += v;
+    }
+
+    pub fn ty(&self) -> SectionType {
+        self.sections.active
     }
 }
 
@@ -164,8 +212,8 @@ impl Section<Nobits> {
     }
 }
 
-#[derive(Debug, Default, Clone, Copy, EnumCount)]
-pub enum ActiveSection {
+#[derive(Debug, Default, Clone, Copy, EnumCount, PartialEq, Eq, Hash)]
+pub enum SectionType {
     #[default]
     Text,
     Data,
@@ -174,9 +222,18 @@ pub enum ActiveSection {
     // CustomSection(usize),
 }
 
-impl ActiveSection {
+impl SectionType {
     const fn progbits_len() -> usize {
         Self::VARIANT_COUNT - 1
+    }
+
+    pub const fn name(&self) -> &str {
+        match self {
+            SectionType::Text => "text",
+            SectionType::Data => "data",
+            SectionType::Rodata => "rodata",
+            SectionType::Bss => "bss",
+        }
     }
 }
 

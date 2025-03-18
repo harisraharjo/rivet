@@ -1,14 +1,29 @@
-use std::{borrow::Cow, collections::HashMap, fmt::Debug, ops::Range};
+use std::{collections::HashMap, fmt::Debug};
 
-#[derive(Debug, Default, PartialEq, Eq)]
-pub enum SymbolType {
-    #[default]
-    Label,
-    Constant,
+// use bumpalo::Bump;
+use thiserror::Error;
+
+use crate::asm::section::SectionType;
+
+#[derive(Error, Debug)]
+pub enum SymbolError {
+    #[error("Symbol {0} is already defined")]
+    DuplicateSymbol(String),
 }
 
-#[derive(Default, Debug, PartialEq, Eq)]
-pub enum Scope {
+// #[derive(Debug)]
+// pub enum Symboloffset {
+//     Constant(i32),      // .equ MAX, 42
+//     Macro(Vec<AstNode>),// Reusable code snippets
+//     Address(u32),       // Labels resolved to addresses
+// }
+
+// #[derive(Debug)]
+pub type Key = SectionType;
+pub type NameSource<'a> = &'a [u8];
+
+#[derive(Default, Debug, PartialEq, Eq, Clone, Copy)]
+pub enum Visibility {
     #[default]
     Local,
     Global,
@@ -17,44 +32,134 @@ pub enum Scope {
 //      would make GREETING a label/symbol pointing to the start of the string's memory location.
 
 #[derive(Default, Debug, PartialEq, Eq)]
-pub struct Symbol {
-    scope: Scope,
-    value: Option<u32>,
-    ty: SymbolType,
+pub struct Symbol<'a> {
+    name: NameSource<'a>,
+    visibility: Visibility,
+    offset: Option<u32>,
+    // section: SectionType,
+    // ty: SymbolType,
     // active_section: SectionType,
 }
 
-impl Symbol {
-    pub fn new(scope: Scope, value: Option<u32>, ty: SymbolType) -> Symbol {
-        Symbol { scope, value, ty }
+impl<'a> Symbol<'a> {
+    pub fn new(name: NameSource<'a>, visibility: Visibility, offset: Option<u32>) -> Self {
+        Self {
+            visibility,
+            offset,
+            name,
+            // section,
+        }
     }
 }
 
-// #[derive(Debug)]
-// pub enum SymbolValue {
-//     Constant(i32),      // .equ MAX, 42
-//     Macro(Vec<AstNode>),// Reusable code snippets
-//     Address(u32),       // Labels resolved to addresses
-// }
+#[derive(Debug)]
+pub struct GlobalSymbol<'a> {
+    name: NameSource<'a>,
+    index: (Key, usize),
+}
 
-pub type RawSymbolName<'a> = Cow<'a, [u8]>;
 #[derive(Debug)]
 pub struct SymbolTable<'a> {
-    entries: HashMap<RawSymbolName<'a>, Symbol>,
+    // arena: Bump,
+    locals: HashMap<Key, Vec<Symbol<'a>>>,
+    globals: Vec<GlobalSymbol<'a>>,
+    pending_globals: Vec<NameSource<'a>>,
 }
 
 impl<'a> SymbolTable<'a> {
-    pub fn new() -> SymbolTable<'a> {
-        SymbolTable {
-            entries: HashMap::new(),
+    pub fn new() -> Self {
+        Self {
+            // arena: Bump::new(),
+            locals: HashMap::new(),
+            globals: Vec::new(),
+            pending_globals: Vec::new(),
         }
     }
 
-    pub fn insert(&mut self, k: RawSymbolName<'a>, v: Symbol) {
-        self.entries.insert(k, v);
+    pub fn insert(&mut self, section: Key, mut value: Symbol<'a>) -> Result<(), SymbolError> {
+        let name = value.name;
+        let global_dupe = self.globals.len() > 0 && self.globals.iter().any(|s| s.name == name);
+        if global_dupe {
+            return Err(SymbolError::DuplicateSymbol(
+                String::from_utf8(name.to_vec()).unwrap(),
+            ));
+        }
+
+        let locals = self.locals.entry(section).or_insert_with(Vec::new);
+
+        let local_dupe = locals.iter().any(|s| s.name == name);
+        if local_dupe {
+            return Err(SymbolError::DuplicateSymbol(
+                String::from_utf8(name.to_vec()).unwrap(),
+            ));
+        }
+
+        let destined_tobe_global = self.pending_globals.iter().any(|p| *p == name);
+        if destined_tobe_global {
+            value.visibility = Visibility::Global;
+            self.globals.push(GlobalSymbol {
+                name,
+                index: (section, locals.len()),
+            });
+        }
+
+        locals.push(value);
+
+        Ok(())
     }
 
-    pub fn contains_key(&self, key: &RawSymbolName<'a>) -> bool {
-        self.entries.contains_key(key)
+    /// Change symbol visibility from local to global
+    pub fn declare_global(
+        &mut self,
+        section: &Key,
+        name: NameSource<'a>,
+    ) -> Result<(), SymbolError> {
+        let global_dupe = self.globals.len() > 0 && self.globals.iter().any(|s| s.name == name);
+        if global_dupe {
+            return Err(SymbolError::DuplicateSymbol(
+                String::from_utf8(name.to_vec()).unwrap(),
+            ));
+        }
+        let locals = self.locals.get_mut(section);
+        match locals {
+            Some(locals) => {
+                let mut locals_iter_mut = locals
+                    .iter_mut()
+                    .enumerate()
+                    .rev()
+                    .filter(|(_, s)| s.name == name);
+
+                if let Some((id, symbol)) = locals_iter_mut.next() {
+                    symbol.visibility = Visibility::Global;
+                    self.globals.push(GlobalSymbol {
+                        name,
+                        index: (*section, id),
+                    });
+
+                    return Ok(());
+                }
+            }
+            None => {}
+        }
+
+        self.pending_globals.push(name);
+
+        Ok(())
+    }
+
+    pub fn locals(&self) -> &HashMap<SectionType, Vec<Symbol<'a>>> {
+        &self.locals
+    }
+
+    pub fn globals(&self) -> &[GlobalSymbol<'a>] {
+        self.globals.as_slice()
+    }
+
+    // #[cfg(test)]
+    pub fn contains_key(&self, name: &[u8], section: Key) -> bool {
+        self.locals
+            .get(&section)
+            .and_then(|v| v.iter().any(|s| s.name == name).into())
+            .is_some()
     }
 }

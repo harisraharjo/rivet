@@ -5,7 +5,7 @@ use shared::{EnumCount, EnumVariants};
 use thiserror::Error;
 
 use crate::{
-    lexer::{Lexeme, LexemesSlice},
+    lexer::Lexeme,
     parser::grammar::OperandRuleType,
     token::{self, LiteralIntegerType},
 };
@@ -45,13 +45,15 @@ impl Instruction {
 pub enum OperandError {
     #[error(transparent)]
     ImmediateError(#[from] isa::operand::ImmediateValueError),
+    #[error(transparent)]
+    ParseIntError(#[from] std::num::ParseIntError),
 }
 
-pub(crate) enum OperandsIndex {
-    Dest,
-    Src1,
-    Src2,
-}
+// pub(crate) enum OperandsIndex {
+//     Dest,
+//     Src1,
+//     Src2,
+// }
 
 #[derive(Debug)]
 /// `[dest, src1, src2]`
@@ -62,12 +64,23 @@ impl Operands {
         Operands(Default::default())
     }
 
-    pub fn insert(&mut self, idx: OperandsIndex, data: OperandType) {
-        self.0[idx as usize] = data;
+    pub fn iter(&mut self) -> impl Iterator<Item = &OperandType> {
+        self.0.iter()
     }
 
     pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut OperandType> {
         self.0.iter_mut()
+    }
+}
+
+impl FromIterator<OperandType> for Operands {
+    fn from_iter<T: IntoIterator<Item = OperandType>>(iter: T) -> Self {
+        let mut operands = Operands::new();
+        for (l, r) in operands.iter_mut().zip(iter) {
+            *l = r;
+        }
+
+        operands
     }
 }
 
@@ -93,32 +106,41 @@ impl<'a> TryFrom<(Lexeme<'a>, OperandRuleType, Source<'a>)> for OperandType {
         use OperandRuleType::*;
         use token::Token::*;
 
-        let token = *lexeme.token();
-
-        match (token, rule) {
+        match (*lexeme.token(), rule) {
             (Identifier(token::IdentifierType::Symbol), _) => {
                 Ok(Self::Symbol(lexeme.span().to_owned()))
             }
-            (Identifier(token::IdentifierType::Register(r)), _) => Ok(Self::Register(r)),
             (Label, _) => Ok(Self::Label(lexeme.span().to_owned())),
-            (LiteralDecimal | LiteralHex | LiteralBinary, R2I | RIR | RI) => {
+            (Identifier(token::IdentifierType::Register(r)), _) => Ok(Self::Register(r)),
+            (literal @ (LiteralDecimal | LiteralHex | LiteralBinary), R2I | RIR | RI) => {
+                //safety unwrap: guaranteed safe
                 let src = source.get(lexeme.span().to_owned()).unwrap();
                 let signed_byte = src[0];
-                let int_ty = LiteralIntegerType::from(token);
-                let bytes =
-                    LiteralIntegerType::filter(src, LiteralIntegerType::head_len(int_ty as u8));
+                let int_ty = LiteralIntegerType::from(literal);
+                let base = int_ty.base();
 
-                let target = if LiteralIntegerType::is_signed(signed_byte) {
-                    let mut vec = vec![0; bytes.len() + 1];
-                    vec[0] = b'-';
-                    vec[1..].copy_from_slice(bytes);
-                    vec
-                } else {
-                    bytes.to_owned()
-                };
+                let imm = i32::from_str_radix(
+                    std::str::from_utf8(
+                        {
+                            let bytes = LiteralIntegerType::filter(
+                                src,
+                                LiteralIntegerType::head_len(int_ty as u8),
+                            );
 
-                let src_str = std::str::from_utf8(target.as_slice()).unwrap();
-                let imm = i32::from_str_radix(src_str, int_ty.base()).unwrap();
+                            if LiteralIntegerType::is_signed(signed_byte) {
+                                let mut vec = vec![0; bytes.len() + 1];
+                                vec[0] = b'-';
+                                vec[1..].copy_from_slice(bytes);
+                                vec
+                            } else {
+                                bytes.to_owned()
+                            }
+                        }
+                        .as_slice(),
+                    )
+                    .unwrap(),
+                    base,
+                )?;
 
                 match rule {
                     R2I | RIR => Ok(Self::Literal14(Immediate14::try_from(imm)?)),

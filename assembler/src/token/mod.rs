@@ -106,14 +106,14 @@ impl Token {
     }
 }
 
-impl TryFrom<&Token> for symbol_table::SymbolType {
-    type Error = LexingError;
+// impl TryFrom<&Token> for symbol_table::SymbolType {
+//     type Error = LexingError;
 
-    fn try_from(value: &Token) -> Result<Self, Self::Error> {
-        match *value {
-            Token::Label => Ok(symbol_table::SymbolType::Label),
-            Token::Identifier(IdentifierType::Symbol) => Ok(symbol_table::SymbolType::Constant),
-            _ => Err(LexingError::Error),
-        }
-    }
-}
+//     fn try_from(value: &Token) -> Result<Self, Self::Error> {
+//         match *value {
+//             Token::Label => Ok(symbol_table::SymbolType::Label),
+//             Token::Identifier(IdentifierType::Symbol) => Ok(symbol_table::SymbolType::Constant),
+//             _ => Err(LexingError::Error),
+//         }
+//     }
+// }

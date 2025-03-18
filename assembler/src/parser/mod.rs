@@ -4,7 +4,6 @@ mod token;
 use grammar::{OperandRuleType, OperandTokenType, RuleError};
 use std::{
     fmt::{Debug, Display},
-    i32,
     ops::Range,
 };
 use thiserror::Error;
@@ -16,6 +15,7 @@ use crate::{
     },
     instruction::{OperandError, OperandType, Operands},
     lexer::{Lexemes, LexemesSlice},
+    symbol_table::{Symbol, SymbolError, SymbolTable},
     token::{IdentifierType, Token},
 };
 
@@ -58,6 +58,8 @@ pub enum ParserError {
     DuplicateLabel(String),
     #[error(transparent)]
     ValueError(#[from] OperandError),
+    #[error(" symbol {0}")]
+    SymbolError(#[from] SymbolError),
     //     #[error("Undefined symbol: {0}")]
     //     UndefinedSymbol(String),
 }
@@ -67,15 +69,17 @@ pub struct Parser<'a> {
     index: usize,
     source: &'a [u8],
     sections: Sections,
+    symtab: &'a mut SymbolTable<'a>,
 }
 
 impl<'a> Parser<'a> {
-    pub fn new(source: &'a [u8], lexemes: Lexemes) -> Self {
+    pub fn new(source: &'a [u8], lexemes: Lexemes, symtab: &'a mut SymbolTable<'a>) -> Self {
         Parser {
             lexemes,
             index: 0,
             source,
             sections: Sections::default(),
+            symtab,
         }
     }
 
@@ -199,60 +203,6 @@ impl<'a> Parser<'a> {
                         return Err(ParserError::UnimplementedFeature(Todo::Dir(dir_type)));
                     }
                 }
-
-                // self.advance_line();
-                // if let Some(Token::Symbol(name)) = self.peek() {
-                //     let section_name = name.clone();
-                //     self.advance(); // Consume section name
-                //     self.current_section = section_name;
-
-                //     // Check for optional flags
-                //     self.section_flags = None;
-                //     if self.peek() == Some(&Token::Comma) {
-                //         self.advance(); // Consume comma
-                //         if let Some(Token::Symbol(flags)) = self.peek() {
-                //             let flags = flags.clone();
-                //             self.advance(); // Consume flags
-                //             // Validate flags (optional)
-                //             if !flags.chars().all(|c| "axwrMSI".contains(c)) {
-                //                 return Err(format!("Invalid section flags: {}", flags));
-                //             }
-                //             self.section_flags = Some(flags);
-                //         } else {
-                //             return Err("Expected section flags after comma".to_string());
-                //         }
-                //     }
-                //     self.expect(Token::Newline, "Expected newline after .section")?;
-                // } else {
-                //     return Err("Expected section name after .section".to_string());
-                // }
-
-                // match name.as_str() {
-                //     ".globl" => {
-                //         if args.len() != 1 {
-                //             return Err(".globl expects exactly one symbol".to_string());
-                //         }
-                //         ast.symbols.insert(
-                //             args[0].clone(),
-                //             SymbolInfo {
-                //                 position: ast.nodes.len(),
-                //                 is_global: true,
-                //             },
-                //         );
-                //     }
-                //     ".lcomm" => {
-                //         if args.len() != 2 {
-                //             return Err(".lcomm expects symbol and size".to_string());
-                //         }
-                //         args[1]
-                //             .parse::<usize>()
-                //             .map_err(|_| "Invalid size in .lcomm".to_string())?;
-                //         // ast.nodes.push(AstNode::Directive { name, args });
-                //     }
-                //     _ => {
-                //         // ast.nodes.push(AstNode::Directive { name, args })
-                //     }
-                // }
             }
             Token::Identifier(IdentifierType::Symbol) => {
                 return Err(ParserError::UnimplementedFeature(Todo::Symbol));
@@ -265,6 +215,7 @@ impl<'a> Parser<'a> {
                 if let Some(lex) = lexemes.find(|token| *token == Token::Label) {
                     return Err(ParserError::InvalidLine(Single::Label));
                 }
+                // TODO: add label into symbol table
 
                 if let Some(l) = lexemes.peek() {
                     match l.token() {
@@ -288,6 +239,7 @@ impl<'a> Parser<'a> {
                 let mut rule = grammar::InstructionRule::new(mnemonic);
                 let sequence = rule.sequence();
 
+                // Syntax analysis
                 if let Some(mismatch) = sequence
                     .iter()
                     .zip(lexemes.by_ref())
@@ -330,23 +282,45 @@ impl<'a> Parser<'a> {
                 let rule_ty = rule.ty();
                 drop(rule);
 
+                // Value analysis
                 lexemes.reset();
-                let mut operands = Operands::new();
-                let iter = lexemes.step_by(OperandRuleType::noises_in_every()).map(
-                    |lexeme| -> Result<OperandType, _> {
-                        (lexeme, rule_ty, self.source).try_into()
-                    },
-                );
+                let operand_types = lexemes
+                    .step_by(OperandRuleType::noises_in_every())
+                    .map(|lexeme| (lexeme, rule_ty, self.source).try_into())
+                    .collect::<Result<Vec<OperandType>, OperandError>>()?;
 
-                for (res, op) in iter.zip(operands.iter_mut()) {
-                    *op = res?;
+                let mut current_section = self.sections.current_section();
+
+                let mut operands = Operands::new();
+                for (target, value) in operands.iter_mut().zip(operand_types) {
+                    *target = value;
+                    match target {
+                        OperandType::Symbol(span) | OperandType::Label(span) => {
+                            let sym_bytes = self.source.get(span.to_owned()).unwrap();
+                            println!("Sym name: {:?}", unsafe {
+                                std::str::from_utf8_unchecked(sym_bytes)
+                            });
+
+                            self.symtab.insert(
+                                current_section.ty(),
+                                Symbol::new(
+                                    sym_bytes,
+                                    Default::default(),
+                                    current_section.offset().into(),
+                                ),
+                            )?;
+                        }
+                        _ => {}
+                    }
                 }
 
                 let ins = crate::instruction::Instruction::new(mnemonic, operands);
                 println!("Instruction IR: {:?}", ins);
+                println!("Current offset: {:?}", current_section.offset());
 
                 // let pseudo = PseudoInstruction
-                self.sections.insert(Element::Instruction(ins));
+                current_section.insert(Element::Instruction(ins));
+                current_section.increase_offset_by(4);
                 self.advance_by(seq_len);
             }
             Token::Eol => {
@@ -392,6 +366,7 @@ impl Display for Todo {
 
 #[cfg(test)]
 mod test {
+
     use crate::lexer::Lexer;
 
     use super::*;
@@ -401,9 +376,8 @@ mod test {
         let lex = Lexer::new();
 
         let raw_source = r#"
-        .section .data
+        .section .text
         main:
-            
             addi x5, x6, my_symbol
             // my_symbol x11, x22, 11 //this is a wrong instruction pattern
             // eds0110xFF //valid symbol
@@ -419,17 +393,12 @@ mod test {
 
         let source = raw_source.as_bytes();
 
-        // let mut symbol_table = SymbolTable::new();
+        let mut symbol_table = SymbolTable::new();
 
         let lexemes = lex.tokenize(source).unwrap();
-        // for (&token, span) in lexemes.symbols() {
-        //     symbol_table.insert(
-        //         span.to_owned(),
-        //         Symbol::new(Default::default(), None, token.try_into().unwrap()),
-        //     );
-        // }
+        println!("Sym table locals: {:?}", symbol_table.locals());
 
-        let mut parser = Parser::new(source, lexemes);
+        let mut parser = Parser::new(source, lexemes, &mut symbol_table);
         assert!(match parser.parse() {
             Ok(_) => true,
             Err(e) => panic!("{e}"),

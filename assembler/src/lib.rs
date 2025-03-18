@@ -5,8 +5,6 @@ mod parser;
 mod symbol_table;
 mod token;
 
-use std::borrow::Cow;
-
 use lexer::Lexer;
 // use parser::Parser;
 use symbol_table::{Symbol, SymbolTable};
@@ -36,12 +34,18 @@ impl Assembler {
         let mut symbol_table = SymbolTable::new();
         let tokens = Lexer::new().tokenize(source)?;
 
-        for (token, span) in tokens.symbols() {
-            symbol_table.insert(
-                Cow::Borrowed(source.get(span.to_owned()).unwrap()),
-                Symbol::new(Default::default(), None, token.try_into().unwrap()),
-            )
-        }
+        // for (token, span) in tokens.symbols() {
+        //     symbol_table
+        //         .insert(
+        //             Default::default(),
+        //             Symbol::new(
+        //                 source.get(span.to_owned()).unwrap(),
+        //                 Default::default(),
+        //                 None,
+        //             ),
+        //         )
+        //         .unwrap()
+        // }
 
         // let mut parser = Parser::new(source, tokens);
         // let data = parser.parse();

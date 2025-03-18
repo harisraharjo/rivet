@@ -26,7 +26,9 @@ impl Default for Cell {
 #[derive(Default, Debug)]
 pub struct State {
     cell: Cell,
-    last_token: Token, // in_block_comments: bool,
+    last_token: Token,
+    // in_block_comments: bool,
+    // custom_section_count: usize
 }
 
 impl State {
@@ -134,7 +136,6 @@ pub enum LiteralIntegerType {
     Decimal,
     Hex,
     Binary,
-    Unknown,
 }
 
 impl LiteralIntegerType {
@@ -168,7 +169,7 @@ impl LiteralIntegerType {
             LiteralIntegerType::Decimal => 10,
             LiteralIntegerType::Hex => 16,
             LiteralIntegerType::Binary => 2,
-            LiteralIntegerType::Unknown => 0,
+            // LiteralIntegerType::Unknown => 0,
         }
     }
 
@@ -180,10 +181,9 @@ impl LiteralIntegerType {
 impl From<Token> for LiteralIntegerType {
     fn from(value: Token) -> Self {
         match value {
-            Token::LiteralDecimal => Self::Decimal,
             Token::LiteralHex => Self::Hex,
             Token::LiteralBinary => Self::Binary,
-            _ => Self::Unknown,
+            _ => Self::Decimal,
         }
     }
 }
@@ -220,7 +220,7 @@ pub(super) fn on_directive(lex: &mut logos::Lexer<Token>) -> Result<DirectiveTyp
         );
     };
 
-    // // acknowledge user defined section if and only if the prev token is `.section`
+    // // approve user defined section if and only if the prev token is `.section`
     // if lex.extras.last_token == Token::Directive(DirectiveType::Section) {
     //     return Ok(DirectiveType::CustomSection);
     // }
