@@ -101,7 +101,15 @@ impl Token {
         Self::Identifier(IdentifierType::Register(isa::Register::X0))
     }
 
-    pub fn symbol() -> Self {
+    pub const fn mnemonic() -> Self {
+        Self::Identifier(IdentifierType::Mnemonic(isa::instruction::Mnemonic::Add))
+    }
+
+    pub const fn directive() -> Self {
+        Self::Directive(DirectiveType::Text)
+    }
+
+    pub const fn symbol() -> Self {
         Self::Identifier(IdentifierType::Symbol)
     }
 }

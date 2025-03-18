@@ -10,8 +10,8 @@ pub enum DirectiveType {
     Set,
     ///`.equ name, expression` Create symbol/add symbol to the symbol table as local symbol. Same as `Set`
     Equ,
-    ///`.globl name` Turn local symbols into global ones
-    Globl,
+    ///`.global name` Turn local symbols into global ones
+    Global,
 
     // Data dir
     ///`.byte expression [, expression]*` -> Emit one or more 8-bit comma separated words
@@ -32,7 +32,7 @@ pub enum DirectiveType {
     // Zero, //.zero integer -> zero bytes
 
     // Alignment dir
-    ///`.align N` -> To keep the memory align 4 bytes. Use this to aligned the location counter `Skip`.\
+    ///`.align N` -> To keep the memory align N bytes. Use this to aligned the location counter `Skip`.\
     /// It will checks if the location counter is a multiple of `2N`, if it is, it has no effect on the program, otherwise, it advances the location counter to the next value that is a multiple of `2N`
     Align,
     ///`b,[pad_val=0]` -> byte align

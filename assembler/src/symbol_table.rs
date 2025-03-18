@@ -111,7 +111,7 @@ impl<'a> SymbolTable<'a> {
     /// Change symbol visibility from local to global
     pub fn declare_global(
         &mut self,
-        section: &Key,
+        section: Key,
         name: NameSource<'a>,
     ) -> Result<(), SymbolError> {
         let global_dupe = self.globals.len() > 0 && self.globals.iter().any(|s| s.name == name);
@@ -120,7 +120,7 @@ impl<'a> SymbolTable<'a> {
                 String::from_utf8(name.to_vec()).unwrap(),
             ));
         }
-        let locals = self.locals.get_mut(section);
+        let locals = self.locals.get_mut(&section);
         match locals {
             Some(locals) => {
                 let mut locals_iter_mut = locals
@@ -133,7 +133,7 @@ impl<'a> SymbolTable<'a> {
                     symbol.visibility = Visibility::Global;
                     self.globals.push(GlobalSymbol {
                         name,
-                        index: (*section, id),
+                        index: (section, id),
                     });
 
                     return Ok(());
@@ -153,6 +153,10 @@ impl<'a> SymbolTable<'a> {
 
     pub fn globals(&self) -> &[GlobalSymbol<'a>] {
         self.globals.as_slice()
+    }
+
+    pub fn pending_globals(&self) -> &[NameSource<'a>] {
+        self.pending_globals.as_slice()
     }
 
     // #[cfg(test)]

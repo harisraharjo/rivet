@@ -14,7 +14,7 @@ pub struct Sections {
 }
 
 impl Sections {
-    pub fn switch(&mut self, ty: DirectiveType, source_span: &SourceSpan) {
+    pub fn switch(&mut self, ty: DirectiveType, source_span: SourceSpan) {
         self.active = match ty {
             DirectiveType::Data => {
                 let active_section = SectionType::Data;
@@ -161,7 +161,7 @@ where
         }
     }
 
-    fn insert_name(&mut self, span: &SourceSpan) {
+    fn insert_name(&mut self, span: SourceSpan) {
         if self.name.end != 0 {
             self.name.start = span.start;
             self.name.end = span.end;

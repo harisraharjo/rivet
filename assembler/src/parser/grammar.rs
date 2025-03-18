@@ -2,17 +2,17 @@ use std::fmt::Display;
 
 use isa::instruction::{InstructionType, Mnemonic};
 use shared::EnumCount;
-use thiserror::Error;
+// use thiserror::Error;
 
 use crate::token::{IdentifierType, Token};
 
-#[derive(Error, Debug)]
-pub enum RuleError {
-    #[error("`{0}`")]
-    InvalidInstructionSequence(OperandTokenType),
-    #[error("directive|instruction|break")]
-    InvalidLabelSequence,
-}
+// #[derive(Error, Debug)]
+// pub enum RuleError {
+//     #[error("`{0}`")]
+//     InvalidInstructionSequence(OperandTokenType),
+//     #[error("directive|instruction|break")]
+//     InvalidLabelSequence,
+// }
 
 pub struct InstructionRule {
     sequence: [OperandTokenType; OperandTokenType::token_count()],
@@ -98,6 +98,20 @@ impl OperandTokenType {
     const fn token_count() -> usize {
         // 1 to remove Eol
         OperandTokenType::VARIANT_COUNT - 1
+    }
+}
+
+impl From<OperandTokenType> for Token {
+    fn from(value: OperandTokenType) -> Self {
+        match value {
+            OperandTokenType::Register => Token::register(),
+            OperandTokenType::Comma => Token::Comma,
+            OperandTokenType::Label => Token::Label,
+            OperandTokenType::SymbolOrLiteral => Token::symbol(),
+            OperandTokenType::ParenL => Token::ParenL,
+            OperandTokenType::ParenR => Token::ParenR,
+            OperandTokenType::Eol => Token::Eol,
+        }
     }
 }
 

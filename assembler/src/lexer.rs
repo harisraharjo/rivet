@@ -55,6 +55,15 @@ impl Lexemes {
         }
     }
 
+    pub fn get(&self, index: usize) -> Option<Lexeme<'_>> {
+        self.tokens.get(index).and_then(|token| {
+            Some(Lexeme {
+                token,
+                span: self.spans.get(index).unwrap(),
+            })
+        })
+    }
+
     pub fn get_token(&self, index: usize) -> Option<&Token> {
         self.tokens.get(index)
     }

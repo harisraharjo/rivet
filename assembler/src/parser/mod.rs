@@ -1,7 +1,7 @@
 pub mod grammar;
 mod token;
 
-use grammar::{OperandRuleType, OperandTokenType, RuleError};
+use grammar::{OperandRuleType, OperandTokenType};
 use std::{
     fmt::{Debug, Display},
     ops::Range,
@@ -14,7 +14,7 @@ use crate::{
         section::{Element, Sections},
     },
     instruction::{OperandError, OperandType, Operands},
-    lexer::{Lexemes, LexemesSlice},
+    lexer::{Lexeme, Lexemes, LexemesSlice},
     symbol_table::{Symbol, SymbolError, SymbolTable},
     token::{IdentifierType, Token},
 };
@@ -46,8 +46,9 @@ pub enum ParserError {
     SyntaxError,
     #[error("Expected {expected}{}", on_invalid_grammar(.found))]
     UnexpectedToken {
-        #[source]
-        expected: RuleError,
+        // #[source]
+        // expected: RuleError,
+        expected: Token,
         found: Option<String>,
     },
     #[error("Invalid line. Multiple {0}s encountered. Only 1 {0} is allowed")]
@@ -87,21 +88,31 @@ impl<'a> Parser<'a> {
         self.source = input;
     }
 
-    fn peek(&self) -> Option<&Token> {
-        self.lexemes.get_token(self.index + 1)
+    #[inline(always)]
+    fn next_index(&self) -> usize {
+        self.index + 1
+    }
+
+    fn peek(&self) -> Option<Lexeme<'_>> {
+        self.lexemes.get(self.next_index())
+    }
+
+    fn peek_token(&self) -> Option<&Token> {
+        self.lexemes.get_token(self.next_index())
     }
 
     pub fn remainder(&self) -> &[Token] {
         // safety: Read until the end. guaranteed to be safe
-        &self.lexemes.tokens()[self.index..]
+        &self.lexemes.tokens()[self.next_index()..]
     }
 
     /// peek the current line
     fn peek_line(&self) -> LexemesSlice<'_> {
-        //safety: unwrap is safe because guaranteed (Token::Eol || Token::Eof) is always present
-        let pos = self.nearest_break().unwrap();
         // upper bound is at the index of Eol||Eof because we don't take them in
-        self.lexemes.slice(self.index..self.index + pos)
+        //safety: unwrap is safe because guaranteed (Token::Eol || Token::Eof) is always present
+        let next_idx = self.next_index();
+        self.lexemes
+            .slice(next_idx..next_idx + self.nearest_break_idx().unwrap())
     }
 
     fn eat(&mut self) -> Option<Token> {
@@ -111,19 +122,17 @@ impl<'a> Parser<'a> {
             return None;
         }
 
-        self.advance();
         Some(token)
     }
 
-    fn nearest_break(&self) -> Option<usize> {
+    fn nearest_break_idx(&self) -> Option<usize> {
         self.remainder()
             .iter()
             .position(|t| *t == Token::Eol || *t == Token::Eof)
     }
 
     fn advance_line(&mut self) {
-        let pos = self.nearest_break().unwrap();
-        self.advance_by(pos);
+        self.advance_by(self.nearest_break_idx().unwrap());
     }
 
     #[inline(always)]
@@ -141,18 +150,22 @@ impl<'a> Parser<'a> {
     }
 
     #[inline(always)]
-    fn get_source(&self, span: Range<usize>) -> &[u8] {
-        &self.source[span]
+    fn get_source(&self, span: Range<usize>) -> Option<&'a [u8]> {
+        self.source.get(span)
+    }
+
+    #[inline(always)]
+    fn get_source_unchecked(&self, span: Range<usize>) -> &'a [u8] {
+        self.source.get(span).unwrap()
     }
 
     fn current_span(&self) -> &Range<usize> {
         self.get_span(self.index)
     }
 
-    fn current_source(&self) -> &[u8] {
-        let span = self.current_span().to_owned();
+    fn current_source(&self) -> &'a [u8] {
         // safety: safe because the span is guaranteed to be inside the bounds
-        self.get_source(span)
+        self.get_source_unchecked(self.current_span().to_owned())
     }
 
     pub fn parse(&mut self) -> Result<(), ParserError> {
@@ -170,31 +183,56 @@ impl<'a> Parser<'a> {
                 use crate::asm::directive::DirectiveType::*;
                 println!("Directive : {:?}", dir_type);
 
-                // let line = self.peek_line();
-                // if line.contains(&Token::Directive(dir_type)) {
-                //     return Err(ParserError::InvalidLine(Single::Directive));
-                // }
-
                 match dir_type {
                     Section | Text | Data | Rodata | Bss => {
-                        self.sections
-                            .switch(dir_type, &self.current_span().to_owned());
+                        let curr = self.current_span().to_owned();
+                        println!("Section Name: {:?}", unsafe {
+                            std::str::from_utf8_unchecked(self.current_source())
+                        });
+                        self.sections.switch(dir_type, curr);
                     }
                     Byte | Half | Word => {
                         return Err(ParserError::UnimplementedFeature(Todo::Dir(dir_type)));
-                        // let ff = dir_type as usize;
-                        // self.sections.insert(data);
-                        // todo!()
                     }
                     String | Asciz | Ascii => {
                         return Err(ParserError::UnimplementedFeature(Todo::Dir(dir_type)));
-                        // todo!()
                     }
                     Align | Balign | P2align => {
                         return Err(ParserError::UnimplementedFeature(Todo::Dir(dir_type)));
                     }
-                    Set | Equ | Globl => {
+                    Set | Equ => {
                         return Err(ParserError::UnimplementedFeature(Todo::Dir(dir_type)));
+                    }
+                    Global => {
+                        //syntax analaysis
+                        let lexeme = self.peek().ok_or(ParserError::UnexpectedToken {
+                            expected: Token::symbol(),
+                            found: None,
+                        })?;
+
+                        match *lexeme.token() {
+                            Token::Identifier(IdentifierType::Symbol) => {
+                                println!("Symbol Ok");
+                                Ok(())
+                            }
+                            token @ _ => Err(ParserError::UnexpectedToken {
+                                expected: Token::symbol(),
+                                found: Some(token.to_string()),
+                            }),
+                        }?;
+
+                        let sym_bytes = self.get_source_unchecked(lexeme.span().to_owned());
+                        println!("Global Sym name: {:?}", unsafe {
+                            std::str::from_utf8_unchecked(sym_bytes)
+                        });
+
+                        self.symtab
+                            .declare_global(self.sections.current_section().ty(), sym_bytes)?;
+
+                        println!("SymTab Global: {:?}", self.symtab.globals());
+                        println!("SymTab Pending: {:?}", unsafe {
+                            std::str::from_utf8_unchecked(self.symtab.pending_globals()[0])
+                        });
                     }
                     Comm | LComm => {
                         return Err(ParserError::UnimplementedFeature(Todo::Dir(dir_type)));
@@ -206,7 +244,6 @@ impl<'a> Parser<'a> {
             }
             Token::Identifier(IdentifierType::Symbol) => {
                 return Err(ParserError::UnimplementedFeature(Todo::Symbol));
-                // self.advance_line();
             }
             Token::Label => {
                 let lexemes = self.peek_line();
@@ -219,12 +256,13 @@ impl<'a> Parser<'a> {
 
                 if let Some(l) = lexemes.peek() {
                     match l.token() {
-                        Token::Identifier(IdentifierType::Mnemonic(_)) => {}
-                        Token::Directive(_) => {}
+                        Token::Identifier(IdentifierType::Mnemonic(_)) | Token::Directive(_) => {}
                         token @ _ => {
                             return Err(ParserError::UnexpectedToken {
-                                expected: RuleError::InvalidLabelSequence,
-                                found: Some(format!("{}", *token)),
+                                // TODO: better error reporting for multi variants. e.g dir|ins|break
+                                // expected: RuleError::InvalidLabelSequence,
+                                expected: Token::directive(),
+                                found: Some(token.to_string()),
                             });
                         }
                     }
@@ -232,7 +270,6 @@ impl<'a> Parser<'a> {
 
                 // Record the label in the symbol table with the current position
                 // self.symbol_table.insert(label.clone(), self.position);
-                // self.advance();
             }
             Token::Identifier(IdentifierType::Mnemonic(mnemonic)) => {
                 let mut lexemes = self.peek_line();
@@ -246,13 +283,15 @@ impl<'a> Parser<'a> {
                     .filter(|(ty, lex)| lex.token().to_owned() != **ty)
                     .next()
                 {
-                    let (ty, lexeme) = mismatch;
+                    let (&ty, lexeme) = mismatch;
 
                     return Err(ParserError::UnexpectedToken {
-                        expected: RuleError::InvalidInstructionSequence(*ty),
+                        expected: ty.into(),
                         found: Some(
-                            String::from_utf8(self.get_source(lexeme.span().to_owned()).to_vec())
-                                .unwrap(),
+                            String::from_utf8(
+                                self.get_source_unchecked(lexeme.span().to_owned()).to_vec(),
+                            )
+                            .unwrap(),
                         ),
                     });
                 };
@@ -261,19 +300,20 @@ impl<'a> Parser<'a> {
                 let residue = seq_len.saturating_sub(lexemes.len());
                 match (residue > 0, &lexemes.next()) {
                     (true, None) => {
+                        let operand_token = sequence[seq_len - residue];
                         return Err(ParserError::UnexpectedToken {
-                            expected: RuleError::InvalidInstructionSequence(
-                                sequence[seq_len - residue],
-                            ),
+                            expected: operand_token.into(),
                             found: None,
                         });
                     }
                     (false, Some(lex)) => {
                         return Err(ParserError::UnexpectedToken {
-                            expected: RuleError::InvalidInstructionSequence(OperandTokenType::Eol),
+                            expected: OperandTokenType::Eol.into(),
                             found: Some(
-                                String::from_utf8(self.get_source(lex.span().to_owned()).to_vec())
-                                    .unwrap(),
+                                String::from_utf8(
+                                    self.get_source_unchecked(lex.span().to_owned()).to_vec(),
+                                )
+                                .unwrap(),
                             ),
                         });
                     }
@@ -325,13 +365,14 @@ impl<'a> Parser<'a> {
             }
             Token::Eol => {
                 println!("=== eol ===");
-                // self.advance(); // Skip empty lines
             }
             t @ _ => {
                 println!("Unknown Token: {:?}", t);
                 return Err(ParserError::SyntaxError);
             }
         }
+
+        self.advance();
         Ok(())
     }
 
@@ -378,6 +419,7 @@ mod test {
         let raw_source = r#"
         .section .text
         main:
+            .global main
             addi x5, x6, my_symbol
             // my_symbol x11, x22, 11 //this is a wrong instruction pattern
             // eds0110xFF //valid symbol
