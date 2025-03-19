@@ -147,21 +147,18 @@ impl LiteralIntegerType {
         }
     }
 
-    /// The length of the "head" e.g. hex: `0x`, bin: `0b`
-    pub const fn head_len(id: u8) -> usize {
-        match id {
+    /// The length of the prefix e.g. hex: `0x`, bin: `0b`
+    pub fn prefix_len(first_byte: u8, id: u8) -> usize {
+        let mut prefix = match id {
             0 => id as usize,
             _ => 2,
-        }
-    }
+        };
 
-    /// filter the bytes
-    pub fn filter<'a>(bytes: &'a [u8], mut head: usize) -> &'a [u8] {
-        if Self::is_signed(bytes[0]) {
-            head += 1;
+        if Self::is_signed(first_byte) {
+            prefix += 1;
         }
 
-        bytes.get(head..).unwrap()
+        prefix
     }
 
     pub const fn base(&self) -> u32 {
@@ -175,6 +172,14 @@ impl LiteralIntegerType {
 
     pub fn is_signed(byte: u8) -> bool {
         byte == b'-'
+    }
+
+    pub const fn from_const(token: Token) -> Self {
+        match token {
+            Token::LiteralHex => LiteralIntegerType::Hex,
+            Token::LiteralBinary => LiteralIntegerType::Binary,
+            _ => LiteralIntegerType::Decimal,
+        }
     }
 }
 
@@ -193,7 +198,10 @@ pub(super) fn on_literal_integer<const TYPE: u8>(
 ) -> Result<(), LexingError> {
     // assert!(TYPE <= LiteralIntegerType::COUNT);
 
-    let target = LiteralIntegerType::filter(lex.slice(), LiteralIntegerType::head_len(TYPE));
+    let slice = lex.slice();
+    let target = slice
+        .get(LiteralIntegerType::prefix_len(slice[0], TYPE)..)
+        .unwrap();
 
     let callback = LiteralIntegerType::cb(TYPE);
     if let Some(i) = target.iter().position(callback) {

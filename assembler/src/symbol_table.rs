@@ -50,6 +50,10 @@ impl<'a> Symbol<'a> {
             // section,
         }
     }
+
+    pub fn name(&self) -> NameSource<'_> {
+        self.name
+    }
 }
 
 #[derive(Debug)]

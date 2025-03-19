@@ -38,7 +38,7 @@ impl Sections {
         };
     }
 
-    pub fn current_section(&mut self) -> CurrentSection<'_> {
+    pub fn current(&mut self) -> CurrentSection<'_> {
         CurrentSection { sections: self }
     }
 

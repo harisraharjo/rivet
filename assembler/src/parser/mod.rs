@@ -64,6 +64,34 @@ pub enum ParserError {
     //     #[error("Undefined symbol: {0}")]
     //     UndefinedSymbol(String),
 }
+
+/// Return the `lexeme` if correct, otherwise returns error `UnexpectedToken`
+macro_rules! expect {
+    ($lexeme:expr, $expected:expr) => {
+        match $lexeme {
+            Some(l) => match *l.token() {
+                exp if exp == $expected => Ok(l),
+                t @ _ => Err(ParserError::UnexpectedToken {
+                    expected: $expected,
+                    found: Some(t.to_string()),
+                }),
+            },
+            None => Err(ParserError::UnexpectedToken {
+                expected: $expected,
+                found: None,
+            }),
+        }
+    };
+}
+
+// macro_rules! matches_flex {
+//     ($token:expr, $custom_pat:pat => $custom_res:expr, $( $pat:pat => $res:expr ),* ) => {
+//         let _: Result<(), ParserError> = match $token {
+//                 $custom_pat => $custom_res,
+//                 $( $pat => $res ),*
+//             };
+//     };
+// }
 // Parser with grammar checking
 pub struct Parser<'a> {
     lexemes: Lexemes,
@@ -205,34 +233,27 @@ impl<'a> Parser<'a> {
                     }
                     Global => {
                         //syntax analaysis
-                        let lexeme = self.peek().ok_or(ParserError::UnexpectedToken {
-                            expected: Token::symbol(),
-                            found: None,
-                        })?;
-
-                        match *lexeme.token() {
-                            Token::Identifier(IdentifierType::Symbol) => {
-                                println!("Symbol Ok");
-                                Ok(())
-                            }
-                            token @ _ => Err(ParserError::UnexpectedToken {
-                                expected: Token::symbol(),
-                                found: Some(token.to_string()),
-                            }),
-                        }?;
-
+                        let lexeme = expect!(self.peek(), Token::symbol())?;
                         let sym_bytes = self.get_source_unchecked(lexeme.span().to_owned());
                         println!("Global Sym name: {:?}", unsafe {
                             std::str::from_utf8_unchecked(sym_bytes)
                         });
 
                         self.symtab
-                            .declare_global(self.sections.current_section().ty(), sym_bytes)?;
+                            .declare_global(self.sections.current().ty(), sym_bytes)?;
 
-                        println!("SymTab Global: {:?}", self.symtab.globals());
-                        println!("SymTab Pending: {:?}", unsafe {
-                            std::str::from_utf8_unchecked(self.symtab.pending_globals()[0])
+                        println!("SymTab Local: {:?}", unsafe {
+                            std::str::from_utf8_unchecked({
+                                self.symtab
+                                    .locals()
+                                    .get(&self.sections.current().ty())
+                                    .unwrap()[0]
+                                    .name()
+                            })
                         });
+                        println!("SymTab Global: {:?}", self.symtab.globals());
+
+                        expect!(self.peek(), Token::Eol)?;
                     }
                     Comm | LComm => {
                         return Err(ParserError::UnimplementedFeature(Todo::Dir(dir_type)));
@@ -252,7 +273,6 @@ impl<'a> Parser<'a> {
                 if let Some(lex) = lexemes.find(|token| *token == Token::Label) {
                     return Err(ParserError::InvalidLine(Single::Label));
                 }
-                // TODO: add label into symbol table
 
                 if let Some(l) = lexemes.peek() {
                     match l.token() {
@@ -268,8 +288,15 @@ impl<'a> Parser<'a> {
                     }
                 }
 
-                // Record the label in the symbol table with the current position
-                // self.symbol_table.insert(label.clone(), self.position);
+                let curr_sect = self.sections.current();
+                let offset = curr_sect.offset();
+
+                self.symtab.insert(
+                    curr_sect.ty(),
+                    Symbol::new(self.current_source(), Default::default(), offset.into()),
+                )?;
+
+                // curr_sect.increase_offset_by(v)
             }
             Token::Identifier(IdentifierType::Mnemonic(mnemonic)) => {
                 let mut lexemes = self.peek_line();
@@ -329,7 +356,7 @@ impl<'a> Parser<'a> {
                     .map(|lexeme| (lexeme, rule_ty, self.source).try_into())
                     .collect::<Result<Vec<OperandType>, OperandError>>()?;
 
-                let mut current_section = self.sections.current_section();
+                let mut current_section = self.sections.current();
 
                 let mut operands = Operands::new();
                 for (target, value) in operands.iter_mut().zip(operand_types) {
@@ -377,10 +404,13 @@ impl<'a> Parser<'a> {
     }
 
     // fn expect(&mut self, expected: Token, err: ParserError) -> Result<(), ParserError> {
-    //     let next = self.peek();
-    //     println!("next: {:?}", next);
-    //     if next == Some(&expected) {
-    //         self.advance();
+    //     let next = self.peek().ok_or(ParserError::UnexpectedToken {
+    //                         expected,
+    //                         found: None,
+    //                     })?;
+
+    //     if *next.token() == expected {
+    //         // self.advance();
     //         Ok(())
     //     } else {
     //         Err(err)

@@ -122,10 +122,9 @@ impl<'a> TryFrom<(Lexeme<'a>, OperandRuleType, Source<'a>)> for OperandType {
                 let imm = i32::from_str_radix(
                     std::str::from_utf8(
                         {
-                            let bytes = LiteralIntegerType::filter(
-                                src,
-                                LiteralIntegerType::head_len(int_ty as u8),
-                            );
+                            let bytes = src
+                                .get(LiteralIntegerType::prefix_len(src[0], int_ty as u8)..)
+                                .unwrap();
 
                             if LiteralIntegerType::is_signed(signed_byte) {
                                 let mut vec = vec![0; bytes.len() + 1];

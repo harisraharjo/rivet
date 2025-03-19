@@ -2,7 +2,7 @@ use std::ops::Range;
 
 use logos::Logos;
 
-use crate::token::{IdentifierType, LexingError, Token};
+use crate::token::{IdentifierType, LexingError, LiteralIntegerType, Token};
 
 pub struct Lexer;
 
@@ -31,12 +31,36 @@ impl Lexer {
                 String::from_utf8(unsafe { input.get_unchecked(lex.span()).to_vec() }).unwrap(),
                 token
             );
-            lexemes.push(token, lex.span());
+            lexemes.push(token, self.filter_span(token, lex.span()));
         }
 
         lexemes.seal();
 
         Ok(lexemes)
+    }
+
+    fn filter_span(&self, token: Token, mut span: Range<usize>) -> Range<usize> {
+        match token {
+            Token::Label => {
+                span.end -= 1;
+            }
+            Token::Directive(_) => {
+                span.start += 1;
+            }
+            Token::LiteralString => {
+                span.start += 1;
+                span.end -= 1;
+            }
+            // t @ Token::LiteralBinary | Token::LiteralHex =>{
+            //     let len = LiteralIntegerType::prefix_len(source[0],LiteralIntegerType::from_const( t));
+
+            // },
+            // Token::Negative => todo!(),
+            // Token::Positive => todo!(),
+            _ => {}
+        };
+
+        span
     }
 }
 
@@ -233,7 +257,6 @@ impl<'a> Lexeme<'a> {
 
 #[cfg(test)]
 mod test {
-    use std::borrow::Cow;
 
     use super::*;
     use crate::symbol_table::{Symbol, SymbolTable};
@@ -268,25 +291,5 @@ mod test {
         let tokens = lex.tokenize(source).unwrap();
         // TODO: this guaranteed works but change the test.
         assert!(true);
-        // for (token, span) in tokens.symbols() {
-        //     symbol_table.insert(
-        //         Default::default(),
-        //         Symbol::new(
-        //             source.get(span.to_owned()).unwrap(),
-        //             Default::default(),
-        //             None,
-        //         ),
-        //     );
-        //     test_spans.push(span);
-        // }
-
-        // println!("Symbol Table: {:?}", symbol_table);
-
-        // for span in test_spans {
-        //     // let key_slice = &buffer[span.start..span.end];
-        //     assert!(
-        //         symbol_table.contains_key(source.get(span.to_owned()).unwrap(), Default::default()),
-        //     );
-        // }
     }
 }
