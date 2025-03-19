@@ -33,7 +33,7 @@ impl InstructionRule {
         self.ty
     }
 
-    pub fn sequence(&mut self) -> &[OperandTokenType] {
+    pub fn generate_sequence(&mut self) -> &[OperandTokenType] {
         use OperandTokenType::*;
         let last_id: usize = match self.ty {
             OperandRuleType::R3 => {

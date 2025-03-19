@@ -79,6 +79,15 @@ impl Lexemes {
         }
     }
 
+    #[inline(always)]
+    pub fn tokens(&self) -> &[Token] {
+        &self.tokens
+    }
+
+    pub fn spans(&self) -> &[Range<usize>] {
+        &self.spans
+    }
+
     pub fn get(&self, index: usize) -> Option<Lexeme<'_>> {
         self.tokens.get(index).and_then(|token| {
             Some(Lexeme {
@@ -101,34 +110,18 @@ impl Lexemes {
         self.spans.push(span);
     }
 
-    pub fn shrink_to_fit(&mut self) {
-        self.tokens.shrink_to_fit();
-        self.spans.shrink_to_fit();
+    pub fn slice(&self, index: Range<usize>) -> Option<LexemesSlice<'_>> {
+        self.tokens
+            .get(index.clone())
+            .and_then(|slice| Some(LexemesSlice::new(slice, &self.spans[index])))
     }
 
-    #[inline(always)]
-    pub fn tokens(&self) -> &[Token] {
-        &self.tokens
-    }
-
-    pub fn spans(&self) -> &[Range<usize>] {
-        &self.spans
-    }
-
-    pub fn slice(&self, index: Range<usize>) -> LexemesSlice<'_> {
-        LexemesSlice::new(&self.tokens[index.clone()], &self.spans[index])
-    }
-
-    pub fn iter(&self) -> impl Iterator<Item = (&Token, &Range<usize>)> {
-        self.tokens.iter().zip(&self.spans)
-    }
-
-    fn iter_mut(&mut self) -> impl Iterator<Item = (&mut Range<usize>, &Token)> {
-        self.spans.iter_mut().zip(&self.tokens)
-    }
+    // pub fn iter(&self) -> LexemesIter<'_> {
+    //     LexemesIter::new(self.tokens.as_slice(), self.spans.as_slice())
+    // }
 
     pub fn symbols(&self) -> impl Iterator<Item = (&Token, &Range<usize>)> {
-        self.iter().filter(|&(token, ..)| {
+        self.tokens.iter().zip(&self.spans).filter(|&(token, ..)| {
             *token == Token::Label || *token == Token::Identifier(IdentifierType::Symbol)
         })
     }
@@ -145,6 +138,11 @@ impl Lexemes {
             self.tokens.push(Token::Eof);
             self.shrink_to_fit();
         }
+    }
+
+    pub fn shrink_to_fit(&mut self) {
+        self.tokens.shrink_to_fit();
+        self.spans.shrink_to_fit();
     }
 }
 
@@ -163,8 +161,12 @@ impl<'a> LexemesSlice<'a> {
         }
     }
 
+    // pub fn iter(&self, ) -> LexemesIter<'_> {
+    //     LexemesIter::new(self.tokens, self.spans)
+    // }
+
     /// find a token within a slice. short-circuiting
-    pub fn find(&self, predicate: fn(&Token) -> bool) -> Option<Lexeme<'a>> {
+    pub fn find_token(&self, predicate: fn(&Token) -> bool) -> Option<Lexeme<'a>> {
         self.tokens
             .iter()
             .position(predicate)
@@ -185,11 +187,6 @@ impl<'a> LexemesSlice<'a> {
     pub fn len(&self) -> usize {
         self.tokens.len()
     }
-
-    pub fn contains(&self, token: &Token) -> bool {
-        self.tokens.contains(token)
-    }
-
     pub fn tokens(&self) -> &'a [Token] {
         self.tokens
     }
@@ -202,6 +199,10 @@ impl<'a> LexemesSlice<'a> {
     pub fn reset(&mut self) {
         self.index = 0;
     }
+
+    // pub fn peek_remainder(&self) -> i32 {
+    //     &self.lexemes.tokens()[self.index..]
+    // }
 }
 
 impl<'a> Iterator for LexemesSlice<'a> {
@@ -233,6 +234,55 @@ impl ExactSizeIterator for LexemesSlice<'_> {
         self.tokens.len() - self.index
     }
 }
+
+// pub struct LexemesIter<'a> {
+//     tokens: &'a [Token],
+//     spans: &'a [Range<usize>],
+//     index: usize,
+// }
+
+// impl<'a> LexemesIter<'a> {
+//     fn new(tokens: &'a [Token], spans: &'a [Range<usize>]) -> LexemesIter<'a> {
+//         // let v = vec![Lexeme{ token: &Token::Comma, span: &(0..3usize) }];
+//         // let ff= v.iter_mut();
+
+//         LexemesIter {
+//             index: 0,
+//             tokens,
+//             spans,
+//         }
+//     }
+// }
+
+// impl<'a> Iterator for LexemesIter<'a> {
+//     type Item = Lexeme<'a>;
+
+//     fn next(&mut self) -> Option<Self::Item> {
+//         if self.index >= self.tokens.len() {
+//             return None;
+//         }
+
+//         let lexeme = Lexeme {
+//             token: &self.tokens[self.index],
+//             span: &self.spans[self.index],
+//         };
+
+//         self.index += 1;
+//         Some(lexeme)
+//     }
+
+//     // Override size_hint for clarity (optional, since default works)
+//     fn size_hint(&self) -> (usize, Option<usize>) {
+//         let remaining = self.tokens.len() - self.index;
+//         (remaining, Some(remaining))
+//     }
+// }
+
+// impl<'a> ExactSizeIterator for LexemesIter<'a> {
+//     fn len(&self) -> usize {
+//         self.tokens.len() - self.index
+//     }
+// }
 
 // TODO: add row number
 #[derive(Debug)]
