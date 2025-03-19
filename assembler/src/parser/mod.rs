@@ -66,7 +66,7 @@ pub enum ParserError {
 }
 
 /// Return the `lexeme` if correct, otherwise returns error `UnexpectedToken`
-macro_rules! expect {
+macro_rules! expect_token {
     ($lexeme:expr, $expected:expr) => {
         match $lexeme {
             Some(l) => match *l.token() {
@@ -213,11 +213,8 @@ impl<'a> Parser<'a> {
 
                 match dir_type {
                     Section | Text | Data | Rodata | Bss => {
-                        let curr = self.current_span().to_owned();
-                        println!("Section Name: {:?}", unsafe {
-                            std::str::from_utf8_unchecked(self.current_source())
-                        });
-                        self.sections.switch(dir_type, curr);
+                        self.sections
+                            .switch(dir_type, self.current_span().to_owned());
                     }
                     Byte | Half | Word => {
                         return Err(ParserError::UnimplementedFeature(Todo::Dir(dir_type)));
@@ -233,7 +230,7 @@ impl<'a> Parser<'a> {
                     }
                     Global => {
                         //syntax analaysis
-                        let lexeme = expect!(self.peek(), Token::symbol())?;
+                        let lexeme = expect_token!(self.peek(), Token::symbol())?;
                         let sym_bytes = self.get_source_unchecked(lexeme.span().to_owned());
                         println!("Global Sym name: {:?}", unsafe {
                             std::str::from_utf8_unchecked(sym_bytes)
@@ -253,7 +250,9 @@ impl<'a> Parser<'a> {
                         });
                         println!("SymTab Global: {:?}", self.symtab.globals());
 
-                        expect!(self.peek(), Token::Eol)?;
+                        self.advance();
+
+                        expect_token!(self.peek(), Token::Eol)?;
                     }
                     Comm | LComm => {
                         return Err(ParserError::UnimplementedFeature(Todo::Dir(dir_type)));
@@ -267,23 +266,27 @@ impl<'a> Parser<'a> {
                 return Err(ParserError::UnimplementedFeature(Todo::Symbol));
             }
             Token::Label => {
-                let lexemes = self.peek_line();
+                // syntax analysis
+                {
+                    let lexemes = self.peek_line();
 
-                // find duplicate label first because a label can exists at the end of the line
-                if let Some(lex) = lexemes.find(|token| *token == Token::Label) {
-                    return Err(ParserError::InvalidLine(Single::Label));
-                }
+                    // find duplicate label because multiple labels can exists at the end of the line
+                    if let Some(lex) = lexemes.find(|token| *token == Token::Label) {
+                        return Err(ParserError::InvalidLine(Single::Label));
+                    }
 
-                if let Some(l) = lexemes.peek() {
-                    match l.token() {
-                        Token::Identifier(IdentifierType::Mnemonic(_)) | Token::Directive(_) => {}
-                        token @ _ => {
-                            return Err(ParserError::UnexpectedToken {
-                                // TODO: better error reporting for multi variants. e.g dir|ins|break
-                                // expected: RuleError::InvalidLabelSequence,
-                                expected: Token::directive(),
-                                found: Some(token.to_string()),
-                            });
+                    if let Some(l) = lexemes.peek() {
+                        match l.token() {
+                            Token::Identifier(IdentifierType::Mnemonic(_))
+                            | Token::Directive(_) => {}
+                            token @ _ => {
+                                return Err(ParserError::UnexpectedToken {
+                                    // TODO: better error reporting for multi variants. e.g dir|ins|break
+                                    // expected: RuleError::InvalidLabelSequence,
+                                    expected: Token::directive(),
+                                    found: Some(token.to_string()),
+                                });
+                            }
                         }
                     }
                 }
@@ -402,20 +405,6 @@ impl<'a> Parser<'a> {
         self.advance();
         Ok(())
     }
-
-    // fn expect(&mut self, expected: Token, err: ParserError) -> Result<(), ParserError> {
-    //     let next = self.peek().ok_or(ParserError::UnexpectedToken {
-    //                         expected,
-    //                         found: None,
-    //                     })?;
-
-    //     if *next.token() == expected {
-    //         // self.advance();
-    //         Ok(())
-    //     } else {
-    //         Err(err)
-    //     }
-    // }
 }
 
 #[derive(Debug)]
