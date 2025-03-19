@@ -76,21 +76,22 @@ macro_rules! expect_token {
             None => Ok(()),
         }
     };
-    ($lexeme:expr, $x:expr) => {
-        match $lexeme {
-            Some(l) => match *l.token() {
-                exp if exp == $x => Ok(l),
-                t @ _ => Err(ParserError::UnexpectedToken {
-                    expected: $x,
-                    found: Some(t.to_string()),
-                }),
-            },
-            None => Err(ParserError::UnexpectedToken {
-                expected: $x,
-                found: None,
-            }),
-        }
-    };
+    // ($lexeme:expr, $x:expr) => {
+    //     match $lexeme {
+    //         Some(l) => match *l.token() {
+    //             exp if exp == $x => Ok(l),
+    //             t @ _ => Err(ParserError::UnexpectedToken {
+    //                 expected: $x,
+    //                 found: Some(t.to_string()),
+    //             }),
+    //         },
+    //         None => Err(ParserError::UnexpectedToken {
+    //             expected: $x,
+    //             found: None,
+    //         }),
+    //     }
+    // };
+    // TODO: modularize this macro to just extracting token and not lexeme
     ($lexeme:expr, $pattern:pat, $ex:expr) => {
         match $lexeme {
             Some(l) => match *l.token() {
@@ -280,27 +281,39 @@ impl<'a> Parser<'a> {
                     }
                     Set | Equ => {
                         //syntax analaysis
-                        let mut line = self.peek_line();
-                        let symbol =
-                            expect_token!(line.next(), Token::Identifier(IdentifierType::Symbol))?;
-                        expect_token!(line.next(), Token::Comma)?;
-                        // line.
-                        match line.next() {
-                            Some(l) => match *l.token() {
-                                Token::LiteralBinary
-                                | Token::LiteralHex
-                                | Token::LiteralDecimal => Ok(()),
-                                t @ _ => Err(ParserError::UnexpectedToken {
-                                    expected: Token::LiteralDecimal,
-                                    found: Some(t.to_string()),
-                                }),
-                            },
-                            None => Err(ParserError::UnexpectedToken {
-                                expected: Token::LiteralDecimal,
-                                found: None,
-                            }),
-                        }?;
+                        let mut lexemes = self.peek_line();
+                        let symbol = expect_token!(
+                            lexemes.next(),
+                            Token::Identifier(IdentifierType::Symbol),
+                            Token::Identifier(IdentifierType::Symbol)
+                        )?;
+                        expect_token!(lexemes.next(), Token::Comma, Token::Comma)?;
 
+                        loop {
+                            expect_token!(
+                                lexemes.next(),
+                                Token::LiteralBinary
+                                    | Token::LiteralHex
+                                    | Token::LiteralDecimal
+                                    | Token::Identifier(IdentifierType::Symbol),
+                                Token::LiteralDecimal
+                            )?;
+
+                            match lexemes.next() {
+                                Some(l) => match *l.token() {
+                                    Token::Negative | Token::Positive => Ok(()),
+                                    t @ _ => Err(ParserError::UnexpectedToken {
+                                        expected: Token::Eol,
+                                        found: Some(t.to_string()),
+                                    }),
+                                },
+                                None => {
+                                    break;
+                                }
+                            }?;
+                        }
+
+                        // TODO: syntax analysis is done. Now complete expression and all the offsets for each token
                         let symbol_span = symbol.span().to_owned();
                         let (ty, offset) = {
                             let curr_sect = self.sections.current();
@@ -323,15 +336,11 @@ impl<'a> Parser<'a> {
                         let mut lexemes = self.peek_line();
                         let symbol = expect_token!(
                             lexemes.next(),
+                            Token::Identifier(IdentifierType::Symbol),
                             Token::Identifier(IdentifierType::Symbol)
                         )?;
                         expect_token!(lexemes.next(), None)?;
                         let span = symbol.span().to_owned();
-
-                        // let span = expect_token!(self.peek(), Token::symbol())?
-                        //     .span()
-                        //     .to_owned();
-                        // expect_token!(self.peek_n(1), Token::Eol)?;
 
                         self.symtab.declare_global(
                             self.sections.current().ty(),

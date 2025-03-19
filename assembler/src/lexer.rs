@@ -178,9 +178,23 @@ impl<'a> LexemesSlice<'a> {
             return None;
         }
 
+        let next_id = self.index + 1;
         Some(Lexeme {
-            token: &self.tokens[self.index],
-            span: &self.spans[self.index],
+            token: &self.tokens[next_id],
+            span: &self.spans[next_id],
+        })
+    }
+
+    /// Peek into the next `N` index
+    pub fn peek_n(&self, n: usize) -> Option<Lexeme<'_>> {
+        let next_id = self.index + n;
+        if next_id >= self.tokens.len() {
+            return None;
+        }
+
+        Some(Lexeme {
+            token: &self.tokens[next_id],
+            span: &self.spans[next_id],
         })
     }
 
@@ -213,13 +227,12 @@ impl<'a> Iterator for LexemesSlice<'a> {
             return None;
         }
 
-        let lexeme = Lexeme {
+        self.index += 1;
+
+        Some(Lexeme {
             token: &self.tokens[self.index],
             span: &self.spans[self.index],
-        };
-
-        self.index += 1;
-        Some(lexeme)
+        })
     }
 
     // Override size_hint for clarity (optional, since default works)
