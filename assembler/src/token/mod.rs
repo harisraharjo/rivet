@@ -8,7 +8,7 @@ pub use helper::LiteralIntegerType;
 pub use helper::{IdentifierType, LexingError};
 use helper::{State, on_directive, on_ident, on_literal_integer, on_newline};
 
-use crate::{asm::directive::DirectiveType, symbol_table};
+use crate::asm::directive::DirectiveType;
 
 #[derive(Logos, Debug, PartialEq, Copy, Clone, Default)]
 #[logos(source = [u8])]
@@ -113,6 +113,33 @@ impl Token {
         Self::Identifier(IdentifierType::Symbol)
     }
 }
+
+/// Expand to `Token::LiteralDecimal | Token::LiteralHex | Token::LiteralBinary`
+macro_rules! literal_integer {
+    () => {
+        Token::LiteralDecimal | Token::LiteralHex | Token::LiteralBinary
+    };
+}
+pub(crate) use literal_integer;
+
+/// Expand to `Token::Positive | Token::Negative`
+macro_rules! operator {
+    () => {
+        Token::Positive | Token::Negative
+    };
+}
+pub(crate) use operator;
+
+/// Expand to `Token::Directive(DirectiveType::Text) | Token::Directive(DirectiveType::Data) | Token::Directive(DirectiveType::Rodata) | Token::Directive(DirectiveType::Bss)`
+macro_rules! section_dir {
+    () => {
+        Token::Directive(DirectiveType::Text)
+            | Token::Directive(DirectiveType::Data)
+            | Token::Directive(DirectiveType::Rodata)
+            | Token::Directive(DirectiveType::Bss)
+    };
+}
+pub(crate) use section_dir;
 
 // impl TryFrom<&Token> for symbol_table::SymbolType {
 //     type Error = LexingError;

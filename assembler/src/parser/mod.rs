@@ -1,7 +1,6 @@
 pub mod grammar;
-mod token;
 
-use grammar::{OperandRuleType, OperandTokenType};
+use grammar::{OperandRuleType, RuleToken};
 use std::{
     fmt::{Debug, Display},
     ops::Range,
@@ -16,7 +15,7 @@ use crate::{
     instruction::{OperandError, OperandType, Operands},
     lexer::{Lexeme, Lexemes, LexemesSlice},
     symbol_table::{Symbol, SymbolError, SymbolTable},
-    token::{IdentifierType, Token},
+    token::{self, IdentifierType, Token},
 };
 
 // #[derive(Debug)]
@@ -48,7 +47,8 @@ pub enum ParserError {
     UnexpectedToken {
         // #[source]
         // expected: RuleError,
-        expected: Token,
+        expected: RuleToken,
+        // expected: Token,
         found: Option<String>,
     },
     #[error("Invalid line. Multiple {0}s encountered. Only 1 {0} is allowed")]
@@ -65,32 +65,17 @@ pub enum ParserError {
     //     UndefinedSymbol(String),
 }
 
-/// Return the `lexeme` if correct, otherwise returns error `UnexpectedToken`
+/// Return `Ok(lexeme)` if correct, otherwise returns error `Err(ParseError::UnexpectedToken)`
 macro_rules! expect_token {
     ($lexeme:expr, None) => {
         match $lexeme {
             Some(l) => Err(ParserError::UnexpectedToken {
-                expected: Token::Eol,
+                expected: RuleToken::Eol,
                 found: Some({ *l.token() }.to_string()),
             }),
             None => Ok(()),
         }
     };
-    // ($lexeme:expr, $x:expr) => {
-    //     match $lexeme {
-    //         Some(l) => match *l.token() {
-    //             exp if exp == $x => Ok(l),
-    //             t @ _ => Err(ParserError::UnexpectedToken {
-    //                 expected: $x,
-    //                 found: Some(t.to_string()),
-    //             }),
-    //         },
-    //         None => Err(ParserError::UnexpectedToken {
-    //             expected: $x,
-    //             found: None,
-    //         }),
-    //     }
-    // };
     // TODO: modularize this macro to just extracting token and not lexeme
     ($lexeme:expr, $pattern:pat, $ex:expr) => {
         match $lexeme {
@@ -109,36 +94,6 @@ macro_rules! expect_token {
     };
 }
 
-// macro_rules! foo {
-//     ($($a:literal)|+) => {$($a)|+}
-// }
-
-// macro_rules! expect_tokens {
-//     () => (
-//         $crate::vec::Vec::new()
-//     );
-//     ($elem:expr; $n:expr) => (
-//         $crate::vec::from_elem($elem, $n)
-//     );
-//     ($($x:expr),+ $(,)?) => (
-//         <[_]>::into_vec(
-//             // This rustc_box is not required, but it produces a dramatic improvement in compile
-//             // time when constructing arrays with many elements.
-//             #[rustc_box]
-//             $crate::boxed::Box::new([$($x),+])
-//         )
-//     );
-// }
-
-// macro_rules! matches_flex {
-//     ($token:expr, $custom_pat:pat => $custom_res:expr, $( $pat:pat => $res:expr ),* ) => {
-//         let _: Result<(), ParserError> = match $token {
-//                 $custom_pat => $custom_res,
-//                 $( $pat => $res ),*
-//             };
-//     };
-// }
-// Parser with grammar checking
 pub struct Parser<'a> {
     lexemes: Lexemes,
     index: usize,
@@ -171,15 +126,15 @@ impl<'a> Parser<'a> {
         self.lexemes.get(self.next_index())
     }
 
-    /// Peek the next (1 + `N`) token
+    /// Peek the next `N` token
     fn peek_n(&self, index: usize) -> Option<Lexeme<'_>> {
-        self.lexemes.get(self.next_index() + index)
+        self.lexemes.get(self.index + index)
     }
 
     /// Peek until the next (1 + `N`) token
     fn peek_until(&self, index: usize) -> Option<LexemesSlice<'_>> {
         let next_idx = self.next_index();
-        self.lexemes.slice(next_idx..self.next_index() + index)
+        self.lexemes.slice(next_idx..next_idx + index)
     }
 
     /// peek the current line
@@ -232,15 +187,15 @@ impl<'a> Parser<'a> {
         self.lexemes.get_span(index)
     }
 
-    #[inline(always)]
-    fn get_source(&self, span: Range<usize>) -> Option<&'a [u8]> {
-        self.source.get(span)
-    }
+    // #[inline(always)]
+    // fn get_source(&self, span: Range<usize>) -> Option<&'a [u8]> {
+    //     self.source.get(span)
+    // }
 
-    #[inline(always)]
-    fn get_source_unwrap(&self, span: Range<usize>) -> &'a [u8] {
-        self.source.get(span).unwrap()
-    }
+    // #[inline(always)]
+    // fn get_source_unwrap(&self, span: Range<usize>) -> &'a [u8] {
+    //     self.source.get(span).unwrap()
+    // }
 
     fn current_span(&self) -> &Range<usize> {
         self.get_span(self.index)
@@ -248,7 +203,7 @@ impl<'a> Parser<'a> {
 
     fn current_source(&self) -> &'a [u8] {
         // safety: safe because the span is guaranteed to be inside the bounds
-        self.get_source_unwrap(self.current_span().to_owned())
+        self.source.get(self.current_span().to_owned()).unwrap()
     }
 
     pub fn parse(&mut self) -> Result<(), ParserError> {
@@ -266,44 +221,33 @@ impl<'a> Parser<'a> {
                 use crate::asm::directive::DirectiveType::*;
 
                 match dir_type {
-                    Section | Text | Data | Rodata | Bss => {
+                    Section => {
+                        expect_token!(self.peek(), token::section_dir!(), RuleToken::SectionDir)?;
+                    }
+                    Text | Data | Rodata | Bss => {
+                        //syntax analaysis
+                        let mut lexemes = self.peek_line();
+                        expect_token!(lexemes.next(), None)?;
+
                         self.sections
                             .switch(dir_type, self.current_span().to_owned());
                     }
                     Byte | Half | Word => {
-                        return Err(ParserError::UnimplementedFeature(Todo::Dir(dir_type)));
-                    }
-                    String | Asciz | Ascii => {
-                        return Err(ParserError::UnimplementedFeature(Todo::Dir(dir_type)));
-                    }
-                    Align | Balign | P2align => {
-                        return Err(ParserError::UnimplementedFeature(Todo::Dir(dir_type)));
-                    }
-                    Set | Equ => {
                         //syntax analaysis
                         let mut lexemes = self.peek_line();
-                        let symbol = expect_token!(
-                            lexemes.next(),
-                            Token::Identifier(IdentifierType::Symbol),
-                            Token::Identifier(IdentifierType::Symbol)
-                        )?;
-                        expect_token!(lexemes.next(), Token::Comma, Token::Comma)?;
-
                         loop {
                             expect_token!(
                                 lexemes.next(),
-                                Token::LiteralBinary
-                                    | Token::LiteralHex
-                                    | Token::LiteralDecimal
+                                token::literal_integer!()
                                     | Token::Identifier(IdentifierType::Symbol),
-                                Token::LiteralDecimal
+                                RuleToken::SymbolOrLiteral
                             )?;
 
                             match lexemes.next() {
                                 Some(l) => match *l.token() {
-                                    Token::Negative | Token::Positive => Ok(()),
+                                    token::operator!() => Ok(()),
                                     t @ _ => Err(ParserError::UnexpectedToken {
-                                        expected: Token::Eol,
+                                        expected: RuleToken::Eol,
                                         found: Some(t.to_string()),
                                     }),
                                 },
@@ -313,90 +257,154 @@ impl<'a> Parser<'a> {
                             }?;
                         }
 
-                        // TODO: syntax analysis is done. Now complete expression and all the offsets for each token
-                        let symbol_span = symbol.span().to_owned();
-                        let (ty, offset) = {
-                            let curr_sect = self.sections.current();
-                            (curr_sect.ty(), curr_sect.offset())
-                        };
-
-                        self.symtab.insert(
-                            ty,
-                            Symbol::new(
-                                self.get_source_unwrap(symbol_span),
-                                Default::default(),
-                                offset.into(),
-                            ),
-                        )?;
-
-                        // return Err(ParserError::UnimplementedFeature(Todo::Dir(dir_type)));
+                        return Err(ParserError::UnimplementedFeature(Todo::Dir(dir_type)));
                     }
-                    Global => {
+                    Ascii => {
+                        //syntax analaysis
+                        let lexeme = expect_token!(
+                            self.peek(),
+                            Token::LiteralString,
+                            RuleToken::LiteralString
+                        )?;
+                        expect_token!(self.peek_n(2), Token::Eol | Token::Eof, RuleToken::Eol)?;
+                        println!("String value: {:?}", lexeme);
+
+                        // TODO: finish the value
+                    }
+                    Align | Balign | P2align => {
+                        let mut lexemes = self.peek_line();
+                        loop {
+                            expect_token!(
+                                lexemes.next(),
+                                token::literal_integer!()
+                                    | Token::Identifier(IdentifierType::Symbol),
+                                RuleToken::SymbolOrLiteral
+                            )?;
+
+                            match lexemes.next() {
+                                Some(l) => match *l.token() {
+                                    token::operator!() => Ok(()),
+                                    t @ _ => Err(ParserError::UnexpectedToken {
+                                        expected: RuleToken::Eol,
+                                        found: Some(t.to_string()),
+                                    }),
+                                },
+                                None => {
+                                    break;
+                                }
+                            }?;
+                        }
+
+                        return Err(ParserError::UnimplementedFeature(Todo::Dir(dir_type)));
+                    }
+                    Set | Equ => {
                         //syntax analaysis
                         let mut lexemes = self.peek_line();
                         let symbol = expect_token!(
                             lexemes.next(),
                             Token::Identifier(IdentifierType::Symbol),
-                            Token::Identifier(IdentifierType::Symbol)
+                            RuleToken::Symbol
                         )?;
-                        expect_token!(lexemes.next(), None)?;
-                        let span = symbol.span().to_owned();
+                        expect_token!(lexemes.next(), Token::Comma, RuleToken::Comma)?;
+                        //check expression
+                        loop {
+                            expect_token!(
+                                lexemes.next(),
+                                token::literal_integer!()
+                                    | Token::Identifier(IdentifierType::Symbol),
+                                RuleToken::SymbolOrLiteral
+                            )?;
 
+                            match lexemes.next() {
+                                Some(l) => match *l.token() {
+                                    token::operator!() => Ok(()),
+                                    t @ _ => Err(ParserError::UnexpectedToken {
+                                        expected: RuleToken::Eol,
+                                        found: Some(t.to_string()),
+                                    }),
+                                },
+                                None => {
+                                    break;
+                                }
+                            }?;
+
+                            // let name = String::from_utf8_lossy(&self.source[span.clone()]).to_string();
+                            // symbols.symbols.iter().find(|s| s.0 == name).map(|s| s.1)
+                        }
+
+                        // TODO: syntax analysis is done. Now complete the expression and all the offsets for each token
+                        let src = self.source.get(symbol.span().to_owned()).unwrap();
+                        let curr_sect = self.sections.current();
+                        self.symtab.insert(
+                            curr_sect.ty(),
+                            Symbol::new(src, Default::default(), None, curr_sect.offset()),
+                        )?;
+                    }
+                    Global => {
+                        //syntax analaysis
+                        let symbol = expect_token!(
+                            self.peek(),
+                            Token::Identifier(IdentifierType::Symbol),
+                            RuleToken::Symbol
+                        )?;
+                        expect_token!(self.peek_n(2), Token::Eol | Token::Eof, RuleToken::Eol)?;
+
+                        let span = symbol.span().to_owned();
                         self.symtab.declare_global(
                             self.sections.current().ty(),
-                            self.get_source_unwrap(span),
+                            self.source.get(span).unwrap(),
                         )?;
                         self.advance();
+                    }
+                    Skip => {
+                        let mut lexemes = self.peek_line();
+                        loop {
+                            expect_token!(
+                                lexemes.next(),
+                                token::literal_integer!()
+                                    | Token::Identifier(IdentifierType::Symbol),
+                                RuleToken::SymbolOrLiteral
+                            )?;
+
+                            match lexemes.next() {
+                                Some(l) => match *l.token() {
+                                    token::operator!() => Ok(()),
+                                    t @ _ => Err(ParserError::UnexpectedToken {
+                                        expected: RuleToken::Eol,
+                                        found: Some(t.to_string()),
+                                    }),
+                                },
+                                None => {
+                                    break;
+                                }
+                            }?;
+                        }
+                        return Err(ParserError::UnimplementedFeature(Todo::Dir(dir_type)));
                     }
                     Comm | LComm => {
                         return Err(ParserError::UnimplementedFeature(Todo::Dir(dir_type)));
                     }
-                    Skip => {
+                    String | Asciz => {
                         return Err(ParserError::UnimplementedFeature(Todo::Dir(dir_type)));
                     }
                 }
             }
-            Token::Identifier(IdentifierType::Symbol) => {
-                // TODO: correct symbol
-                let curr_sect = self.sections.current();
-                let offset = curr_sect.offset();
-
-                self.symtab.insert(
-                    curr_sect.ty(),
-                    Symbol::new(self.current_source(), Default::default(), offset.into()),
-                )?;
-            }
             Token::Label => {
                 // syntax analysis
-                {
-                    let mut lexemes = self.peek_line();
+                expect_token!(
+                    self.peek(),
+                    Token::Identifier(IdentifierType::Mnemonic(_))
+                        | Token::Directive(_)
+                        | Token::Eol
+                        | Token::Eof,
+                    RuleToken::InstructionOrDir
+                )?;
 
-                    // find duplicate label because multiple labels can exists at the end of the line
-                    if let Some(_) = lexemes.find_token(|token| *token == Token::Label) {
-                        return Err(ParserError::InvalidLine(Single::Label));
-                    }
-
-                    if let Some(l) = lexemes.next() {
-                        match l.token() {
-                            Token::Identifier(IdentifierType::Mnemonic(_))
-                            | Token::Directive(_) => {}
-                            token @ _ => {
-                                return Err(ParserError::UnexpectedToken {
-                                    // TODO: better error reporting for multi variants. e.g dir|ins|break
-                                    expected: Token::directive(),
-                                    found: Some(token.to_string()),
-                                });
-                            }
-                        };
-                    };
-                }
-
+                let src = self.current_source();
                 let curr_sect = self.sections.current();
-                let offset = curr_sect.offset();
-
                 self.symtab.insert(
                     curr_sect.ty(),
-                    Symbol::new(self.current_source(), Default::default(), offset.into()),
+                    Symbol::new(src, Default::default(), None, curr_sect.offset()),
                 )?;
             }
             Token::Identifier(IdentifierType::Mnemonic(mnemonic)) => {
@@ -411,12 +419,12 @@ impl<'a> Parser<'a> {
                     .filter(|(ty, lex)| lex.token().to_owned() != **ty)
                     .next()
                 {
-                    let (_, lexeme) = mismatch;
+                    let (rule_token, lexeme) = mismatch;
 
                     return Err(ParserError::UnexpectedToken {
-                        expected: *lexeme.token(),
+                        expected: *rule_token,
                         found: std::str::from_utf8(
-                            self.get_source_unwrap(lexeme.span().to_owned()),
+                            self.source.get(lexeme.span().to_owned()).unwrap(),
                         )
                         .unwrap()
                         .to_owned()
@@ -429,17 +437,17 @@ impl<'a> Parser<'a> {
                 // check whether the input is: (too little, too much)
                 match (rule_residue > 0, &lexemes.next()) {
                     (true, None) => {
-                        let operand_token = sequence[seq_len - rule_residue];
+                        let rule_token = sequence[seq_len - rule_residue];
                         return Err(ParserError::UnexpectedToken {
-                            expected: operand_token.into(),
+                            expected: rule_token,
                             found: None,
                         });
                     }
                     (false, Some(lexeme)) => {
                         return Err(ParserError::UnexpectedToken {
-                            expected: Token::Eol,
+                            expected: RuleToken::Eol,
                             found: std::str::from_utf8(
-                                self.get_source_unwrap(lexeme.span().to_owned()),
+                                self.source.get(lexeme.span().to_owned()).unwrap(),
                             )
                             .unwrap()
                             .to_owned()
@@ -460,28 +468,24 @@ impl<'a> Parser<'a> {
                     .collect::<Result<Vec<OperandType>, OperandError>>()?;
 
                 let mut current_section = self.sections.current();
-
                 let mut operands = Operands::new();
                 for (target, value) in operands.iter_mut().zip(operand_types) {
-                    *target = value;
-                    match target {
+                    match &value {
                         OperandType::Symbol(span) | OperandType::Label(span) => {
-                            let sym_bytes = self.source.get(span.to_owned()).unwrap();
-                            println!("Sym name: {:?}", unsafe {
-                                std::str::from_utf8_unchecked(sym_bytes)
-                            });
-
                             self.symtab.insert(
                                 current_section.ty(),
                                 Symbol::new(
-                                    sym_bytes,
+                                    self.source.get(span.to_owned()).unwrap(),
                                     Default::default(),
-                                    current_section.offset().into(),
+                                    None,
+                                    current_section.offset(),
                                 ),
                             )?;
                         }
                         _ => {}
                     }
+
+                    *target = value;
                 }
 
                 let ins = crate::instruction::Instruction::new(mnemonic, operands);
@@ -540,6 +544,7 @@ mod test {
 
         let raw_source = r#"
         .section .text
+        .set symbol1, 1 + 1
         main:
             .global main
             addi x5, x6, my_symbol
@@ -561,6 +566,28 @@ mod test {
 
         let lexemes = lex.tokenize(source).unwrap();
         println!("Sym table locals: {:?}", symbol_table.locals());
+
+        let mut parser = Parser::new(source, lexemes, &mut symbol_table);
+        assert!(match parser.parse() {
+            Ok(_) => true,
+            Err(e) => panic!("{e}"),
+        })
+    }
+
+    #[test]
+    fn t_parser_global() {
+        let lex = Lexer::new();
+
+        let raw_source = r#"
+        .section .text
+        // .set symbol1, 1 + 1
+        main:
+            .global main"#;
+
+        let source = raw_source.as_bytes();
+
+        let mut symbol_table = SymbolTable::new();
+        let lexemes = lex.tokenize(source).unwrap();
 
         let mut parser = Parser::new(source, lexemes, &mut symbol_table);
         assert!(match parser.parse() {

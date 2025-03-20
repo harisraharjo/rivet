@@ -35,18 +35,25 @@ pub enum Visibility {
 pub struct Symbol<'a> {
     name: NameSource<'a>,
     visibility: Visibility,
-    offset: Option<u32>,
+    value: Option<u32>,
+    offset: u32,
     // section: SectionType,
     // ty: SymbolType,
     // active_section: SectionType,
 }
 
 impl<'a> Symbol<'a> {
-    pub fn new(name: NameSource<'a>, visibility: Visibility, offset: Option<u32>) -> Self {
+    pub fn new(
+        name: NameSource<'a>,
+        visibility: Visibility,
+        value: Option<u32>,
+        offset: u32,
+    ) -> Self {
         Self {
             visibility,
             offset,
             name,
+            value,
             // section,
         }
     }

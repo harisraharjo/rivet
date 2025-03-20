@@ -2,7 +2,7 @@ use std::ops::Range;
 
 use logos::Logos;
 
-use crate::token::{IdentifierType, LexingError, LiteralIntegerType, Token};
+use crate::token::{IdentifierType, LexingError, Token};
 
 pub struct Lexer;
 
@@ -227,12 +227,14 @@ impl<'a> Iterator for LexemesSlice<'a> {
             return None;
         }
 
-        self.index += 1;
-
-        Some(Lexeme {
+        let lex = Lexeme {
             token: &self.tokens[self.index],
             span: &self.spans[self.index],
-        })
+        };
+
+        self.index += 1;
+
+        Some(lex)
     }
 
     // Override size_hint for clarity (optional, since default works)

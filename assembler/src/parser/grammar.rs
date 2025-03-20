@@ -4,27 +4,149 @@ use isa::instruction::{InstructionType, Mnemonic};
 use shared::EnumCount;
 // use thiserror::Error;
 
-use crate::token::{IdentifierType, Token};
+use crate::{
+    asm::directive::DirectiveType,
+    token::{self, IdentifierType, Token},
+};
 
 // #[derive(Error, Debug)]
 // pub enum RuleError {
 //     #[error("`{0}`")]
-//     InvalidInstructionSequence(OperandTokenType),
+//     InvalidInstructionSequence(RuleToken),
 //     #[error("directive|instruction|break")]
 //     InvalidLabelSequence,
 // }
 
+#[derive(EnumCount, Copy, Clone, Debug)]
+pub enum RuleToken {
+    Register,
+    Comma,
+    Label,
+    SymbolOrLiteral,
+    ParenL,
+    ParenR,
+    Operator,
+    //--- Hidden Token ---
+    Symbol,
+    LiteralString,
+    SectionDir,
+    InstructionOrDir,
+    Eol,
+}
+
+impl RuleToken {
+    /// Token counts minus tokens that are "hidden"
+    const fn token_count() -> usize {
+        RuleToken::VARIANT_COUNT - Self::hidden_count()
+    }
+
+    /// Tokens that can be used for sequence matching
+    const fn sequence() -> [Self; Self::token_count()] {
+        [
+            Self::Register,
+            Self::Comma,
+            Self::SymbolOrLiteral,
+            Self::Label,
+            Self::ParenL,
+            Self::ParenR,
+            Self::Operator,
+        ]
+    }
+
+    /// "Hidden" tokens. Tokens that are only intended for single matching and not as a sequence matching
+    const fn hidden_count() -> usize {
+        [
+            Self::Eol,
+            Self::Symbol,
+            Self::LiteralString,
+            Self::SectionDir,
+            Self::InstructionOrDir,
+        ]
+        .len()
+    }
+}
+
+// impl From<RuleToken> for Token {
+//     fn from(value: RuleToken) -> Self {
+//         match value {
+//             RuleToken::Register => Token::register(),
+//             RuleToken::Comma => Token::Comma,
+//             RuleToken::Label => Token::Label,
+//             RuleToken::SymbolOrLiteral => Token::symbol(),
+//             RuleToken::ParenL => Token::ParenL,
+//             RuleToken::ParenR => Token::ParenR,
+//             RuleToken::Eol => Token::Eol,
+//             RuleToken::Operator => todo!(),
+//                     }
+//     }
+// }
+
+impl PartialEq<RuleToken> for Token {
+    fn eq(&self, other: &RuleToken) -> bool {
+        use RuleToken::*;
+        match (self, other) {
+            (Token::Identifier(IdentifierType::Register(_)), Register)
+            | (Token::Label, Label)
+            | (
+                Token::LiteralDecimal
+                | Token::LiteralHex
+                | Token::LiteralBinary
+                | Token::Identifier(IdentifierType::Symbol),
+                SymbolOrLiteral,
+            )
+            | (token::operator!(), Operator)
+            | (Token::ParenR, ParenR)
+            | (Token::ParenL, ParenL)
+            | (Token::Comma, Comma)
+            | (Token::Eol, Eol) => true,
+            _ => false,
+        }
+    }
+}
+
+impl Display for RuleToken {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use RuleToken::*;
+        match self {
+            Register => Token::register().fmt(f),
+            Comma => Token::Comma.fmt(f),
+            Label => Token::Label.fmt(f),
+            ParenL => Token::ParenL.fmt(f),
+            ParenR => Token::ParenR.fmt(f),
+            Eol => Token::Eol.fmt(f),
+            Symbol => Token::Identifier(IdentifierType::Symbol).fmt(f),
+            LiteralString => Token::LiteralString.fmt(f),
+            SectionDir => write!(
+                f,
+                "{}|{}|{}|{}",
+                DirectiveType::Text,
+                DirectiveType::Data,
+                DirectiveType::Rodata,
+                DirectiveType::Bss
+            ),
+            InstructionOrDir => write!(f, "{}|{}", Token::mnemonic(), Token::directive()),
+            SymbolOrLiteral => write!(
+                f,
+                "{}|{}|{}|{}",
+                Token::symbol(),
+                Token::LiteralDecimal,
+                Token::LiteralHex,
+                Token::LiteralBinary
+            ),
+            Operator => write!(f, "{}|{}", Token::Positive, Token::Negative),
+        }
+    }
+}
+
 pub struct InstructionRule {
-    sequence: [OperandTokenType; OperandTokenType::token_count()],
+    sequence: [RuleToken; RuleToken::token_count()],
     ty: OperandRuleType,
-    // sequence: &'a [OperandTokenType],
 }
 
 impl InstructionRule {
     pub fn new(mnemonic: Mnemonic) -> InstructionRule {
-        use OperandTokenType::*;
         InstructionRule {
-            sequence: [Register, Comma, SymbolOrLiteral, Label, ParenL, ParenR],
+            sequence: RuleToken::sequence(),
             ty: OperandRuleType::from(mnemonic),
         }
     }
@@ -33,8 +155,8 @@ impl InstructionRule {
         self.ty
     }
 
-    pub fn generate_sequence(&mut self) -> &[OperandTokenType] {
-        use OperandTokenType::*;
+    pub fn generate_sequence(&mut self) -> &[RuleToken] {
+        use RuleToken::*;
         let last_id: usize = match self.ty {
             OperandRuleType::R3 => {
                 // [Register, Comma, Register, Comma, Register]
@@ -78,80 +200,6 @@ impl InstructionRule {
         };
 
         self.sequence.get(0..last_id + 1).unwrap()
-    }
-}
-
-#[derive(EnumCount, Copy, Clone, Debug)]
-pub enum OperandTokenType {
-    Register,
-    Comma,
-    Label,
-    SymbolOrLiteral,
-    ParenL,
-    ParenR,
-    // Negative,
-    // Symbol,
-    Eol,
-}
-
-impl OperandTokenType {
-    const fn token_count() -> usize {
-        // 1 to remove Eol
-        OperandTokenType::VARIANT_COUNT - 1
-    }
-}
-
-impl From<OperandTokenType> for Token {
-    fn from(value: OperandTokenType) -> Self {
-        match value {
-            OperandTokenType::Register => Token::register(),
-            OperandTokenType::Comma => Token::Comma,
-            OperandTokenType::Label => Token::Label,
-            OperandTokenType::SymbolOrLiteral => Token::symbol(),
-            OperandTokenType::ParenL => Token::ParenL,
-            OperandTokenType::ParenR => Token::ParenR,
-            OperandTokenType::Eol => Token::Eol,
-        }
-    }
-}
-
-impl Display for OperandTokenType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use OperandTokenType::*;
-        match self {
-            Register => Token::register().fmt(f),
-            Comma => Token::Comma.fmt(f),
-            Label => Token::Label.fmt(f),
-            ParenL => Token::ParenL.fmt(f),
-            ParenR => Token::ParenR.fmt(f),
-            Eol => Token::Eol.fmt(f),
-            SymbolOrLiteral => write!(
-                f,
-                "{}|{}|{}|{}",
-                Token::symbol(),
-                Token::LiteralDecimal,
-                Token::LiteralHex,
-                Token::LiteralBinary
-            ),
-            // Negative => Token::Negative.fmt(f),
-        }
-    }
-}
-
-impl PartialEq<OperandTokenType> for Token {
-    fn eq(&self, other: &OperandTokenType) -> bool {
-        use OperandTokenType::*;
-        match (self, other) {
-            (Token::Identifier(IdentifierType::Register(_)), Register)
-            | (Token::Identifier(IdentifierType::Symbol), SymbolOrLiteral)
-            | (Token::Label, Label)
-            | (Token::LiteralDecimal | Token::LiteralHex | Token::LiteralBinary, SymbolOrLiteral)
-            | (Token::ParenR, ParenR)
-            | (Token::ParenL, ParenL)
-            | (Token::Comma, Comma)
-            | (Token::Eol, Eol) => true,
-            _ => false,
-        }
     }
 }
 
