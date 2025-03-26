@@ -114,6 +114,15 @@ impl Token {
     }
 }
 
+/// Expand to `Token::Identifier(IdentifierType::Symbol)`
+macro_rules! symbol {
+    () => {
+        $crate::token::Token::Identifier($crate::token::IdentifierType::Symbol)
+    };
+}
+
+pub(crate) use symbol;
+
 /// Expand to `Token::LiteralDecimal | Token::LiteralHex | Token::LiteralBinary`
 macro_rules! literal_integer {
     () => {
@@ -122,10 +131,18 @@ macro_rules! literal_integer {
 }
 pub(crate) use literal_integer;
 
+/// Expand to `Token::LiteralDecimal | Token::LiteralHex | Token::LiteralBinary | Token::Identifier(IdentifierType::Symbol)`
+macro_rules! symbol_or_numeric {
+    () => {
+        $crate::token::literal_integer!() | Token::Identifier(IdentifierType::Symbol)
+    };
+}
+pub(crate) use symbol_or_numeric;
+
 /// Expand to `Token::Positive | Token::Negative`
 macro_rules! operator {
     () => {
-        Token::Positive | Token::Negative
+        $crate::token::Token::Positive | $crate::token::Token::Negative
     };
 }
 pub(crate) use operator;

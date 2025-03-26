@@ -1,5 +1,8 @@
 mod asm;
+mod helper;
 mod instruction;
+mod interner;
+mod ir;
 mod lexer;
 mod parser;
 mod symbol_table;
@@ -7,7 +10,7 @@ mod token;
 
 use lexer::Lexer;
 // use parser::Parser;
-use symbol_table::{Symbol, SymbolTable};
+use symbol_table::SymbolTable;
 use thiserror::Error;
 use token::LexingError;
 
@@ -31,7 +34,7 @@ impl Assembler {
     }
 
     pub fn assemble<'source>(&mut self, source: &'source [u8]) -> Result<(), AssemblerError> {
-        let mut symbol_table = SymbolTable::new();
+        let mut symbol_table = SymbolTable::new(source);
         let tokens = Lexer::new().tokenize(source)?;
 
         // for (token, span) in tokens.symbols() {

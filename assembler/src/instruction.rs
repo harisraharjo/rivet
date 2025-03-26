@@ -27,18 +27,6 @@ impl Instruction {
     pub fn new(mnemonic: isa::instruction::Mnemonic, operands: Operands) -> Instruction {
         Instruction { mnemonic, operands }
     }
-
-    // pub fn symbols(&self) -> i32 {
-    //     1
-    // }
-
-    pub fn is_resolved(&self) -> bool {
-        !self.operands.0.iter().any(|o| {
-            let od = core::mem::discriminant(o);
-            od == core::mem::discriminant(&OperandType::Symbol(0..0))
-                || od == core::mem::discriminant(&OperandType::Label(0..0))
-        })
-    }
 }
 
 #[derive(Debug, Error)]
@@ -87,12 +75,12 @@ impl FromIterator<OperandType> for Operands {
 type Source<'a> = &'a [u8];
 
 #[derive(Debug, Default)]
+//16 bytes
 pub enum OperandType {
     Symbol(Range<usize>),
-    Label(Range<usize>),
     Register(isa::Register),
-    Literal14(isa::operand::Immediate14),
-    Literal19(isa::operand::Immediate19),
+    Imm14(isa::operand::Immediate14),
+    Imm19(isa::operand::Immediate19),
     #[default]
     None,
 }
@@ -110,40 +98,37 @@ impl<'a> TryFrom<(Lexeme<'a>, OperandRuleType, Source<'a>)> for OperandType {
             (Identifier(token::IdentifierType::Symbol), _) => {
                 Ok(Self::Symbol(lexeme.span().to_owned()))
             }
-            (Label, _) => Ok(Self::Label(lexeme.span().to_owned())),
+            // (Label, _) => Ok(Self::Label(lexeme.span().to_owned())),
             (Identifier(token::IdentifierType::Register(r)), _) => Ok(Self::Register(r)),
             (literal @ (LiteralDecimal | LiteralHex | LiteralBinary), R2I | RIR | RI) => {
                 //safety unwrap: guaranteed safe
-                let src = source.get(lexeme.span().to_owned()).unwrap();
-                let signed_byte = src[0];
+                let slice = source.get(lexeme.span().to_owned()).unwrap();
+                let frst_byte = slice[0];
                 let int_ty = LiteralIntegerType::from(literal);
                 let base = int_ty.base();
 
-                let imm = i32::from_str_radix(
-                    std::str::from_utf8(
-                        {
-                            let bytes = src
-                                .get(LiteralIntegerType::prefix_len(src[0], int_ty as u8)..)
-                                .unwrap();
+                let mut buffer = Vec::with_capacity(0);
+                let radix = std::str::from_utf8({
+                    let bytes = slice
+                        .get(LiteralIntegerType::prefix_len(frst_byte, int_ty as u8)..)
+                        .unwrap();
 
-                            if LiteralIntegerType::is_signed(signed_byte) {
-                                let mut vec = vec![0; bytes.len() + 1];
-                                vec[0] = b'-';
-                                vec[1..].copy_from_slice(bytes);
-                                vec
-                            } else {
-                                bytes.to_owned()
-                            }
-                        }
-                        .as_slice(),
-                    )
-                    .unwrap(),
-                    base,
-                )?;
+                    if LiteralIntegerType::is_signed(frst_byte) {
+                        buffer.reserve_exact(bytes.len() + 1);
+                        buffer.push(b'-');
+                        buffer.fill(Default::default());
+                        buffer[1..].copy_from_slice(bytes);
+                        buffer.as_slice()
+                    } else {
+                        bytes
+                    }
+                })
+                .unwrap();
 
+                let imm = i32::from_str_radix(radix, base)?;
                 match rule {
-                    R2I | RIR => Ok(Self::Literal14(Immediate14::try_from(imm)?)),
-                    _ => Ok(Self::Literal19(Immediate19::try_from(imm)?)),
+                    R2I | RIR => Ok(Self::Imm14(Immediate14::try_from(imm)?)),
+                    _ => Ok(Self::Imm19(Immediate19::try_from(imm)?)),
                 }
             }
             _ => Ok(Self::None),

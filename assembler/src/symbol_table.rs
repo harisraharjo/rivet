@@ -1,9 +1,13 @@
-use std::{collections::HashMap, fmt::Debug};
+use std::{collections::HashMap, fmt::Debug, ops::Range};
 
 // use bumpalo::Bump;
 use thiserror::Error;
 
-use crate::asm::section::SectionType;
+use crate::{
+    asm::{directive::DirectiveType, section::SectionType, symbol::SymbolType},
+    interner::{Interner, StrId},
+    ir::Exprs,
+};
 
 #[derive(Error, Debug)]
 pub enum SymbolError {
@@ -20,7 +24,8 @@ pub enum SymbolError {
 
 // #[derive(Debug)]
 pub type Key = SectionType;
-pub type NameSource<'a> = &'a [u8];
+pub type SymbolName = StrId;
+// pub type SymbolName = &'a [u8];
 
 #[derive(Default, Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Visibility {
@@ -31,68 +36,129 @@ pub enum Visibility {
 // .equ GREETING, msg where msg is defined as .ascii "Hello, World!"
 //      would make GREETING a label/symbol pointing to the start of the string's memory location.
 
-#[derive(Default, Debug, PartialEq, Eq)]
-pub struct Symbol<'a> {
-    name: NameSource<'a>,
+#[derive(Debug, PartialEq)]
+pub(crate) enum ConstantSymbolDir {
+    Set,
+    Equ,
+}
+
+impl From<DirectiveType> for ConstantSymbolDir {
+    fn from(value: DirectiveType) -> Self {
+        match value {
+            DirectiveType::Set => Self::Set,
+            _ => Self::Equ,
+        }
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct ConstantSymbol {
+    resolved: bool,
+}
+
+impl ConstantSymbol {
+    pub fn new(value: Exprs) -> ConstantSymbol {
+        // TODO: finish constantsymbol
+        ConstantSymbol { resolved: false }
+    }
+}
+
+pub type ConstantsKey = Range<usize>;
+#[derive(Debug, Default)]
+pub struct ConstantSymbols {
+    data: HashMap<ConstantsKey, ConstantSymbol>,
+}
+
+impl ConstantSymbols {
+    pub fn insert<'a>(
+        &mut self,
+        name_span: Range<usize>,
+        ty: ConstantSymbolDir,
+        value: ConstantSymbol,
+        source: &'a [u8],
+    ) -> Result<(), SymbolError> {
+        if ty == ConstantSymbolDir::Equ && self.data.contains_key(&name_span) {
+            return Err(SymbolError::DuplicateSymbol(
+                std::str::from_utf8(source.get(name_span).unwrap())
+                    .unwrap()
+                    .to_owned(),
+            ));
+        }
+        self.data.entry(name_span).insert_entry(value);
+        Ok(())
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct Symbol {
+    name: SymbolName,
     visibility: Visibility,
     value: Option<u32>,
-    offset: u32,
+    ty: SymbolType,
     // section: SectionType,
-    // ty: SymbolType,
     // active_section: SectionType,
 }
 
-impl<'a> Symbol<'a> {
+impl Symbol {
     pub fn new(
-        name: NameSource<'a>,
+        name: SymbolName,
         visibility: Visibility,
         value: Option<u32>,
-        offset: u32,
+        // offset: Option<u32>,
+        ty: SymbolType,
     ) -> Self {
         Self {
             visibility,
-            offset,
+            // offset,
             name,
             value,
+            ty,
             // section,
         }
     }
 
-    pub fn name(&self) -> NameSource<'_> {
-        self.name
+    pub fn name(&self) -> &SymbolName {
+        &self.name
     }
 }
 
 #[derive(Debug)]
-pub struct GlobalSymbol<'a> {
-    name: NameSource<'a>,
+pub struct GlobalSymbol {
+    name: SymbolName,
     index: (Key, usize),
 }
 
 #[derive(Debug)]
 pub struct SymbolTable<'a> {
     // arena: Bump,
-    locals: HashMap<Key, Vec<Symbol<'a>>>,
-    globals: Vec<GlobalSymbol<'a>>,
-    pending_globals: Vec<NameSource<'a>>,
+    locals: HashMap<Key, Vec<Symbol>>,
+    globals: Vec<GlobalSymbol>,
+    pending_globals: Vec<SymbolName>,
+    source: &'a [u8],
 }
 
 impl<'a> SymbolTable<'a> {
-    pub fn new() -> Self {
+    pub fn new(source: &'a [u8]) -> Self {
         Self {
             // arena: Bump::new(),
             locals: HashMap::new(),
             globals: Vec::new(),
             pending_globals: Vec::new(),
+            source,
         }
     }
 
-    pub fn insert(&mut self, section: Key, mut value: Symbol<'a>) -> Result<(), SymbolError> {
-        let name = value.name;
+    pub fn insert(
+        &mut self,
+        section: Key,
+        mut value: Symbol,
+        intern: &Interner,
+    ) -> Result<(), SymbolError> {
+        let name = value.name().to_owned();
         let global_dupe = self.globals.len() > 0 && self.globals.iter().any(|s| s.name == name);
         if global_dupe {
             return Err(SymbolError::DuplicateSymbol(
-                String::from_utf8(name.to_vec()).unwrap(),
+                intern.lookup(value.name).to_owned(),
             ));
         }
 
@@ -101,7 +167,7 @@ impl<'a> SymbolTable<'a> {
         let local_dupe = locals.iter().any(|s| s.name == name);
         if local_dupe {
             return Err(SymbolError::DuplicateSymbol(
-                String::from_utf8(name.to_vec()).unwrap(),
+                intern.lookup(value.name).to_owned(),
             ));
         }
 
@@ -119,17 +185,28 @@ impl<'a> SymbolTable<'a> {
         Ok(())
     }
 
+    // pub fn get(&self, name: SymbolName) -> i32 {
+    //     //   // Prefer local symbol in current section, then global
+    //     //     if let Some(local) = symbols.iter().find(|s| s.name == *name && s.section == current_section && s.visibility == SymbolVisibility::Local) {
+    //     //         Some(local.offset)
+    //     //     } else if let Some(global) = symbols.iter().find(|s| s.name == *name && s.visibility == SymbolVisibility::Global) {
+    //     //         Some(global.offset)
+    //     //     } else {
+    //     //         None // Unresolved, needs relocation
+    //     //     }
+    //     1
+    // }
+
     /// Change symbol visibility from local to global
     pub fn declare_global(
         &mut self,
         section: Key,
-        name: NameSource<'a>,
+        name: SymbolName,
+        intern: &Interner,
     ) -> Result<(), SymbolError> {
         let global_dupe = self.globals.len() > 0 && self.globals.iter().any(|s| s.name == name);
         if global_dupe {
-            return Err(SymbolError::DuplicateSymbol(
-                String::from_utf8(name.to_vec()).unwrap(),
-            ));
+            return Err(SymbolError::DuplicateSymbol(intern.lookup(name).to_owned()));
         }
         let locals = self.locals.get_mut(&section);
         match locals {
@@ -158,23 +235,23 @@ impl<'a> SymbolTable<'a> {
         Ok(())
     }
 
-    pub fn locals(&self) -> &HashMap<SectionType, Vec<Symbol<'a>>> {
+    pub fn locals(&self) -> &HashMap<SectionType, Vec<Symbol>> {
         &self.locals
     }
 
-    pub fn globals(&self) -> &[GlobalSymbol<'a>] {
+    pub fn globals(&self) -> &[GlobalSymbol] {
         self.globals.as_slice()
     }
 
-    pub fn pending_globals(&self) -> &[NameSource<'a>] {
+    pub fn pending_globals(&self) -> &[SymbolName] {
         self.pending_globals.as_slice()
     }
 
     // #[cfg(test)]
-    pub fn contains_key(&self, name: &[u8], section: Key) -> bool {
-        self.locals
-            .get(&section)
-            .and_then(|v| v.iter().any(|s| s.name == name).into())
-            .is_some()
-    }
+    // pub fn contains_key(&self, name: &[u8], section: Key) -> bool {
+    //     self.locals
+    //         .get(&section)
+    //         .and_then(|v| v.iter().any(|s| s.name == name).into())
+    //         .is_some()
+    // }
 }

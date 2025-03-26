@@ -22,7 +22,7 @@ pub enum RuleToken {
     Register,
     Comma,
     Label,
-    SymbolOrLiteral,
+    SymbolOrNumeric,
     ParenL,
     ParenR,
     Operator,
@@ -31,7 +31,8 @@ pub enum RuleToken {
     LiteralString,
     SectionDir,
     InstructionOrDir,
-    Eol,
+    // Eol,
+    Break,
 }
 
 impl RuleToken {
@@ -45,7 +46,7 @@ impl RuleToken {
         [
             Self::Register,
             Self::Comma,
-            Self::SymbolOrLiteral,
+            Self::SymbolOrNumeric,
             Self::Label,
             Self::ParenL,
             Self::ParenR,
@@ -53,14 +54,15 @@ impl RuleToken {
         ]
     }
 
-    /// "Hidden" tokens. Tokens that are only intended for single matching and not as a sequence matching
+    /// "Hidden" tokens. Tokens that are only intended for single matching and not for sequence matching
     const fn hidden_count() -> usize {
         [
-            Self::Eol,
+            // Self::Eol,
             Self::Symbol,
             Self::LiteralString,
             Self::SectionDir,
             Self::InstructionOrDir,
+            Self::Break,
         ]
         .len()
     }
@@ -72,7 +74,7 @@ impl RuleToken {
 //             RuleToken::Register => Token::register(),
 //             RuleToken::Comma => Token::Comma,
 //             RuleToken::Label => Token::Label,
-//             RuleToken::SymbolOrLiteral => Token::symbol(),
+//             RuleToken::SymbolOrNumeric => Token::symbol(),
 //             RuleToken::ParenL => Token::ParenL,
 //             RuleToken::ParenR => Token::ParenR,
 //             RuleToken::Eol => Token::Eol,
@@ -84,6 +86,7 @@ impl RuleToken {
 impl PartialEq<RuleToken> for Token {
     fn eq(&self, other: &RuleToken) -> bool {
         use RuleToken::*;
+        //IMPORTANT: Don't add hidden token here
         match (self, other) {
             (Token::Identifier(IdentifierType::Register(_)), Register)
             | (Token::Label, Label)
@@ -92,13 +95,13 @@ impl PartialEq<RuleToken> for Token {
                 | Token::LiteralHex
                 | Token::LiteralBinary
                 | Token::Identifier(IdentifierType::Symbol),
-                SymbolOrLiteral,
+                SymbolOrNumeric,
             )
             | (token::operator!(), Operator)
             | (Token::ParenR, ParenR)
             | (Token::ParenL, ParenL)
             | (Token::Comma, Comma)
-            | (Token::Eol, Eol) => true,
+            | (Token::Eol | Token::Eof, Break) => true,
             _ => false,
         }
     }
@@ -113,7 +116,7 @@ impl Display for RuleToken {
             Label => Token::Label.fmt(f),
             ParenL => Token::ParenL.fmt(f),
             ParenR => Token::ParenR.fmt(f),
-            Eol => Token::Eol.fmt(f),
+            Break => write!(f, "{}|{}", Token::Eol, Token::Eof,),
             Symbol => Token::Identifier(IdentifierType::Symbol).fmt(f),
             LiteralString => Token::LiteralString.fmt(f),
             SectionDir => write!(
@@ -125,7 +128,7 @@ impl Display for RuleToken {
                 DirectiveType::Bss
             ),
             InstructionOrDir => write!(f, "{}|{}", Token::mnemonic(), Token::directive()),
-            SymbolOrLiteral => write!(
+            SymbolOrNumeric => write!(
                 f,
                 "{}|{}|{}|{}",
                 Token::symbol(),
@@ -166,20 +169,20 @@ impl InstructionRule {
                 4
             }
             OperandRuleType::R2I => {
-                // [Register, Comma, Register, Comma, SymbolOrLiteral]
+                // [Register, Comma, Register, Comma, SymbolOrNumeric]
                 self.sequence[2] = Register;
                 self.sequence[3] = Comma;
-                self.sequence[4] = SymbolOrLiteral;
+                self.sequence[4] = SymbolOrNumeric;
                 4
             }
             OperandRuleType::RI => {
-                // [Register, Comma, SymbolOrLiteral]
-                self.sequence[2] = SymbolOrLiteral;
+                // [Register, Comma, SymbolOrNumeric]
+                self.sequence[2] = SymbolOrNumeric;
                 2
             }
             OperandRuleType::RIR => {
-                // [Register, Comma, SymbolOrLiteral, ParenL, Register, ParenR]
-                self.sequence[2] = SymbolOrLiteral;
+                // [Register, Comma, SymbolOrNumeric, ParenL, Register, ParenR]
+                self.sequence[2] = SymbolOrNumeric;
                 self.sequence[3] = ParenL;
                 self.sequence[4] = Register;
                 self.sequence[5] = ParenR;
@@ -222,7 +225,7 @@ pub enum OperandRuleType {
 }
 
 impl OperandRuleType {
-    /// Function to remind that there are noises e.g. `Comma, ParenL, ParenR` in every `X`id
+    /// Function to remind that there are noises e.g. `Comma, ParenL, ParenR` in every `X`index
     pub(crate) const fn noises_in_every() -> usize {
         2
     }

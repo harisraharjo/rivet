@@ -1,7 +1,7 @@
 //? Symbol: is an absoulte, means that the value is not changed during the linking process
 //? Label: (is basically a symbol). may have its value (which is an address) changed during the relocation process.
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq, Eq)]
 pub enum SymbolType {
     #[default]
     Label,

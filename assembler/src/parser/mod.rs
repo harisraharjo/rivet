@@ -1,5 +1,6 @@
 pub mod grammar;
 
+// use bumpalo::{Bump, collections::Vec as BumpVec};
 use grammar::{OperandRuleType, RuleToken};
 use std::{
     fmt::{Debug, Display},
@@ -8,14 +9,10 @@ use std::{
 use thiserror::Error;
 
 use crate::{
-    asm::{
-        directive::DirectiveType,
-        section::{Element, Sections},
-    },
-    instruction::{OperandError, OperandType, Operands},
-    lexer::{Lexeme, Lexemes, LexemesSlice},
-    symbol_table::{Symbol, SymbolError, SymbolTable},
-    token::{self, IdentifierType, Token},
+    asm::{directive::DirectiveType, section::{ContentType, Section}, symbol::SymbolType}, instruction::{OperandError, OperandType, Operands}, interner::Interner, ir::{Expr, Exprs, IRError, Node}, lexer::{Lexeme, Lexemes, LexemesSlice}, symbol_table::{
+        ConstantSymbol, ConstantSymbolDir, ConstantSymbols, Symbol, SymbolError, 
+        Visibility,
+    }, token::{self, IdentifierType, Token}
 };
 
 // #[derive(Debug)]
@@ -54,11 +51,13 @@ pub enum ParserError {
     #[error("Invalid line. Multiple {0}s encountered. Only 1 {0} is allowed")]
     InvalidLine(Single),
     #[error("{0} is still work in progress. Stay tuned!")]
-    UnimplementedFeature(Todo),
+    UnimplementedFeature(RuntimeTodo),
     #[error("Duplicate label {0}")]
     DuplicateLabel(String),
     #[error(transparent)]
     ValueError(#[from] OperandError),
+    #[error(transparent)]
+    IRError(#[from] IRError),
     #[error(" symbol {0}")]
     SymbolError(#[from] SymbolError),
     //     #[error("Undefined symbol: {0}")]
@@ -70,7 +69,7 @@ macro_rules! expect_token {
     ($lexeme:expr, None) => {
         match $lexeme {
             Some(l) => Err(ParserError::UnexpectedToken {
-                expected: RuleToken::Eol,
+                expected: RuleToken::Break,
                 found: Some({ *l.token() }.to_string()),
             }),
             None => Ok(()),
@@ -94,22 +93,55 @@ macro_rules! expect_token {
     };
 }
 
+#[derive(Debug)]
+pub struct IR {
+    // intern: ustr
+    // nodes: BumpVec<'bump, &'bump dyn Debug>
+    nodes: Vec<Node>,
+    intern: Interner
+}
+
+
+impl IR {
+    fn new() -> Self {
+        Self {
+            nodes: Vec::new(),
+            intern: Interner::with_capacity(50),
+        }
+    }
+
+    fn push(&mut self, node: Node ) {
+        self.nodes.push(node);
+    }
+
+    #[cfg(test)]
+    fn interns(&self) -> &Interner {
+        &self.intern
+    }
+
+}
+
 pub struct Parser<'a> {
     lexemes: Lexemes,
     index: usize,
     source: &'a [u8],
-    sections: Sections,
-    symtab: &'a mut SymbolTable<'a>,
+    // sections: Sections,
+    constants: ConstantSymbols,
+    // arena: bumpalo::Bump,
+    ir: IR,
 }
 
 impl<'a> Parser<'a> {
-    pub fn new(source: &'a [u8], lexemes: Lexemes, symtab: &'a mut SymbolTable<'a>) -> Self {
+    pub fn new(source: &'a [u8], lexemes: Lexemes) -> Self {
+        // let cap = source.len();
         Parser {
             lexemes,
             index: 0,
             source,
-            sections: Sections::default(),
-            symtab,
+            // sections: Sections::default(),
+            constants: ConstantSymbols::default(),
+            // arena: Bump::with_capacity(cap),
+            ir: IR::new(),
         }
     }
 
@@ -153,14 +185,8 @@ impl<'a> Parser<'a> {
         &self.lexemes.tokens()[self.next_index()..]
     }
 
-    fn eat(&mut self) -> Option<Token> {
-        let token = self.lexemes.tokens()[self.index];
-
-        if token == Token::Eof {
-            return None;
-        }
-
-        Some(token)
+    fn eat(&self) -> Option<&Token> {
+        self.lexemes.tokens().get(self.index)
     }
 
     fn nearest_break_idx(&self) -> Option<usize> {
@@ -207,9 +233,16 @@ impl<'a> Parser<'a> {
     }
 
     pub fn parse(&mut self) -> Result<(), ParserError> {
+        // let mut vec = BumpVec::new_in(&self.arena);
+        // BumpVec<&dyn Debug>
+
         while let Some(token) = self.eat() {
-            self.walk(token)?;
+            self.walk(*token)?;
+            // vec.push(value);
         }
+        
+        println!("{:?}", self.ir.intern);
+        println!("{:?}", self.ir.nodes);
 
         Ok(())
     }
@@ -218,108 +251,132 @@ impl<'a> Parser<'a> {
         println!("Parsing... {:?}", token);
         match token {
             Token::Directive(dir_type) => {
-                use crate::asm::directive::DirectiveType::*;
+                use crate::asm::directive::DirectiveType;
 
                 match dir_type {
-                    Section => {
+                    DirectiveType::Section => {
                         expect_token!(self.peek(), token::section_dir!(), RuleToken::SectionDir)?;
                     }
-                    Text | Data | Rodata | Bss => {
-                        //syntax analaysis
-                        let mut lexemes = self.peek_line();
-                        expect_token!(lexemes.next(), None)?;
+                    DirectiveType::Text | DirectiveType::Data | DirectiveType::Rodata | DirectiveType::Bss 
+                    // | CustomSection
+                     => {
+                        expect_token!(self.peek(), Token::Eol | Token::Eof, RuleToken::Break)?;
 
-                        self.sections
-                            .switch(dir_type, self.current_span().to_owned());
+                        // self.sections
+                        //     .switch(dir_type, self.current_span().to_owned());
+
+                        let slice = self.current_source();
+                        // safety: guaranteed safe because of it's valid utf8. Taken from the implementation of `String.to_box_slice()`
+                        // let box_str = unsafe { std::str::from_boxed_utf8_unchecked(slice.into()) };
+                        let str_id= self.ir.intern.intern(std::str::from_utf8(
+                            slice
+                        )
+                        .unwrap());
+                        let data = Section::new(dir_type.into(), str_id);
+                        self.ir.push(Node::Section(data));
+                        // curr_sect.insert(Node::String(box_str));
                     }
-                    Byte | Half | Word => {
-                        //syntax analaysis
-                        let mut lexemes = self.peek_line();
-                        loop {
-                            expect_token!(
-                                lexemes.next(),
-                                token::literal_integer!()
-                                    | Token::Identifier(IdentifierType::Symbol),
-                                RuleToken::SymbolOrLiteral
-                            )?;
+                    DirectiveType::Byte | DirectiveType::Half | DirectiveType::Word => {
+                        // let mut lexemes = self.peek_line();
+                        // loop {
+                        //     expect_token!(
+                        //         lexemes.next(),
+                        //         token::symbol_or_numeric!(),
+                        //         RuleToken::SymbolOrNumeric
+                        //     )?;
 
-                            match lexemes.next() {
-                                Some(l) => match *l.token() {
-                                    token::operator!() => Ok(()),
-                                    t @ _ => Err(ParserError::UnexpectedToken {
-                                        expected: RuleToken::Eol,
-                                        found: Some(t.to_string()),
-                                    }),
-                                },
-                                None => {
-                                    break;
-                                }
-                            }?;
-                        }
+                        //     match lexemes.next() {
+                        //         Some(l) => match *l.token() {
+                        //             token::operator!() => Ok(()),
+                        //             t @ _ => Err(ParserError::UnexpectedToken {
+                        //                 expected: RuleToken::Eol,
+                        //                 found: Some(t.to_string()),
+                        //             }),
+                        //         },
+                        //         None => {
+                        //             break;
+                        //         }
+                        //     }?;
+                        // }
 
-                        return Err(ParserError::UnimplementedFeature(Todo::Dir(dir_type)));
+                        // let mut curr_sect = self.sections.current();
+                        // curr_sect.insert(Node::Global(span));
+
+                        return Err(ParserError::UnimplementedFeature(RuntimeTodo::Dir(
+                            dir_type,
+                        )));
                     }
-                    Ascii => {
-                        //syntax analaysis
+                    DirectiveType::Ascii => {
                         let lexeme = expect_token!(
                             self.peek(),
                             Token::LiteralString,
                             RuleToken::LiteralString
                         )?;
-                        expect_token!(self.peek_n(2), Token::Eol | Token::Eof, RuleToken::Eol)?;
+                        expect_token!(self.peek_n(2), Token::Eol | Token::Eof, RuleToken::Break)?;
                         println!("String value: {:?}", lexeme);
 
-                        // TODO: finish the value
-                    }
-                    Align | Balign | P2align => {
-                        let mut lexemes = self.peek_line();
-                        loop {
-                            expect_token!(
-                                lexemes.next(),
-                                token::literal_integer!()
-                                    | Token::Identifier(IdentifierType::Symbol),
-                                RuleToken::SymbolOrLiteral
-                            )?;
+                        let span = lexeme.span().to_owned();
+                        let slice = self.source.get(span).unwrap();
+                        // safety: guaranteed safe because of it's valid utf8. Taken from the implementation of `String.to_box_slice()`
+                        let box_str = unsafe { std::str::from_boxed_utf8_unchecked(slice.into()) };
 
-                            match lexemes.next() {
-                                Some(l) => match *l.token() {
-                                    token::operator!() => Ok(()),
-                                    t @ _ => Err(ParserError::UnexpectedToken {
-                                        expected: RuleToken::Eol,
-                                        found: Some(t.to_string()),
-                                    }),
-                                },
-                                None => {
-                                    break;
-                                }
-                            }?;
-                        }
-
-                        return Err(ParserError::UnimplementedFeature(Todo::Dir(dir_type)));
+                        self.ir.push(Node::String(box_str));
+                        
                     }
-                    Set | Equ => {
-                        //syntax analaysis
+                    DirectiveType::Align | DirectiveType::Balign | DirectiveType::P2align => {
+                        // let mut lexemes = self.peek_line();
+                        // loop {
+                        //     expect_token!(
+                        //         lexemes.next(),
+                        //         token::symbol_or_numeric!(),
+                        //         RuleToken::SymbolOrNumeric
+                        //     )?;
+
+                        //     match lexemes.next() {
+                        //         Some(l) => match *l.token() {
+                        //             token::operator!() => Ok(()),
+                        //             t @ _ => Err(ParserError::UnexpectedToken {
+                        //                 expected: RuleToken::Eol,
+                        //                 found: Some(t.to_string()),
+                        //             }),
+                        //         },
+                        //         None => {
+                        //             break;
+                        //         }
+                        //     }?;
+                        // }
+
+                        // let mut curr_sect = self.sections.current();
+                        // curr_sect.insert(Node::Global(span));
+
+                        return Err(ParserError::UnimplementedFeature(RuntimeTodo::Dir(
+                            dir_type,
+                        )));
+                    }
+                    DirectiveType::Set | DirectiveType::Equ => {
                         let mut lexemes = self.peek_line();
-                        let symbol = expect_token!(
+                        let constant_name = expect_token!(
                             lexemes.next(),
                             Token::Identifier(IdentifierType::Symbol),
                             RuleToken::Symbol
                         )?;
                         expect_token!(lexemes.next(), Token::Comma, RuleToken::Comma)?;
-                        //check expression
+
+                        let mut exprs = Exprs::new(lexemes.len());
                         loop {
-                            expect_token!(
+                            let var = expect_token!(
                                 lexemes.next(),
-                                token::literal_integer!()
-                                    | Token::Identifier(IdentifierType::Symbol),
-                                RuleToken::SymbolOrLiteral
+                                token::symbol_or_numeric!(),
+                                RuleToken::SymbolOrNumeric
                             )?;
 
-                            match lexemes.next() {
+                            exprs.push(Expr::try_from((var, self.source))?);
+
+                            let op = match lexemes.next() {
                                 Some(l) => match *l.token() {
-                                    token::operator!() => Ok(()),
+                                    token::operator!() => Ok(l),
                                     t @ _ => Err(ParserError::UnexpectedToken {
-                                        expected: RuleToken::Eol,
+                                        expected: RuleToken::Break,
                                         found: Some(t.to_string()),
                                     }),
                                 },
@@ -328,64 +385,77 @@ impl<'a> Parser<'a> {
                                 }
                             }?;
 
-                            // let name = String::from_utf8_lossy(&self.source[span.clone()]).to_string();
-                            // symbols.symbols.iter().find(|s| s.0 == name).map(|s| s.1)
+                            exprs.push(Expr::try_from((op, self.source))?);
+                            // self.arena.alloc(Expr::try_from((op, self.source))?);
                         }
 
-                        // TODO: syntax analysis is done. Now complete the expression and all the offsets for each token
-                        let src = self.source.get(symbol.span().to_owned()).unwrap();
-                        let curr_sect = self.sections.current();
-                        self.symtab.insert(
-                            curr_sect.ty(),
-                            Symbol::new(src, Default::default(), None, curr_sect.offset()),
+                        let token_len = lexemes.token_len();
+                        self.constants.insert(
+                            constant_name.span().to_owned(),
+                            dir_type.into(),
+                            // TODO: Data for expression is not quite right still
+                            ConstantSymbol::new(exprs),
+                            self.source,
                         )?;
+                        self.advance_by(token_len);
                     }
-                    Global => {
-                        //syntax analaysis
+                    DirectiveType::Global => {
                         let symbol = expect_token!(
                             self.peek(),
                             Token::Identifier(IdentifierType::Symbol),
                             RuleToken::Symbol
                         )?;
-                        expect_token!(self.peek_n(2), Token::Eol | Token::Eof, RuleToken::Eol)?;
+                        expect_token!(self.peek_n(2), Token::Eol | Token::Eof, RuleToken::Break)?;
 
                         let span = symbol.span().to_owned();
-                        self.symtab.declare_global(
-                            self.sections.current().ty(),
-                            self.source.get(span).unwrap(),
-                        )?;
+                        let slice = self.source.get(span).unwrap();
+                        // safety: guaranteed safe because of it's valid utf8. Taken from the implementation of `String.to_box_slice()`
+                        // let box_str = unsafe { std::str::from_boxed_utf8_unchecked(slice.into()) };
+                    
+                        let str_id= self.ir.intern.intern(std::str::from_utf8(
+                            slice
+                        )
+                        .unwrap());
+                        self.ir.push(Node::Global(str_id));
+
                         self.advance();
                     }
-                    Skip => {
-                        let mut lexemes = self.peek_line();
-                        loop {
-                            expect_token!(
-                                lexemes.next(),
-                                token::literal_integer!()
-                                    | Token::Identifier(IdentifierType::Symbol),
-                                RuleToken::SymbolOrLiteral
-                            )?;
+                    DirectiveType::Skip => {
+                        // let mut lexemes = self.peek_line();
+                        // loop {
+                        //     expect_token!(
+                        //         lexemes.next(),
+                        //         token::symbol_or_numeric!(),
+                        //         RuleToken::SymbolOrNumeric
+                        //     )?;
 
-                            match lexemes.next() {
-                                Some(l) => match *l.token() {
-                                    token::operator!() => Ok(()),
-                                    t @ _ => Err(ParserError::UnexpectedToken {
-                                        expected: RuleToken::Eol,
-                                        found: Some(t.to_string()),
-                                    }),
-                                },
-                                None => {
-                                    break;
-                                }
-                            }?;
-                        }
-                        return Err(ParserError::UnimplementedFeature(Todo::Dir(dir_type)));
+                        //     match lexemes.next() {
+                        //         Some(l) => match *l.token() {
+                        //             token::operator!() => Ok(()),
+                        //             t @ _ => Err(ParserError::UnexpectedToken {
+                        //                 expected: RuleToken::Eol,
+                        //                 found: Some(t.to_string()),
+                        //             }),
+                        //         },
+                        //         None => {
+                        //             break;
+                        //         }
+                        //     }?;
+                        // }
+
+                        return Err(ParserError::UnimplementedFeature(RuntimeTodo::Dir(
+                            dir_type,
+                        )));
                     }
-                    Comm | LComm => {
-                        return Err(ParserError::UnimplementedFeature(Todo::Dir(dir_type)));
+                    DirectiveType::Comm | DirectiveType::LComm => {
+                        return Err(ParserError::UnimplementedFeature(RuntimeTodo::Dir(
+                            dir_type,
+                        )));
                     }
-                    String | Asciz => {
-                        return Err(ParserError::UnimplementedFeature(Todo::Dir(dir_type)));
+                    DirectiveType::String | DirectiveType::Asciz => {
+                        return Err(ParserError::UnimplementedFeature(RuntimeTodo::Dir(
+                            dir_type,
+                        )));
                     }
                 }
             }
@@ -400,12 +470,17 @@ impl<'a> Parser<'a> {
                     RuleToken::InstructionOrDir
                 )?;
 
-                let src = self.current_source();
-                let curr_sect = self.sections.current();
-                self.symtab.insert(
-                    curr_sect.ty(),
-                    Symbol::new(src, Default::default(), None, curr_sect.offset()),
-                )?;
+                let span = self.current_span().to_owned();
+                let slice = self.source.get(span).unwrap();
+                let str_id= self.ir.intern.intern(std::str::from_utf8(slice).unwrap());
+                
+               self.ir.push(Node::Label(Symbol::new(
+                    str_id,
+                    Visibility::Local,
+                    None,
+                    SymbolType::Label,
+                )));
+    
             }
             Token::Identifier(IdentifierType::Mnemonic(mnemonic)) => {
                 let mut lexemes = self.peek_line();
@@ -433,7 +508,7 @@ impl<'a> Parser<'a> {
                 };
 
                 let seq_len = sequence.len();
-                let rule_residue = seq_len.saturating_sub(lexemes.len());
+                let rule_residue = seq_len.saturating_sub(lexemes.token_len());
                 // check whether the input is: (too little, too much)
                 match (rule_residue > 0, &lexemes.next()) {
                     (true, None) => {
@@ -445,7 +520,7 @@ impl<'a> Parser<'a> {
                     }
                     (false, Some(lexeme)) => {
                         return Err(ParserError::UnexpectedToken {
-                            expected: RuleToken::Eol,
+                            expected: RuleToken::Break,
                             found: std::str::from_utf8(
                                 self.source.get(lexeme.span().to_owned()).unwrap(),
                             )
@@ -467,44 +542,20 @@ impl<'a> Parser<'a> {
                     .map(|lexeme| (lexeme, rule_ty, self.source).try_into())
                     .collect::<Result<Vec<OperandType>, OperandError>>()?;
 
-                let mut current_section = self.sections.current();
-                let mut operands = Operands::new();
-                for (target, value) in operands.iter_mut().zip(operand_types) {
-                    match &value {
-                        OperandType::Symbol(span) | OperandType::Label(span) => {
-                            self.symtab.insert(
-                                current_section.ty(),
-                                Symbol::new(
-                                    self.source.get(span.to_owned()).unwrap(),
-                                    Default::default(),
-                                    None,
-                                    current_section.offset(),
-                                ),
-                            )?;
-                        }
-                        _ => {}
-                    }
-
-                    *target = value;
-                }
-
+                // let mut current_section = self.sections.current();
+                let operands = Operands::from_iter(operand_types);
                 let ins = crate::instruction::Instruction::new(mnemonic, operands);
                 println!("Instruction IR: {:?}", ins);
-                println!("Current offset: {:?}", current_section.offset());
 
                 // let pseudo = PseudoInstruction
-                current_section.insert(Element::Instruction(ins));
-                current_section.increase_offset_by(4);
+                self.ir.push(Node::Instruction(ins));
                 self.advance_by(seq_len);
             }
-            Token::Eol => {
-                println!("=== eol ===");
-            }
-            Token::Comma => {
-                //do nothing
+            Token::Eol | Token::Eof => {
+                println!("=== BREAK ===");
             }
             t @ _ => {
-                println!("Unknown Token: {:?}", t);
+                println!("Unknown Token: {:?} -> {:?}", t, std::str::from_utf8(self.current_source()));
                 return Err(ParserError::SyntaxError);
             }
         }
@@ -515,18 +566,18 @@ impl<'a> Parser<'a> {
 }
 
 #[derive(Debug)]
-enum Todo {
+enum RuntimeTodo {
     // #[errortra]
     Dir(DirectiveType),
     // #[error("symbol")]
     Symbol,
 }
 
-impl Display for Todo {
+impl Display for RuntimeTodo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Todo::Dir(directive_type) => Display::fmt(directive_type, f),
-            Todo::Symbol => write!(f, "{}", "symbol"),
+            RuntimeTodo::Dir(directive_type) => Display::fmt(directive_type, f),
+            RuntimeTodo::Symbol => write!(f, "{}", "symbol"),
         }
     }
 }
@@ -560,14 +611,23 @@ mod test {
             // 0b11kl // invalid literal Binary
         "#;
 
+        // ex
+        // Instructions: 4 bytes each (RV32I).
+        // Word: 4 bytes.
+        // Byte: 1 byte.
+        // Half: 2 bytes.
+        // String: Length of string + null terminator.
+        // Align: Pad to the specified boundary (e.g., .align 2 → 4 bytes).
+        // Skip: Add uninitialized bytes.
+        // let name = String::from_utf8_lossy(&self.source[span.clone()]).to_string();
+        // symbols.symbols.iter().find(|s| s.0 == name).map(|s| s.1)
+
         let source = raw_source.as_bytes();
 
-        let mut symbol_table = SymbolTable::new();
-
+        // let mut symbol_table = SymbolTable::new();
         let lexemes = lex.tokenize(source).unwrap();
-        println!("Sym table locals: {:?}", symbol_table.locals());
 
-        let mut parser = Parser::new(source, lexemes, &mut symbol_table);
+        let mut parser = Parser::new(source, lexemes);
         assert!(match parser.parse() {
             Ok(_) => true,
             Err(e) => panic!("{e}"),
@@ -586,10 +646,10 @@ mod test {
 
         let source = raw_source.as_bytes();
 
-        let mut symbol_table = SymbolTable::new();
+        // let mut symbol_table = SymbolTable::new();
         let lexemes = lex.tokenize(source).unwrap();
 
-        let mut parser = Parser::new(source, lexemes, &mut symbol_table);
+        let mut parser = Parser::new(source, lexemes);
         assert!(match parser.parse() {
             Ok(_) => true,
             Err(e) => panic!("{e}"),

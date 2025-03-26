@@ -1,216 +1,103 @@
-use crate::instruction::Instruction;
+use crate::interner::StrId;
 
 use super::directive::DirectiveType;
-use std::ops::Range;
 
-pub struct Sections {
-    ///  \[Text, Data, Rodata, Bss]
-    progbits: Vec<Section<Progbits>>,
-    bss: Section<Nobits>,
-    //TODO: support user defined section
-    // custom: Vec<Section<Progbits>>,
-    active: SectionType,
-    offsets: Vec<u32>,
-}
-
-impl Sections {
-    pub fn switch(&mut self, ty: DirectiveType, source_span: SourceSpan) {
-        self.active = match ty {
-            DirectiveType::Data => {
-                let active_section = SectionType::Data;
-                self.progbits[active_section as usize].insert_name(source_span);
-                active_section
-            }
-            DirectiveType::Rodata => {
-                let active_section = SectionType::Rodata;
-                self.progbits[active_section as usize].insert_name(source_span);
-                active_section
-            }
-            DirectiveType::Bss => {
-                self.bss.insert_name(source_span);
-                SectionType::Bss
-            }
-            _ => {
-                let active_section = SectionType::Text;
-                self.progbits[active_section as usize].insert_name(source_span);
-                active_section
-            } // DirectiveType::CustomSection => todo!(),
-        };
-    }
-
-    pub fn current(&mut self) -> CurrentSection<'_> {
-        CurrentSection { sections: self }
-    }
-
-    // pub fn insert(&mut self, element: Element) {
-    //     if let Some(s) = self.progbits.get_mut(self.active as usize) {
-    //         s.insert(element);
-    //         return;
-    //     };
-
-    //     self.bss.insert(element);
-    // }
-
-    // pub fn active_section(&self) -> SectionType {
-    //     self.active
-    // }
-
-    // pub fn current_offset(&self) -> u32 {
-    //     self.offsets[self.active as usize]
-    // }
-
-    // pub fn increase_offset_by(&mut self, v: u32) {
-    //     self.offsets[self.active as usize] += v;
-    // }
-}
-
-impl Default for Sections {
-    fn default() -> Self {
-        let mut text = Section::<Progbits>::default();
-        text.flags.insert(Flag::EXECINSTR);
-        let mut data = Section::<Progbits>::default();
-        data.flags.insert(Flag::WRITE);
-
-        Self {
-            progbits: vec![text, data, Default::default()],
-            bss: Default::default(),
-            active: SectionType::Text,
-            offsets: vec![0; SectionType::VARIANT_COUNT],
-        }
-        // let flags = match ty {
-        //     Text => (Flag::ALLOC | Flag::EXECINSTR),
-
-        //     Data => Flag::ALLOC | Flag::WRITE,
-        //     Bss => Flag::ALLOC | Flag::WRITE,
-        //     Rodata => Flag::ALLOC,
-        //     _ => Flag::ALLOC,
-        // };
-    }
-}
-
-pub struct CurrentSection<'a> {
-    sections: &'a mut Sections,
-}
-
-impl CurrentSection<'_> {
-    pub fn insert(&mut self, element: Element) {
-        if let Some(s) = self
-            .sections
-            .progbits
-            .get_mut(self.sections.active as usize)
-        {
-            s.insert(element);
-            return;
-        };
-
-        self.sections.bss.insert(element);
-    }
-
-    pub fn offset(&self) -> u32 {
-        self.sections.offsets[self.sections.active as usize]
-    }
-
-    pub fn increase_offset_by(&mut self, v: u32) {
-        self.sections.offsets[self.sections.active as usize] += v;
-    }
-
-    pub fn ty(&self) -> SectionType {
-        self.sections.active
-    }
-}
-
-/// Range in the source `&[u8]` where the section name resides.
-pub type SourceSpan = Range<usize>;
+// pub type SourceSpan = Range<usize>;
 /// Represents a section in the assembler, mapping to an ELF section header.
 #[derive(Debug)]
-pub struct Section<T>
-where
-    T: ContentType,
-{
-    /// Range in the source &[u8] where the section name resides.
-    name: SourceSpan,
-    // /// Type of the section (e.g., Progbits, Nobits).
-    // attr: SectionAttribute,
+pub struct Section {
+    /// Id in the Interner.
+    str_id: StrId,
+    /// Type of the section (e.g., Progbits, Nobits).
+    content_type: ContentType,
     /// Flags indicating section properties (e.g., ALLOC, EXECINSTR).
     flags: Flag,
     /// Alignment requirement (power of 2, e.g., 4 for .text).
     alignment: Alignment,
-    // /// Content or size, depending on section type.
-    ty: DirectiveType,
-    /// Progbits or Nobits
-    content: T,
+    /// Section type. `.text, .data, etc`
+    ty: SectionType,
+    // /// Progbits or Nobits
+    // content: T,
 }
 
-impl<T> Section<T>
-where
-    T: ContentType,
-{
-    pub const fn new(
-        ty: DirectiveType,
-        name: SourceSpan,
-        flags: Flag,
-        // alignment: Alignment,
-        content: T,
+impl Section {
+    pub fn new(
+        ty: SectionType,
+        str_id: StrId,
+        // content: T,
     ) -> Self {
+        let content_type = match ty {
+            SectionType::Text => ContentType::Progbits,
+            SectionType::Data => ContentType::Progbits,
+            SectionType::Rodata => ContentType::Progbits,
+            SectionType::Bss => ContentType::Nobits,
+        };
+
+        let flags = match content_type {
+            ContentType::Progbits => Flag::ALLOC,
+            ContentType::Nobits => Flag::ALLOC | Flag::WRITE,
+        };
+
         Self {
-            name,
+            str_id,
             flags,
             alignment: Alignment::new(ty),
             ty,
-            content,
+            content_type, // content,
         }
     }
 
-    fn insert_name(&mut self, span: SourceSpan) {
-        if self.name.end != 0 {
-            self.name.start = span.start;
-            self.name.end = span.end;
-        };
-    }
+    // fn insert_name(&mut self, span: SourceSpan) {
+    //     if self.name.end != 0 {
+    //         self.name.start = span.start;
+    //         self.name.end = span.end;
+    //     };
+    // }
 }
 
-impl Default for Section<Progbits> {
-    fn default() -> Self {
-        Self {
-            name: 0..0,
-            alignment: Alignment::new(DirectiveType::Text),
-            flags: Flag::ALLOC,
-            ty: DirectiveType::Text,
-            content: Progbits::default(),
-        }
-    }
-}
+// impl Default for Section<Progbits> {
+//     fn default() -> Self {
+//         Self {
+//             name: StrId,
+//             alignment: Alignment::new(DirectiveType::Text),
+//             flags: Flag::ALLOC,
+//             ty: DirectiveType::Text,
+//             content_type: ContentType::Progbits,
+//             // content: Progbits::default(),
+//         }
+//     }
+// }
 
-impl Default for Section<Nobits> {
-    fn default() -> Self {
-        Self {
-            name: 0..0,
-            alignment: Alignment::new(DirectiveType::Bss),
-            flags: Flag::ALLOC | Flag::WRITE,
-            ty: DirectiveType::Bss,
-            content: Nobits::default(),
-        }
-    }
-}
+// impl Default for Section<Nobits> {
+//     fn default() -> Self {
+//         Self {
+//             name: StrId,
+//             alignment: Alignment::new(DirectiveType::Bss),
+//             flags: Flag::ALLOC | Flag::WRITE,
+//             ty: DirectiveType::Bss,
+//             content: Nobits::default(),
+//         }
+//     }
+// }
 
-impl Section<Progbits> {
-    pub fn insert(&mut self, element: Element) {
-        self.content.buffer.push(element);
-    }
-}
+// impl Section<Progbits> {
+//     pub fn insert(&mut self, element: Node) {
+//         self.content.buffer.push(element);
+//     }
+// }
 
-impl Section<Nobits> {
-    pub fn insert(&mut self, element: Element) {
-        self.content.0 = match element {
-            Element::Word(d) => d,
-            Element::Byte(d) => d as u32,
-            Element::Half(d) => d as u32,
-            Element::Skip(d) => d,
-            Element::Align(d) => d,
-            _ => self.content.0,
-        }
-    }
-}
+// impl Section<Nobits> {
+//     pub fn insert(&mut self, element: Node) {
+//         self.content.0 = match element {
+//             Node::Word(d) => d,
+//             Node::Byte(d) => d as u32,
+//             Node::Half(d) => d as u32,
+//             Node::Skip(d) => d,
+//             Node::Align(d) => d,
+//             _ => self.content.0,
+//         }
+//     }
+// }
 
 #[derive(Debug, Default, Clone, Copy, EnumCount, PartialEq, Eq, Hash)]
 pub enum SectionType {
@@ -220,6 +107,7 @@ pub enum SectionType {
     Rodata,
     Bss,
     // CustomSection(usize),
+    // None,
 }
 
 impl SectionType {
@@ -227,12 +115,24 @@ impl SectionType {
         Self::VARIANT_COUNT - 1
     }
 
-    pub const fn name(&self) -> &str {
-        match self {
-            SectionType::Text => "text",
-            SectionType::Data => "data",
-            SectionType::Rodata => "rodata",
-            SectionType::Bss => "bss",
+    // pub const fn name(&self) -> &str {
+    //     match self {
+    //         SectionType::Text => "text",
+    //         SectionType::Data => "data",
+    //         SectionType::Rodata => "rodata",
+    //         SectionType::Bss => "bss",
+    //     }
+    // }
+}
+
+impl From<DirectiveType> for SectionType {
+    fn from(value: DirectiveType) -> Self {
+        match value {
+            // DirectiveType::Text => Self::Text,
+            DirectiveType::Data => Self::Data,
+            DirectiveType::Rodata => Self::Rodata,
+            DirectiveType::Bss => Self::Bss,
+            _ => Self::Text,
         }
     }
 }
@@ -260,83 +160,164 @@ pub struct Alignment {
 }
 
 impl Alignment {
-    pub const fn new(ty: DirectiveType) -> Alignment {
+    pub const fn new(ty: SectionType) -> Alignment {
         Alignment {
             value: match ty {
-                DirectiveType::Text => 4,
+                SectionType::Text => 4,
                 _ => 1,
             },
         }
     }
 }
 
-/// Represents an expression parsed from lexemes.
-#[derive(Debug)]
-enum Expr {
-    Literal(i32),                     // Resolved numeric literal, e.g., 42
-    Symbol(Range<usize>),             // Unresolved symbol, e.g., "foo" at 5..8
-    BinaryOp(ExprSide, Op, ExprSide), // e.g., foo + 4
+// pub trait ContentType {}
+// #[derive(Debug)]
+// pub struct Progbits {
+//     buffer: Vec<Node>,
+// }
+// impl ContentType for Progbits {}
+// // impl Progbits {
+// //     // fn new() -> Progbits {
+// //     //     Progbits
+// //     // }
+// // }
+
+// impl Default for Progbits {
+//     fn default() -> Self {
+//         Self {
+//             buffer: Vec::with_capacity(10),
+//         }
+//     }
+// }
+
+// #[derive(Debug, Default)]
+// pub struct Nobits(u32);
+// impl ContentType for Nobits {}
+
+/// Represents the type of a section defined by section control directives for RV32I.
+#[derive(Debug, PartialEq, Eq, Default)]
+pub enum ContentType {
+    #[default]
+    /// Program data (e.g., .text, .data, .rodata, user-defined .section).
+    Progbits,
+    /// Uninitialized data (e.g., .bss).
+    Nobits,
+    // /// String table (e.g., .shstrtab, indirectly related).
+    // Strtab,
 }
 
-#[derive(Debug)]
-enum ExprSide {
-    Symbol,
-    Literal,
-}
+// pub struct Sections {
+//     ///  \[Text, Data, Rodata, Bss]
+//     progbits: Vec<Section<Progbits>>,
+//     bss: Section<Nobits>,
+//     //TODO: support user defined section
+//     // custom: Vec<Section<Progbits>>,
+//     active: SectionType,
+//     offsets: Vec<u32>,
+// }
 
-/// Supported operators in expressions.
-#[derive(Debug)]
-enum Op {
-    Add,
-    Sub,
-    Mul,
-    Div,
-}
+// impl Sections {
+//     pub fn switch(&mut self, ty: DirectiveType, source_span: SourceSpan) {
+//         self.active = match ty {
+//             DirectiveType::Data => {
+//                 let active_section = SectionType::Data;
+//                 self.progbits[active_section as usize].insert_name(source_span);
+//                 active_section
+//             }
+//             DirectiveType::Rodata => {
+//                 let active_section = SectionType::Rodata;
+//                 self.progbits[active_section as usize].insert_name(source_span);
+//                 active_section
+//             }
+//             DirectiveType::Bss => {
+//                 self.bss.insert_name(source_span);
+//                 SectionType::Bss
+//             }
+//             _ => {
+//                 let active_section = SectionType::Text;
+//                 self.progbits[active_section as usize].insert_name(source_span);
+//                 active_section
+//             } // DirectiveType::CustomSection => todo!(),
+//         };
+//     }
 
-/// Represents data parsed into a section, using spans for strings.
-#[derive(Debug)]
-pub enum Element {
-    Word(u32),                // .word 0x12345678
-    Byte(u8),                 // .byte 0xFF
-    Half(u16),                // .half 0x1234
-    String(Range<usize>),     // .asciz "hello" (span into source)
-    Instruction(Instruction), // e.g., "lw x5, 0(x6)" (span into source)
-    Align(u32),               // New for .align, .p2align, .balign
-    Skip(u32),                // For .skip size
-}
+//     pub fn current(&mut self) -> CurrentSection<'_> {
+//         CurrentSection { sections: self }
+//     }
 
-pub trait ContentType {}
-#[derive(Debug)]
-pub struct Progbits {
-    buffer: Vec<Element>,
-}
-impl ContentType for Progbits {}
-// impl Progbits {
-//     // fn new() -> Progbits {
-//     //     Progbits
+//     // pub fn insert(&mut self, element: Node) {
+//     //     if let Some(s) = self.progbits.get_mut(self.active as usize) {
+//     //         s.insert(element);
+//     //         return;
+//     //     };
+
+//     //     self.bss.insert(element);
+//     // }
+
+//     // pub fn active_section(&self) -> SectionType {
+//     //     self.active
+//     // }
+
+//     // pub fn current_offset(&self) -> u32 {
+//     //     self.offsets[self.active as usize]
+//     // }
+
+//     // pub fn increase_offset_by(&mut self, v: u32) {
+//     //     self.offsets[self.active as usize] += v;
 //     // }
 // }
 
-impl Default for Progbits {
-    fn default() -> Self {
-        Self {
-            buffer: Vec::with_capacity(10),
-        }
-    }
-}
+// impl Default for Sections {
+//     fn default() -> Self {
+//         let mut text = Section::<Progbits>::default();
+//         text.flags.insert(Flag::EXECINSTR);
+//         let mut data = Section::<Progbits>::default();
+//         data.flags.insert(Flag::WRITE);
 
-#[derive(Debug, Default)]
-pub struct Nobits(u32);
-impl ContentType for Nobits {}
+//         Self {
+//             progbits: vec![text, data, Default::default()],
+//             bss: Default::default(),
+//             active: SectionType::Text,
+//             offsets: vec![0; SectionType::VARIANT_COUNT],
+//         }
+//         // let flags = match ty {
+//         //     Text => (Flag::ALLOC | Flag::EXECINSTR),
 
-// /// Represents the type of a section defined by section control directives for RV32I.
-// #[derive(Debug, PartialEq, Eq, Default)]
-// enum SectionAttribute {
-//     #[default]
-//     /// Program data (e.g., .text, .data, .rodata, user-defined .section).
-//     Progbits,
-//     /// Uninitialized data (e.g., .bss).
-//     Nobits,
-//     /// String table (e.g., .shstrtab, indirectly related).
-//     Strtab,
+//         //     Data => Flag::ALLOC | Flag::WRITE,
+//         //     Bss => Flag::ALLOC | Flag::WRITE,
+//         //     Rodata => Flag::ALLOC,
+//         //     _ => Flag::ALLOC,
+//         // };
+//     }
+// }
+
+// pub struct CurrentSection<'a> {
+//     sections: &'a mut Sections,
+// }
+
+// impl CurrentSection<'_> {
+//     pub fn insert(&mut self, element: Node) {
+//         if let Some(s) = self
+//             .sections
+//             .progbits
+//             .get_mut(self.sections.active as usize)
+//         {
+//             s.insert(element);
+//             return;
+//         };
+
+//         self.sections.bss.insert(element);
+//     }
+
+//     pub fn offset(&self) -> u32 {
+//         self.sections.offsets[self.sections.active as usize]
+//     }
+
+//     pub fn increase_offset_by(&mut self, v: u32) {
+//         self.sections.offsets[self.sections.active as usize] += v;
+//     }
+
+//     pub fn ty(&self) -> SectionType {
+//         self.sections.active
+//     }
 // }
