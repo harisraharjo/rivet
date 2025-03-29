@@ -1,4 +1,4 @@
-use std::ops::Range;
+use std::{ops::Range, slice::Windows};
 
 use thiserror::Error;
 
@@ -6,8 +6,6 @@ use crate::{
     asm::section::Section,
     instruction::Instruction,
     interner::StrId,
-    lexer::Lexeme,
-    symbol_table::Symbol,
     token::{self, LiteralIntegerType},
 };
 
@@ -24,7 +22,7 @@ pub struct Exprs {
 }
 
 impl Exprs {
-    pub fn new(cap: usize) -> Exprs {
+    pub fn with_capacity(cap: usize) -> Exprs {
         Exprs {
             vars: Vec::with_capacity(cap),
             ops: Vec::with_capacity(cap - 1),
@@ -35,10 +33,6 @@ impl Exprs {
         self.vars.push(value);
     }
 }
-
-// pub struct Express {
-//     ty: ExprTy,
-// }
 
 // #[derive(Debug)]
 // pub enum ExprTy {
@@ -84,14 +78,11 @@ impl<'a> TryFrom<(token::Token, Slice<'a>)> for Expr {
     type Error = IRError;
 
     fn try_from((token, slice): (token::Token, Slice<'a>)) -> Result<Self, Self::Error> {
-        // let span = lexeme.span().to_owned();
-        // let t = *lexeme.token();
         match token {
             token::symbol!() => Ok(Self::Symbol(StrId::default())),
             token::operator!() => Ok(Self::Operator(token.into())),
             literal @ _ => {
                 //safety unwrap: guaranteed safe
-                // let slice = src.get(span).unwrap();
                 let frst_byte = slice[0];
                 let ty = LiteralIntegerType::from(literal);
                 let signed = LiteralIntegerType::is_signed(frst_byte);

@@ -13,7 +13,7 @@ use crate::{
     instruction::{Operand, OperandError, Operands},
     interner::Interner,
     ir::{Expr, Exprs, IRError, Node},
-    lexer::{Lexeme, Lexemes, LexemesSlice},
+    lexer::{Lexeme, Lexemes, LexemesSlice, RangeExt},
     symbol_table::{ConstantSymbol, ConstantSymbols, SymbolError},
     token::{self, IdentifierType, Token},
 };
@@ -165,16 +165,22 @@ impl<'a> Parser<'a> {
     }
 
     /// Peek until the next (1 + `N`) token
-    fn peek_until(&self, index: usize) -> Option<LexemesSlice<'_>> {
+    fn peek_until(&self, index: usize) -> Range<usize> {
         let next_idx = self.next_index();
-        self.lexemes.slice(next_idx..next_idx + index)
+        next_idx..next_idx + index
+    }
+
+    /// peek the current line indices
+    fn peek_line_indices(&self) -> Range<usize> {
+        //// upper bound is at the index of Eol||Eof because we don't take them in
+        // Eol||Eof is included
+        self.peek_until(self.nearest_break_idx().unwrap() + 1)
     }
 
     /// peek the current line
     fn peek_line(&self) -> LexemesSlice<'_> {
-        // upper bound is at the index of Eol||Eof because we don't take them in
         //safety: unwrap is safe because guaranteed (Token::Eol || Token::Eof) is always present
-        self.peek_until(self.nearest_break_idx().unwrap()).unwrap()
+        self.lexemes.slice(self.peek_line_indices()).unwrap()
     }
 
     fn peek_token(&self) -> Option<&Token> {
@@ -278,31 +284,6 @@ impl<'a> Parser<'a> {
                         // curr_sect.insert(Node::String(box_str));
                     }
                     DirectiveType::Byte | DirectiveType::Half | DirectiveType::Word => {
-                        // let mut lexemes = self.peek_line();
-                        // loop {
-                        //     expect_token!(
-                        //         lexemes.next(),
-                        //         token::symbol_or_numeric!(),
-                        //         RuleToken::SymbolOrNumeric
-                        //     )?;
-
-                        //     match lexemes.next() {
-                        //         Some(l) => match *l.token() {
-                        //             token::operator!() => Ok(()),
-                        //             t @ _ => Err(ParserError::UnexpectedToken {
-                        //                 expected: RuleToken::Eol,
-                        //                 found: Some(t.to_string()),
-                        //             }),
-                        //         },
-                        //         None => {
-                        //             break;
-                        //         }
-                        //     }?;
-                        // }
-
-                        // let mut curr_sect = self.sections.current();
-                        // curr_sect.insert(Node::Global(span));
-
                         return Err(ParserError::UnimplementedFeature(RuntimeTodo::Dir(
                             dir_type,
                         )));
@@ -324,74 +305,50 @@ impl<'a> Parser<'a> {
                         self.ir.push(Node::String(box_str));
                     }
                     DirectiveType::Align | DirectiveType::Balign | DirectiveType::P2align => {
-                        // let mut lexemes = self.peek_line();
-                        // loop {
-                        //     expect_token!(
-                        //         lexemes.next(),
-                        //         token::symbol_or_numeric!(),
-                        //         RuleToken::SymbolOrNumeric
-                        //     )?;
-
-                        //     match lexemes.next() {
-                        //         Some(l) => match *l.token() {
-                        //             token::operator!() => Ok(()),
-                        //             t @ _ => Err(ParserError::UnexpectedToken {
-                        //                 expected: RuleToken::Eol,
-                        //                 found: Some(t.to_string()),
-                        //             }),
-                        //         },
-                        //         None => {
-                        //             break;
-                        //         }
-                        //     }?;
-                        // }
-
-                        // let mut curr_sect = self.sections.current();
-                        // curr_sect.insert(Node::Global(span));
 
                         return Err(ParserError::UnimplementedFeature(RuntimeTodo::Dir(
                             dir_type,
                         )));
                     }
                     DirectiveType::Set | DirectiveType::Equ => {
-                        let mut lexemes = self.peek_line();
+                        let line_range = self.peek_line_indices();
+                        let indices_len = line_range.len();
+                        
+                        let mut range_chunks = line_range.chunks(2);
+                        let first_chunk = range_chunks.next().unwrap();
+
                         let constant_name = expect_token!(
-                            lexemes.next(),
+                            self.lexemes.get(first_chunk.start),
                             Token::Identifier(IdentifierType::Symbol),
                             RuleToken::Symbol
                         )?;
-                        expect_token!(lexemes.next(), Token::Comma, RuleToken::Comma)?;
 
-                        let mut exprs = Exprs::new(lexemes.len());
-                        loop {
+                        expect_token!(self.lexemes.get(first_chunk.end-1), Token::Comma, RuleToken::Comma)?;
+
+
+                        // - 1 = exclude Eol/Eof
+                        let mut exprs = Exprs::with_capacity(indices_len - 1 );
+                        //exprs check
+                        for chunk in range_chunks {
                             let var = expect_token!(
-                                lexemes.next(),
+                                self.lexemes.get(chunk.start),
                                 token::symbol_or_numeric!(),
                                 RuleToken::SymbolOrNumeric
                             )?;
 
-                            let slice = self.source.get(var.span().to_owned()).unwrap();
-                            exprs.push(Expr::try_from((*var.token(), slice))?);
+                            let op = expect_token!(
+                                self.lexemes.get(chunk.end-1),
+                                token::operator!() | token::break_kind!(),
+                                RuleToken::OperatorOrBreak
+                            )?;
 
-                            let op = match lexemes.next() {
-                                Some(l) => match *l.token() {
-                                    token::operator!() => Ok(l),
-                                    t @ _ => Err(ParserError::UnexpectedToken {
-                                        expected: RuleToken::Break,
-                                        found: Some(t.to_string()),
-                                    }),
-                                },
-                                None => {
-                                    break;
-                                }
-                            }?;
+                            // let slice = self.source.get(var.span().to_owned()).unwrap();
+                            // let slice = self.source.get(op.span().to_owned()).unwrap();
 
-                            let slice = self.source.get(op.span().to_owned()).unwrap();
-                            exprs.push(Expr::try_from((*op.token(), slice))?);
-                            // self.arena.alloc(Expr::try_from((op, self.source))?);
+                            // exprs.push(Expr::try_from((*var.token(), slice))?);
+                            // exprs.push(Expr::try_from((*op.token(), slice))?);
                         }
 
-                        let token_len = lexemes.token_len();
                         self.constants.insert(
                             constant_name.span().to_owned(),
                             dir_type.into(),
@@ -399,7 +356,7 @@ impl<'a> Parser<'a> {
                             ConstantSymbol::new(exprs),
                             self.source,
                         )?;
-                        self.advance_by(token_len);
+                        self.advance_by(indices_len);
                     }
                     DirectiveType::Global => {
                         let symbol = expect_token!(
@@ -422,28 +379,6 @@ impl<'a> Parser<'a> {
                         self.advance();
                     }
                     DirectiveType::Skip => {
-                        // let mut lexemes = self.peek_line();
-                        // loop {
-                        //     expect_token!(
-                        //         lexemes.next(),
-                        //         token::symbol_or_numeric!(),
-                        //         RuleToken::SymbolOrNumeric
-                        //     )?;
-
-                        //     match lexemes.next() {
-                        //         Some(l) => match *l.token() {
-                        //             token::operator!() => Ok(()),
-                        //             t @ _ => Err(ParserError::UnexpectedToken {
-                        //                 expected: RuleToken::Eol,
-                        //                 found: Some(t.to_string()),
-                        //             }),
-                        //         },
-                        //         None => {
-                        //             break;
-                        //         }
-                        //     }?;
-                        // }
-
                         return Err(ParserError::UnimplementedFeature(RuntimeTodo::Dir(
                             dir_type,
                         )));
@@ -521,15 +456,17 @@ impl<'a> Parser<'a> {
                     }
                     //too much
                     (false, Some(lexeme)) => {
-                        return Err(ParserError::UnexpectedToken {
-                            expected: RuleToken::Break,
-                            found: std::str::from_utf8(
-                                self.source.get(lexeme.span().to_owned()).unwrap(),
-                            )
-                            .unwrap()
-                            .to_owned()
-                            .into(),
-                        });
+                        if *lexeme.token() != RuleToken::Break {
+                            return Err(ParserError::UnexpectedToken {
+                                expected: RuleToken::Break,
+                                found: std::str::from_utf8(
+                                    self.source.get(lexeme.span().to_owned()).unwrap(),
+                                )
+                                .unwrap()
+                                .to_owned()
+                                .into(),
+                            });
+                        }
                     }
                     //impossible
                     _ => {}
@@ -541,13 +478,14 @@ impl<'a> Parser<'a> {
                 lexemes.reset();
 
                 // Iterate over indices instead of the actual item to bypass the error `cannot borrow as mutable bcs it's also borrowed as immutable`
-                let range_iter = lexemes
+                let mut remainder_range = lexemes
                     .range_index()
-                    .clone()
-                    .step_by(OperandRuleType::noises_in_every());
+                    .clone();
+                // remove Eol/Eof
+                remainder_range.end -= 1;
+                let range_iter =  remainder_range.step_by(OperandRuleType::noises_in_every());
                 let mut operand_types = Vec::with_capacity(range_iter.len());
                 for i in range_iter {
-                    // tODO: the index of lexemes is not the same as the real one in self.lexemes
                     let lexeme = self.lexemes.get_unchecked(i);
                     let slice = self.source.get(lexeme.span().to_owned()).unwrap();
                     let token = *lexeme.token();
@@ -636,6 +574,7 @@ mod test {
             // 0x1000MP # invalid literal bin
             // 99beto // invalid literal decimal
             // 0b11kl // invalid literal Binary
+        // .set symbol5, 1 + 1 + 2 + 1 + 1 + 2 + 1 + 1
         "#;
 
         // ex

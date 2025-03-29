@@ -31,7 +31,7 @@ pub enum RuleToken {
     LiteralString,
     SectionDir,
     InstructionOrDir,
-    // Eol,
+    OperatorOrBreak,
     Break,
 }
 
@@ -63,6 +63,7 @@ impl RuleToken {
             Self::SectionDir,
             Self::InstructionOrDir,
             Self::Break,
+            Self::OperatorOrBreak,
         ]
         .len()
     }
@@ -137,6 +138,7 @@ impl Display for RuleToken {
                 Token::LiteralBinary
             ),
             Operator => write!(f, "{}|{}", Token::Positive, Token::Negative),
+            OperatorOrBreak => write!(f, "{}|{}|{}", Token::Eol, Token::Eof, Operator.to_string()),
         }
     }
 }

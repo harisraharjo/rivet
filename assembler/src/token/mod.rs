@@ -147,6 +147,14 @@ macro_rules! operator {
 }
 pub(crate) use operator;
 
+/// Expand to `Token::Eol | Token::Eof`
+macro_rules! break_kind {
+    () => {
+        $crate::token::Token::Eol | $crate::token::Token::Eof
+    };
+}
+pub(crate) use break_kind;
+
 /// Expand to `Token::Directive(DirectiveType::Text) | Token::Directive(DirectiveType::Data) | Token::Directive(DirectiveType::Rodata) | Token::Directive(DirectiveType::Bss)`
 macro_rules! section_dir {
     () => {

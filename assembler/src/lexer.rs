@@ -1,4 +1,8 @@
-use std::ops::{Index, Range};
+use std::{
+    num::NonZeroUsize,
+    ops::{Add, Range},
+    slice::Windows,
+};
 
 use logos::Logos;
 
@@ -150,6 +154,61 @@ impl Lexemes {
     }
 }
 
+/// An iterator over non-overlapping chunks of a Range<usize>.
+pub struct RangeChunks<T>
+where
+    T: Copy + PartialOrd + Ord + Add<usize, Output = T>,
+{
+    range: Range<T>,
+    size: usize,
+    current: T,
+}
+
+impl<T> RangeChunks<T>
+where
+    T: Copy + PartialOrd + Ord + Add<usize, Output = T>,
+{
+    fn new(range: Range<T>, size: usize) -> Self {
+        let current = range.start;
+        Self {
+            current,
+            range,
+            size,
+        }
+    }
+}
+
+impl<T> Iterator for RangeChunks<T>
+where
+    T: Copy + PartialOrd + Ord + Add<usize, Output = T>,
+{
+    type Item = Range<T>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.current >= self.range.end {
+            return None;
+        }
+
+        let start = self.current;
+        let end = (start + self.size).min(self.range.end); // Exclusive upper bound
+        self.current = end; // Move to next chunk
+        Some(start..end)
+    }
+}
+
+pub trait RangeExt<T>
+where
+    T: Copy + PartialOrd + Ord + Add<usize, Output = T>,
+{
+    fn chunks(self, size: usize) -> RangeChunks<T>;
+}
+
+impl RangeExt<usize> for Range<usize> {
+    fn chunks(self, size: usize) -> RangeChunks<usize> {
+        RangeChunks::new(self, size)
+    }
+}
+
 pub struct LexemesSlice<'a> {
     tokens: &'a [Token],
     spans: &'a [Range<usize>],
@@ -222,12 +281,12 @@ impl<'a> LexemesSlice<'a> {
         self.index = 0;
     }
 
-    /// reset the iterator index to specific index. It will reset to the last index if the specified index is larger than the length or less than 0
+    /// reset the iterator index to given index. It will reset to the last index if the specified index is larger than the length or less than 0
     pub fn reset_to(&mut self, index: usize) {
         self.index = std::cmp::min(std::cmp::max(0, index), self.tokens.len());
     }
 
-    /// reset the iterator index to specific index
+    /// reset the iterator index to given index
     pub fn reset_to_unchecked(&mut self, index: usize) {
         self.index = index;
     }
@@ -235,6 +294,13 @@ impl<'a> LexemesSlice<'a> {
     /// Range index of the slice in the original `Lexemes`
     pub fn range_index(&self) -> &Range<usize> {
         &self.range_index
+    }
+
+    /// Range index for the remainder of the iterator
+    pub fn remainder_range(&self) -> Range<usize> {
+        // self.range_index.clone().skip(self.index)
+        let start = self.range_index.start + self.index;
+        start..self.range_index.end + 1
     }
 
     // pub fn peek_remainder(&self) -> i32 {
