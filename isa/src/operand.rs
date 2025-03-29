@@ -51,7 +51,7 @@ impl Display for IntError {
 }
 
 // TODO: make it u32 instead?
-#[derive(Debug, PartialEq, Eq, Default)]
+#[derive(Debug, PartialEq, Eq, Default, Clone, Copy)]
 pub struct Immediate<const BIT: u32>(i32);
 pub type Immediate14 = Immediate<{ ImmediateType::B14.length() }>;
 pub type Immediate19 = Immediate<{ ImmediateType::B19.length() }>;

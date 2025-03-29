@@ -1,5 +1,5 @@
 use proc_macro2::TokenStream;
-use syn::{spanned::Spanned, LitStr};
+use syn::{LitStr, spanned::Spanned};
 
 fn extract_enum_variants_count(ast: &mut syn::DeriveInput) -> usize {
     if let syn::Data::Enum(enum_data) = &mut ast.data {

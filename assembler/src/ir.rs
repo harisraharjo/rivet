@@ -47,51 +47,51 @@ impl Exprs {
 //     I32,
 // }
 
-#[derive(Debug, Clone, Copy)]
-pub enum ExprLayer<A> {
-    Add { a: A, b: A },
-    Sub { a: A, b: A },
-    Mul { a: A, b: A },
-    IntI32(i32),
-    IntU32(u32),
-}
+// #[derive(Debug, Clone, Copy)]
+// pub enum ExprLayer<A> {
+//     Add { a: A, b: A },
+//     Sub { a: A, b: A },
+//     Mul { a: A, b: A },
+//     IntI32(i32),
+//     IntU32(u32),
+// }
 
-#[derive(Eq, Hash, PartialEq)]
-pub struct ExprIdx(usize);
-impl ExprIdx {
-    fn head() -> Self {
-        ExprIdx(0)
-    }
-}
+// #[derive(Eq, Hash, PartialEq)]
+// pub struct ExprIdx(usize);
+// impl ExprIdx {
+//     fn head() -> Self {
+//         ExprIdx(0)
+//     }
+// }
 
-pub struct ExprTopo {
-    // nonempty, in topological-sorted order. guaranteed via construction.
-    elems: Vec<ExprLayer<ExprIdx>>,
-}
+// pub struct ExprTopo {
+//     // nonempty, in topological-sorted order. guaranteed via construction.
+//     elems: Vec<ExprLayer<ExprIdx>>,
+// }
 
 /// Represents an expression parsed from lexemes.
 //16 bytes
 #[derive(Debug)]
 pub enum Expr {
-    Symbol(Range<usize>),
+    Symbol(StrId),
     U32(u32),
     I32(i32),
     Operator(Op),
 }
 
-type Source<'a> = &'a [u8];
-impl<'a> TryFrom<(Lexeme<'a>, Source<'a>)> for Expr {
+type Slice<'a> = &'a [u8];
+impl<'a> TryFrom<(token::Token, Slice<'a>)> for Expr {
     type Error = IRError;
 
-    fn try_from((lexeme, src): (Lexeme<'a>, Source<'a>)) -> Result<Self, Self::Error> {
-        let span = lexeme.span().to_owned();
-        let t = *lexeme.token();
-        match t {
-            token::symbol!() => Ok(Self::Symbol(span)),
-            token::operator!() => Ok(Self::Operator(t.into())),
+    fn try_from((token, slice): (token::Token, Slice<'a>)) -> Result<Self, Self::Error> {
+        // let span = lexeme.span().to_owned();
+        // let t = *lexeme.token();
+        match token {
+            token::symbol!() => Ok(Self::Symbol(StrId::default())),
+            token::operator!() => Ok(Self::Operator(token.into())),
             literal @ _ => {
                 //safety unwrap: guaranteed safe
-                let slice = src.get(span).unwrap();
+                // let slice = src.get(span).unwrap();
                 let frst_byte = slice[0];
                 let ty = LiteralIntegerType::from(literal);
                 let signed = LiteralIntegerType::is_signed(frst_byte);
@@ -155,7 +155,7 @@ pub enum Node {
     Section(Section),
     Instruction(Instruction),
     // Label(Range<usize>),
-    Label(Symbol),
+    Label(StrId),
     Global(StrId),
     // Expr(Exprs),
     Align(u32), // New for .align, .p2align, .balign

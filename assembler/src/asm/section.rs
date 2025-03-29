@@ -110,20 +110,20 @@ pub enum SectionType {
     // None,
 }
 
-impl SectionType {
-    const fn progbits_len() -> usize {
-        Self::VARIANT_COUNT - 1
-    }
+// impl SectionType {
+//     const fn progbits_len() -> usize {
+//         Self::VARIANT_COUNT - 1
+//     }
 
-    // pub const fn name(&self) -> &str {
-    //     match self {
-    //         SectionType::Text => "text",
-    //         SectionType::Data => "data",
-    //         SectionType::Rodata => "rodata",
-    //         SectionType::Bss => "bss",
-    //     }
-    // }
-}
+//     // pub const fn name(&self) -> &str {
+//     //     match self {
+//     //         SectionType::Text => "text",
+//     //         SectionType::Data => "data",
+//     //         SectionType::Rodata => "rodata",
+//     //         SectionType::Bss => "bss",
+//     //     }
+//     // }
+// }
 
 impl From<DirectiveType> for SectionType {
     fn from(value: DirectiveType) -> Self {

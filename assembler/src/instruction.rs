@@ -1,11 +1,12 @@
-use std::ops::Range;
+use std::ops::{Index, IndexMut};
 
 use isa::operand::{Immediate14, Immediate19};
 use shared::{EnumCount, EnumVariants};
 use thiserror::Error;
 
 use crate::{
-    lexer::Lexeme,
+    interner::StrId,
+    // lexer::Lexeme,
     parser::grammar::OperandRuleType,
     token::{self, LiteralIntegerType},
 };
@@ -37,47 +38,69 @@ pub enum OperandError {
     ParseIntError(#[from] std::num::ParseIntError),
 }
 
-// pub(crate) enum OperandsIndex {
-//     Dest,
-//     Src1,
-//     Src2,
-// }
+pub(crate) enum OperandsIndex {
+    Dest,
+    Src1,
+    Src2,
+}
 
 #[derive(Debug)]
 /// `[dest, src1, src2]`
-pub struct Operands([OperandType; 3]);
+pub struct Operands([Operand; 3]);
 
 impl Operands {
     pub fn new() -> Operands {
         Operands(Default::default())
     }
 
-    pub fn iter(&mut self) -> impl Iterator<Item = &OperandType> {
+    pub fn iter(&mut self) -> impl Iterator<Item = &Operand> {
         self.0.iter()
     }
 
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut OperandType> {
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Operand> {
         self.0.iter_mut()
     }
-}
 
-impl FromIterator<OperandType> for Operands {
-    fn from_iter<T: IntoIterator<Item = OperandType>>(iter: T) -> Self {
-        let mut operands = Operands::new();
-        for (l, r) in operands.iter_mut().zip(iter) {
-            *l = r;
+    /// Copies all elements from `src` into `self`, using a memcpy. Partial copy is allowed as long as the length of `src` is longer than the `self`
+    pub fn copy_from_slice(&mut self, src: &[Operand]) {
+        assert!(src.len() <= self.0.len(), "Source slice length is too long",);
+        // SAFETY: take a look at the underlying implementation in `copy_from_slice`
+        unsafe {
+            std::ptr::copy_nonoverlapping(src.as_ptr(), self.0.as_mut_ptr(), src.len());
         }
+    }
 
-        operands
+    pub fn len(&self) -> usize {
+        self.0.len()
     }
 }
 
-type Source<'a> = &'a [u8];
+impl Index<OperandsIndex> for Operands {
+    type Output = Operand;
 
-#[derive(Debug, Default)]
-//16 bytes
-pub enum OperandType {
-    Symbol(Range<usize>),
+    fn index(&self, index: OperandsIndex) -> &Self::Output {
+        match index {
+            OperandsIndex::Dest => &self.0[0],
+            OperandsIndex::Src1 => &self.0[1],
+            OperandsIndex::Src2 => &self.0[2],
+        }
+    }
+}
+
+impl IndexMut<OperandsIndex> for Operands {
+    fn index_mut(&mut self, index: OperandsIndex) -> &mut Self::Output {
+        match index {
+            OperandsIndex::Dest => &mut self.0[0],
+            OperandsIndex::Src1 => &mut self.0[1],
+            OperandsIndex::Src2 => &mut self.0[2],
+        }
+    }
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+//4 bytes
+pub enum Operand {
+    Symbol(StrId),
     Register(isa::Register),
     Imm14(isa::operand::Immediate14),
     Imm19(isa::operand::Immediate19),
@@ -85,36 +108,32 @@ pub enum OperandType {
     None,
 }
 
-impl<'a> TryFrom<(Lexeme<'a>, OperandRuleType, Source<'a>)> for OperandType {
+type SourceSlice<'a> = &'a [u8];
+impl<'a> TryFrom<(token::Token, OperandRuleType, SourceSlice<'a>)> for Operand {
     type Error = OperandError;
 
     fn try_from(
-        (lexeme, rule, source): (Lexeme<'a>, OperandRuleType, Source<'a>),
+        (token, rule, slice): (token::Token, OperandRuleType, SourceSlice<'a>),
     ) -> Result<Self, Self::Error> {
         use OperandRuleType::*;
         use token::Token::*;
 
-        match (*lexeme.token(), rule) {
-            (Identifier(token::IdentifierType::Symbol), _) => {
-                Ok(Self::Symbol(lexeme.span().to_owned()))
-            }
+        match (token, rule) {
+            (Identifier(token::IdentifierType::Symbol), _) => Ok(Self::Symbol(StrId::default())),
             // (Label, _) => Ok(Self::Label(lexeme.span().to_owned())),
             (Identifier(token::IdentifierType::Register(r)), _) => Ok(Self::Register(r)),
             (literal @ (LiteralDecimal | LiteralHex | LiteralBinary), R2I | RIR | RI) => {
                 //safety unwrap: guaranteed safe
-                let slice = source.get(lexeme.span().to_owned()).unwrap();
+                // let slice = source.get(lexeme.span().to_owned()).unwrap();
                 let frst_byte = slice[0];
                 let int_ty = LiteralIntegerType::from(literal);
-                let base = int_ty.base();
 
-                let mut buffer = Vec::with_capacity(0);
+                let bytes = slice
+                    .get(LiteralIntegerType::prefix_len(frst_byte, int_ty as u8)..)
+                    .unwrap();
+                let mut buffer = Vec::with_capacity(bytes.len() + 1);
                 let radix = std::str::from_utf8({
-                    let bytes = slice
-                        .get(LiteralIntegerType::prefix_len(frst_byte, int_ty as u8)..)
-                        .unwrap();
-
                     if LiteralIntegerType::is_signed(frst_byte) {
-                        buffer.reserve_exact(bytes.len() + 1);
                         buffer.push(b'-');
                         buffer.fill(Default::default());
                         buffer[1..].copy_from_slice(bytes);
@@ -125,7 +144,7 @@ impl<'a> TryFrom<(Lexeme<'a>, OperandRuleType, Source<'a>)> for OperandType {
                 })
                 .unwrap();
 
-                let imm = i32::from_str_radix(radix, base)?;
+                let imm = i32::from_str_radix(radix, int_ty.base())?;
                 match rule {
                     R2I | RIR => Ok(Self::Imm14(Immediate14::try_from(imm)?)),
                     _ => Ok(Self::Imm19(Immediate19::try_from(imm)?)),

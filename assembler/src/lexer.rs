@@ -1,4 +1,4 @@
-use std::ops::Range;
+use std::ops::{Index, Range};
 
 use logos::Logos;
 
@@ -97,6 +97,10 @@ impl Lexemes {
         })
     }
 
+    pub fn get_unchecked(&self, index: usize) -> Lexeme<'_> {
+        Lexeme::new(&self.tokens[index], &self.spans[index])
+    }
+
     pub fn get_token(&self, index: usize) -> Option<&Token> {
         self.tokens.get(index)
     }
@@ -110,10 +114,10 @@ impl Lexemes {
         self.spans.push(span);
     }
 
-    pub fn slice(&self, index: Range<usize>) -> Option<LexemesSlice<'_>> {
+    pub fn slice(&self, range: Range<usize>) -> Option<LexemesSlice<'_>> {
         self.tokens
-            .get(index.clone())
-            .and_then(|slice| Some(LexemesSlice::new(slice, &self.spans[index])))
+            .get(range.clone())
+            .and_then(|slice| Some(LexemesSlice::new(slice, &self.spans[range.clone()], range)))
     }
 
     // pub fn iter(&self) -> LexemesIter<'_> {
@@ -150,14 +154,20 @@ pub struct LexemesSlice<'a> {
     tokens: &'a [Token],
     spans: &'a [Range<usize>],
     index: usize,
+    range_index: Range<usize>,
 }
 
 impl<'a> LexemesSlice<'a> {
-    fn new(tokens: &'a [Token], spans: &'a [Range<usize>]) -> LexemesSlice<'a> {
+    fn new(
+        tokens: &'a [Token],
+        spans: &'a [Range<usize>],
+        range_index: Range<usize>,
+    ) -> LexemesSlice<'a> {
         LexemesSlice {
             tokens,
             spans,
             index: 0,
+            range_index,
         }
     }
 
@@ -166,7 +176,7 @@ impl<'a> LexemesSlice<'a> {
     // }
 
     /// find a token within a slice. short-circuiting
-    pub fn find_token(&self, predicate: fn(&Token) -> bool) -> Option<Lexeme<'a>> {
+    pub fn find_token(&self, predicate: fn(&Token) -> bool) -> Option<Lexeme<'_>> {
         self.tokens
             .iter()
             .position(predicate)
@@ -179,10 +189,7 @@ impl<'a> LexemesSlice<'a> {
         }
 
         let next_id = self.index + 1;
-        Some(Lexeme {
-            token: &self.tokens[next_id],
-            span: &self.spans[next_id],
-        })
+        Some(self.get(next_id))
     }
 
     /// Peek into the next `N` index
@@ -192,10 +199,7 @@ impl<'a> LexemesSlice<'a> {
             return None;
         }
 
-        Some(Lexeme {
-            token: &self.tokens[next_id],
-            span: &self.spans[next_id],
-        })
+        Some(self.get(next_id))
     }
 
     pub fn token_len(&self) -> usize {
@@ -207,6 +211,10 @@ impl<'a> LexemesSlice<'a> {
 
     pub fn get_token(&self, idx: usize) -> Token {
         self.tokens[idx]
+    }
+
+    pub fn get(&self, index: usize) -> Lexeme<'_> {
+        Lexeme::new(&self.tokens[index], &self.spans[index])
     }
 
     /// reset the iterator index
@@ -222,6 +230,11 @@ impl<'a> LexemesSlice<'a> {
     /// reset the iterator index to specific index
     pub fn reset_to_unchecked(&mut self, index: usize) {
         self.index = index;
+    }
+
+    /// Range index of the slice in the original `Lexemes`
+    pub fn range_index(&self) -> &Range<usize> {
+        &self.range_index
     }
 
     // pub fn peek_remainder(&self) -> i32 {
