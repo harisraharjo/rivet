@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::Debug, ops::Range};
+use std::{collections::HashMap, fmt::Debug};
 
 // use bumpalo::Bump;
 use thiserror::Error;
@@ -11,7 +11,7 @@ use crate::{
 
 #[derive(Error, Debug)]
 pub enum SymbolError {
-    #[error("Symbol {0} is already defined")]
+    #[error("{0} is already defined")]
     DuplicateSymbol(String),
 }
 
@@ -63,7 +63,7 @@ impl ConstantSymbol {
     }
 }
 
-pub type ConstantsKey = Range<usize>;
+pub type ConstantsKey = StrId;
 #[derive(Debug, Default)]
 pub struct ConstantSymbols {
     data: HashMap<ConstantsKey, ConstantSymbol>,
@@ -72,19 +72,15 @@ pub struct ConstantSymbols {
 impl ConstantSymbols {
     pub fn insert<'a>(
         &mut self,
-        name_span: Range<usize>,
+        name_id: ConstantsKey,
         ty: ConstantSymbolDir,
         value: ConstantSymbol,
-        source: &'a [u8],
+        name: &str,
     ) -> Result<(), SymbolError> {
-        if ty == ConstantSymbolDir::Equ && self.data.contains_key(&name_span) {
-            return Err(SymbolError::DuplicateSymbol(
-                std::str::from_utf8(source.get(name_span).unwrap())
-                    .unwrap()
-                    .to_owned(),
-            ));
+        if ty == ConstantSymbolDir::Equ && self.data.contains_key(&name_id) {
+            return Err(SymbolError::DuplicateSymbol(name.to_owned()));
         }
-        self.data.entry(name_span).insert_entry(value);
+        self.data.entry(name_id).insert_entry(value);
         Ok(())
     }
 }

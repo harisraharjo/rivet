@@ -1,7 +1,6 @@
 use bumpalo::Bump;
 //taken from https://matklad.github.io/2020/03/22/fast-simple-rust-interner.html
 use rustc_hash::FxHashMap;
-use std::mem;
 
 #[derive(Debug)]
 pub struct Interner {

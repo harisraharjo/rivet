@@ -38,6 +38,7 @@ pub enum OperandError {
     ParseIntError(#[from] std::num::ParseIntError),
 }
 
+#[derive(Debug, EnumCount)]
 pub(crate) enum OperandsIndex {
     Dest,
     Src1,
@@ -46,7 +47,7 @@ pub(crate) enum OperandsIndex {
 
 #[derive(Debug)]
 /// `[dest, src1, src2]`
-pub struct Operands([Operand; 3]);
+pub struct Operands([Operand; OperandsIndex::VARIANT_COUNT]);
 
 impl Operands {
     pub fn new() -> Operands {
@@ -61,7 +62,7 @@ impl Operands {
         self.0.iter_mut()
     }
 
-    /// Copies all elements from `src` into `self`, using a memcpy. Partial copy is allowed as long as the length of `src` is longer than the `self`
+    /// Copies all elements from `src` into `self`, using a memcpy. Partial copy is allowed as long as the length of `self` is longer than the `src`
     pub fn copy_from_slice(&mut self, src: &[Operand]) {
         assert!(src.len() <= self.0.len(), "Source slice length is too long",);
         // SAFETY: take a look at the underlying implementation in `copy_from_slice`

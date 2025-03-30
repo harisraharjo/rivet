@@ -2,6 +2,7 @@ pub mod grammar;
 
 // use bumpalo::{Bump, collections::Vec as BumpVec};
 use grammar::{OperandRuleType, RuleToken};
+use shared::EnumCount;
 use std::{
     fmt::{Debug, Display},
     ops::Range,
@@ -10,7 +11,7 @@ use thiserror::Error;
 
 use crate::{
     asm::{directive::DirectiveType, section::Section},
-    instruction::{Operand, OperandError, Operands},
+    instruction::{Operand, OperandError, Operands, OperandsIndex},
     interner::Interner,
     ir::{Expr, Exprs, IRError, Node},
     lexer::{Lexeme, Lexemes, LexemesSlice, RangeExt},
@@ -172,9 +173,7 @@ impl<'a> Parser<'a> {
 
     /// peek the current line indices
     fn peek_line_indices(&self) -> Range<usize> {
-        //// upper bound is at the index of Eol||Eof because we don't take them in
-        // Eol||Eof is included
-        self.peek_until(self.nearest_break_idx().unwrap() + 1)
+        self.peek_until(self.next_line_index())
     }
 
     /// peek the current line
@@ -202,8 +201,13 @@ impl<'a> Parser<'a> {
             .position(|t| *t == Token::Eol || *t == Token::Eof)
     }
 
+    // Get the index of the the next line. Eol||Eof is included
+    fn next_line_index(&self, ) -> usize {
+        self.nearest_break_idx().unwrap() + 1
+    }
+
     fn advance_line(&mut self) {
-        self.advance_by(self.nearest_break_idx().unwrap());
+        self.advance_by(self.next_line_index());
     }
 
     #[inline(always)]
@@ -267,21 +271,14 @@ impl<'a> Parser<'a> {
                     DirectiveType::Text | DirectiveType::Data | DirectiveType::Rodata | DirectiveType::Bss
                     // | CustomSection
                      => {
-                        expect_token!(self.peek(), Token::Eol | Token::Eof, RuleToken::Break)?;
+                        expect_token!(self.peek(), token::break_kind!(), RuleToken::Break)?;
 
-                        // self.sections
-                        //     .switch(dir_type, self.current_span().to_owned());
-
-                        let slice = self.current_source();
-                        // safety: guaranteed safe because of it's valid utf8. Taken from the implementation of `String.to_box_slice()`
-                        // let box_str = unsafe { std::str::from_boxed_utf8_unchecked(slice.into()) };
                         let str_id= self.ir.str_tab.intern(std::str::from_utf8(
-                            slice
+                            self.current_source()
                         )
                         .unwrap());
                         let data = Section::new(dir_type.into(), str_id);
                         self.ir.push(Node::Section(data));
-                        // curr_sect.insert(Node::String(box_str));
                     }
                     DirectiveType::Byte | DirectiveType::Half | DirectiveType::Word => {
                         return Err(ParserError::UnimplementedFeature(RuntimeTodo::Dir(
@@ -294,18 +291,15 @@ impl<'a> Parser<'a> {
                             Token::LiteralString,
                             RuleToken::LiteralString
                         )?;
-                        expect_token!(self.peek_n(2), Token::Eol | Token::Eof, RuleToken::Break)?;
-                        // println!("String value: {:?}", lexeme);
+                        expect_token!(self.peek_n(2), token::break_kind!(), RuleToken::Break)?;
 
-                        let span = lexeme.span().to_owned();
-                        let slice = self.source.get(span).unwrap();
+                        let slice = self.source.get(lexeme.span().to_owned()).unwrap();
                         // safety: guaranteed safe because of it's valid utf8. Taken from the implementation of `String.to_box_slice()`
                         let box_str = unsafe { std::str::from_boxed_utf8_unchecked(slice.into()) };
 
                         self.ir.push(Node::String(box_str));
                     }
                     DirectiveType::Align | DirectiveType::Balign | DirectiveType::P2align => {
-
                         return Err(ParserError::UnimplementedFeature(RuntimeTodo::Dir(
                             dir_type,
                         )));
@@ -317,17 +311,16 @@ impl<'a> Parser<'a> {
                         let mut range_chunks = line_range.chunks(2);
                         let first_chunk = range_chunks.next().unwrap();
 
-                        let constant_name = expect_token!(
+                        let constant = expect_token!(
                             self.lexemes.get(first_chunk.start),
                             Token::Identifier(IdentifierType::Symbol),
                             RuleToken::Symbol
                         )?;
-
                         expect_token!(self.lexemes.get(first_chunk.end-1), Token::Comma, RuleToken::Comma)?;
-
 
                         // - 1 = exclude Eol/Eof
                         let mut exprs = Exprs::with_capacity(indices_len - 1 );
+
                         //exprs check
                         for chunk in range_chunks {
                             let var = expect_token!(
@@ -336,27 +329,34 @@ impl<'a> Parser<'a> {
                                 RuleToken::SymbolOrNumeric
                             )?;
 
+                            let slice = self.source.get(var.span().to_owned()).unwrap();
+                            let str_id =
+                                self.ir.str_tab.intern(std::str::from_utf8(slice).unwrap());
+                            // exprs.push(Expr::try_from((*var.token(), slice))?);
+
                             let op = expect_token!(
                                 self.lexemes.get(chunk.end-1),
                                 token::operator!() | token::break_kind!(),
                                 RuleToken::OperatorOrBreak
                             )?;
 
-                            // let slice = self.source.get(var.span().to_owned()).unwrap();
                             // let slice = self.source.get(op.span().to_owned()).unwrap();
-
-                            // exprs.push(Expr::try_from((*var.token(), slice))?);
                             // exprs.push(Expr::try_from((*op.token(), slice))?);
                         }
 
+                        let constant_str = std::str::from_utf8(self.source.get(constant.span().to_owned()).unwrap()).unwrap();
+                        let str_id =
+                            self.ir.str_tab.intern(constant_str);
+
                         self.constants.insert(
-                            constant_name.span().to_owned(),
+                            str_id,
                             dir_type.into(),
                             // TODO: Data for expression is not quite right still
                             ConstantSymbol::new(exprs),
-                            self.source,
+                            constant_str,
                         )?;
-                        self.advance_by(indices_len);
+
+                        self.advance_line();
                     }
                     DirectiveType::Global => {
                         let symbol = expect_token!(
@@ -364,18 +364,15 @@ impl<'a> Parser<'a> {
                             Token::Identifier(IdentifierType::Symbol),
                             RuleToken::Symbol
                         )?;
-                        expect_token!(self.peek_n(2), Token::Eol | Token::Eof, RuleToken::Break)?;
+                        expect_token!(self.peek_n(2), token::break_kind!(), RuleToken::Break)?;
 
-                        let span = symbol.span().to_owned();
-                        let slice = self.source.get(span).unwrap();
-                        // safety: guaranteed safe because of it's valid utf8. Taken from the implementation of `String.to_box_slice()`
-                        // let box_str = unsafe { std::str::from_boxed_utf8_unchecked(slice.into()) };
+                        let slice = self.source.get(symbol.span().to_owned()).unwrap();
                         let str_id= self.ir.str_tab.intern(std::str::from_utf8(
                             slice
                         )
                         .unwrap());
-                        self.ir.push(Node::Global(str_id));
 
+                        self.ir.push(Node::Global(str_id));
                         self.advance();
                     }
                     DirectiveType::Skip => {
@@ -483,9 +480,12 @@ impl<'a> Parser<'a> {
                     .clone();
                 // remove Eol/Eof
                 remainder_range.end -= 1;
+
                 let range_iter =  remainder_range.step_by(OperandRuleType::noises_in_every());
-                let mut operand_types = Vec::with_capacity(range_iter.len());
-                for i in range_iter {
+                //at most 3
+
+                let mut operand_types = [Operand::None; OperandsIndex::VARIANT_COUNT];
+                for (i, op_idx) in range_iter.zip(0..OperandsIndex::VARIANT_COUNT + 1) {
                     let lexeme = self.lexemes.get_unchecked(i);
                     let slice = self.source.get(lexeme.span().to_owned()).unwrap();
                     let token = *lexeme.token();
@@ -500,7 +500,7 @@ impl<'a> Parser<'a> {
                         _ => {}
                     }
 
-                    operand_types.push(operand);
+                    operand_types[op_idx] = operand;
                 }
 
                 let mut operands = Operands::new();
@@ -510,9 +510,9 @@ impl<'a> Parser<'a> {
 
                 // // let pseudo = PseudoInstruction
                 self.ir.push(Node::Instruction(ins));
-                self.advance_by(seq_len);
+                self.advance_line();
             }
-            Token::Eol | Token::Eof => {
+            token::break_kind!() => {
                 println!("=== BREAK ===");
             }
             t @ _ => {
