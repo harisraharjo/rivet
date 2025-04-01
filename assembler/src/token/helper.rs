@@ -101,14 +101,14 @@ impl From<&[u8]> for IdentifierType {
     fn from(value: &[u8]) -> Self {
         if let Some(i) = Self::mnemonics().iter().position(|v| v.as_bytes() == value) {
             return Self::Mnemonic(
-                // Safety: guaranteed to be safe because `i` is an actual index from the selected variant.
+                // Safety: guaranteed to be safe because fieldless enum and `i` is an actual index from the selected variant.
                 unsafe { std::mem::transmute::<u8, isa::instruction::Mnemonic>(i as u8) },
             );
         };
 
         if let Some(i) = Self::registers().iter().position(|v| v.as_bytes() == value) {
             return Self::Register(
-                // Safety: guaranteed to be safe because `i` is an actual index from the selected variant.
+                // Safety: guaranteed to be safe because fieldless enum and `i` is an actual index from the selected variant.
                 unsafe { std::mem::transmute::<u8, isa::Register>(i as u8) },
             );
         };
@@ -223,7 +223,7 @@ pub(super) fn on_directive(lex: &mut logos::Lexer<Token>) -> Result<DirectiveTyp
     let target = slice.get(1..).unwrap();
     if let Some(i) = variants.iter().position(|v| v.as_bytes() == target) {
         return Ok(
-            // Safety: guaranteed to be safe because `i` is an actual index from the selected variant and DirectiveTypes variants are all unit variant.
+            // Safety: guaranteed to be safe because fieldless enum and `i` is an actual index from the selected variant and DirectiveTypes variants are all unit variant.
             unsafe { std::mem::transmute::<u8, DirectiveType>(i as u8) },
         );
     };

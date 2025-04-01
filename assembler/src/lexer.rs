@@ -29,12 +29,6 @@ impl Lexer {
                 _ => e,
             })?;
             lex.extras.set_last_token(token);
-
-            // println!(
-            //     "Lexeme: {:?} as {:?}",
-            //     String::from_utf8(unsafe { input.get_unchecked(lex.span()).to_vec() }).unwrap(),
-            //     token
-            // );
             lexemes.push(token, self.filter_span(token, lex.span()));
         }
 
@@ -151,61 +145,6 @@ impl Lexemes {
     pub fn shrink_to_fit(&mut self) {
         self.tokens.shrink_to_fit();
         self.spans.shrink_to_fit();
-    }
-}
-
-/// An iterator over non-overlapping chunks of a Range<usize>.
-pub struct RangeChunks<T>
-where
-    T: Copy + PartialOrd + Ord + Add<usize, Output = T>,
-{
-    range: Range<T>,
-    size: usize,
-    current: T,
-}
-
-impl<T> RangeChunks<T>
-where
-    T: Copy + PartialOrd + Ord + Add<usize, Output = T>,
-{
-    fn new(range: Range<T>, size: usize) -> Self {
-        let current = range.start;
-        Self {
-            current,
-            range,
-            size,
-        }
-    }
-}
-
-impl<T> Iterator for RangeChunks<T>
-where
-    T: Copy + PartialOrd + Ord + Add<usize, Output = T>,
-{
-    type Item = Range<T>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.current >= self.range.end {
-            return None;
-        }
-
-        let start = self.current;
-        let end = (start + self.size).min(self.range.end); // Exclusive upper bound
-        self.current = end; // Move to next chunk
-        Some(start..end)
-    }
-}
-
-pub trait RangeExt<T>
-where
-    T: Copy + PartialOrd + Ord + Add<usize, Output = T>,
-{
-    fn chunks(self, size: usize) -> RangeChunks<T>;
-}
-
-impl RangeExt<usize> for Range<usize> {
-    fn chunks(self, size: usize) -> RangeChunks<usize> {
-        RangeChunks::new(self, size)
     }
 }
 

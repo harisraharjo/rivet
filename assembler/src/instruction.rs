@@ -65,7 +65,7 @@ impl Operands {
     /// Copies all elements from `src` into `self`, using a memcpy. Partial copy is allowed as long as the length of `self` is longer than the `src`
     pub fn copy_from_slice(&mut self, src: &[Operand]) {
         assert!(src.len() <= self.0.len(), "Source slice length is too long",);
-        // SAFETY: take a look at the underlying implementation in `copy_from_slice`
+        // SAFETY: Basically using the underlying implementation of `copy_from_slice`
         unsafe {
             std::ptr::copy_nonoverlapping(src.as_ptr(), self.0.as_mut_ptr(), src.len());
         }

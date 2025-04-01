@@ -2,7 +2,7 @@ pub mod grammar;
 
 // use bumpalo::{Bump, collections::Vec as BumpVec};
 use grammar::{OperandRuleType, RuleToken};
-use shared::EnumCount;
+use shared::{EnumCount, RangeChunks};
 use std::{
     fmt::{Debug, Display},
     ops::Range,
@@ -13,8 +13,8 @@ use crate::{
     asm::{directive::DirectiveType, section::Section},
     instruction::{Operand, OperandError, Operands, OperandsIndex},
     interner::Interner,
-    ir::{Expr, Exprs, IRError, Node},
-    lexer::{Lexeme, Lexemes, LexemesSlice, RangeExt},
+    ir::{Expr, Exprs, IRError, Node, Op, Variable},
+    lexer::{Lexeme, Lexemes, LexemesSlice},
     symbol_table::{ConstantSymbol, ConstantSymbols, SymbolError},
     token::{self, IdentifierType, Token},
 };
@@ -294,7 +294,7 @@ impl<'a> Parser<'a> {
                         expect_token!(self.peek_n(2), token::break_kind!(), RuleToken::Break)?;
 
                         let slice = self.source.get(lexeme.span().to_owned()).unwrap();
-                        // safety: guaranteed safe because of it's valid utf8. Taken from the implementation of `String.to_box_slice()`
+                        // safety: guaranteed safe because it's valid utf8. Taken from the implementation of `String.to_box_slice()`
                         let box_str = unsafe { std::str::from_boxed_utf8_unchecked(slice.into()) };
 
                         self.ir.push(Node::String(box_str));
@@ -321,6 +321,11 @@ impl<'a> Parser<'a> {
                         // - 1 = exclude Eol/Eof
                         let mut exprs = Exprs::with_capacity(indices_len - 1 );
 
+                        let vars_count = indices_len.div_ceil(2);
+                        // let mut exprs_vec = Vec::<Expr>::with_capacity(vars_count);
+                        let mut ops = Vec::<Expr>::with_capacity(vars_count - 1);
+                        let mut buffer = Vec::<Op>::with_capacity(ops.capacity());
+
                         //exprs check
                         for chunk in range_chunks {
                             let var = expect_token!(
@@ -329,20 +334,38 @@ impl<'a> Parser<'a> {
                                 RuleToken::SymbolOrNumeric
                             )?;
 
-                            let slice = self.source.get(var.span().to_owned()).unwrap();
-                            let str_id =
-                                self.ir.str_tab.intern(std::str::from_utf8(slice).unwrap());
-                            // exprs.push(Expr::try_from((*var.token(), slice))?);
-
                             let op = expect_token!(
                                 self.lexemes.get(chunk.end-1),
                                 token::operator!() | token::break_kind!(),
                                 RuleToken::OperatorOrBreak
                             )?;
 
-                            // let slice = self.source.get(op.span().to_owned()).unwrap();
-                            // exprs.push(Expr::try_from((*op.token(), slice))?);
+                            let slice = self.source.get(var.span().to_owned()).unwrap();
+                            let mut variable = Variable::new(*var.token(), slice)?;
+                            if let Variable::Symbol(ref mut str_id) = variable {
+                                *str_id = self.ir.str_tab.intern(std::str::from_utf8(slice).unwrap());
+                            };
+                            exprs.push(Expr::Var(variable));
+                            
+                            let op = Op::from(*op.token());
+                            while let Some(top) = buffer.last() {
+                                if top.ge(&op) {
+                                    let len = exprs.len();
+                                    ops.push(Expr::Operator {
+                                        op:  buffer.pop().unwrap(),
+                                        left:  len - 1,
+                                        right:  len - 2,
+                                    });
+                                } else {
+                                    break;
+                                }
+                            }
+                            
+                            buffer.push(op);
                         }
+
+                        exprs.append(&mut ops);
+                        println!("EXPRS: {:?}", exprs);
 
                         let constant_str = std::str::from_utf8(self.source.get(constant.span().to_owned()).unwrap()).unwrap();
                         let str_id =
@@ -560,7 +583,7 @@ mod test {
 
         let raw_source = r#"
         .section .text
-        .set symbol1, 1 + 1
+        .set symbol1, 1 + 2 - 3
         main:
             .global main
             addi x5, x6, my_symbol
