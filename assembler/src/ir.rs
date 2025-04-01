@@ -1,5 +1,3 @@
-use std::ops::BitOr;
-
 use thiserror::Error;
 
 use crate::{
@@ -15,6 +13,23 @@ pub enum IRError {
     ParseIntError(#[from] std::num::ParseIntError),
     #[error("Unknown value")]
     UnknownValue,
+}
+
+/// Represents data parsed into a section, using spans for strings.
+#[derive(Debug)]
+pub enum Node {
+    Word(u32),
+    Byte(u8),
+    Half(u16),
+    String(Box<str>),
+    Section(Section),
+    Instruction(Instruction),
+    // Label(Range<usize>),
+    Label(StrId),
+    Global(StrId),
+    // Expr(Exprs),
+    Align(u32), // New for .align, .p2align, .balign
+    Skip(u32),
 }
 
 #[derive(Debug)]
@@ -108,6 +123,40 @@ pub enum Op {
     None,
 }
 
+impl Op {
+    const fn precedence(&self) -> u8 {
+        match self {
+            Op::Add => 1,
+            Op::Sub => 1,
+            Op::Mul => 2,
+            Op::Div => 2,
+            Op::None => 0,
+        }
+    }
+}
+
+impl PartialOrd for Op {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other)) // Delegate to Ord::cmp
+    }
+}
+
+impl Ord for Op {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.precedence().cmp(&other.precedence())
+    }
+}
+
+impl From<token::Token> for Op {
+    fn from(value: token::Token) -> Self {
+        match value {
+            token::Token::Negative => Self::Sub,
+            token::Token::Positive => Self::Add,
+            _ => Self::None,
+        }
+    }
+}
+
 // impl PartialEq for Op {
 //     fn eq(&self, other: &Self) -> bool {
 //         match (self, other) {
@@ -120,91 +169,3 @@ pub enum Op {
 // }
 
 // impl Eq for Op {}
-
-impl PartialOrd for Op {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other)) // Delegate to Ord::cmp
-    }
-}
-
-impl Ord for Op {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        use std::cmp::Ordering::*;
-        match (self, other) {
-            (Self::Add, Self::Add) => Equal,
-            (Self::Add, Self::Sub) => Equal,
-            (Self::Add, Self::Mul) => Less,
-            (Self::Add, Self::Div) => Less,
-            (Self::Add, Self::None) => Greater,
-            (Self::Sub, Self::Add) => Equal,
-            (Self::Sub, Self::Sub) => Equal,
-            (Self::Sub, Self::Mul) => Less,
-            (Self::Sub, Self::Div) => Less,
-            (Self::Sub, Self::None) => Greater,
-            (Self::Mul, Self::Add) => Greater,
-            (Self::Mul, Self::Sub) => Greater,
-            (Self::Mul, Self::Mul) => Equal,
-            (Self::Mul, Self::Div) => Equal,
-            (Self::Mul, Self::None) => Greater,
-            (Self::Div, Self::Add) => Greater,
-            (Self::Div, Self::Sub) => Greater,
-            (Self::Div, Self::Mul) => Equal,
-            (Self::Div, Self::Div) => Equal,
-            (Self::Div, Self::None) => Greater,
-            (Self::None, Self::Add) => Less,
-            (Self::None, Self::Sub) => Less,
-            (Self::None, Self::Mul) => Less,
-            (Self::None, Self::Div) => Less,
-            (Self::None, Self::None) => Equal,
-        }
-    }
-
-    // fn cmp(&self, other: &Self) -> Ordering {
-    //     match (self, other) {}
-    // }
-}
-
-// impl BitOr for Op {
-//     type Output = Self;
-
-//     fn bitor(self, rhs: Self) -> Self::Output {
-//         match (&self, &rhs) {
-//             (Op::Add, Op::Mul) => rhs,
-//             (Op::Add, Op::Div) => rhs,
-//             (Op::Sub, Op::Mul) => rhs,
-//             (Op::Sub, Op::Div) => rhs,
-//             (Op::Mul, Op::Add) => self,
-//             (Op::Mul, Op::Sub) => self,
-//             (Op::Div, Op::Add) => self,
-//             (Op::Div, Op::Sub) => self,
-//             _ => rhs,
-//         }
-//     }
-// }
-
-impl From<token::Token> for Op {
-    fn from(value: token::Token) -> Self {
-        match value {
-            token::Token::Negative => Self::Sub,
-            token::Token::Positive => Self::Add,
-            _ => Self::None,
-        }
-    }
-}
-
-/// Represents data parsed into a section, using spans for strings.
-#[derive(Debug)]
-pub enum Node {
-    Word(u32),
-    Byte(u8),
-    Half(u16),
-    String(Box<str>),
-    Section(Section),
-    Instruction(Instruction),
-    // Label(Range<usize>),
-    Label(StrId),
-    Global(StrId),
-    // Expr(Exprs),
-    Align(u32), // New for .align, .p2align, .balign
-    Skip(u32),
-}
