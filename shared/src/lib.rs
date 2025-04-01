@@ -1,4 +1,4 @@
-use std::ops::{Add, Range};
+use std::ops::{Add, Neg, Range, RangeInclusive, Sub};
 
 pub use macros_derive::{EnumCount, EnumVariants, VMInstruction};
 
@@ -30,56 +30,56 @@ pub const fn max_value_for_bit_length<const SIGNED: bool>(bit_count: u32) -> u32
 }
 
 /// An iterator over non-overlapping chunks of a Range<usize>.
-pub struct Chunks<T>
+pub struct RangeChunks<T>
 where
     T: Copy + PartialOrd + Ord + Add<usize, Output = T>,
 {
-    range: Range<T>,
-    size: usize,
+    constant: usize,
     current: T,
+    end: T,
 }
 
-impl<T> Chunks<T>
+impl<T> RangeChunks<T>
 where
-    T: Copy + PartialOrd + Ord + Add<usize, Output = T>,
+    T: Copy + PartialOrd + Ord + Add<usize, Output = T> + Sub<usize, Output = T>,
 {
     fn new(range: Range<T>, size: usize) -> Self {
         let current = range.start;
         Self {
             current,
-            range,
-            size,
+            end: range.end - 1,
+            constant: size - 1,
         }
     }
 }
 
-impl<T> Iterator for Chunks<T>
+impl<T> Iterator for RangeChunks<T>
 where
     T: Copy + PartialOrd + Ord + Add<usize, Output = T>,
 {
-    type Item = Range<T>;
+    type Item = RangeInclusive<T>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.current >= self.range.end {
+        if self.current >= self.end {
             return None;
         }
 
         let start = self.current;
-        let end = (start + self.size).min(self.range.end); // Exclusive upper bound
-        self.current = end; // Move to next chunk
-        Some(start..end)
+        let end = (start + self.constant).min(self.end); // Exclusive upper bound
+        self.current = end + 1; // Move to next chunk
+        Some(start..=end)
     }
 }
 
-pub trait RangeChunks<T>
+pub trait ChunksExt<T>
 where
     T: Copy + PartialOrd + Ord + Add<usize, Output = T>,
 {
-    fn chunks(self, size: usize) -> Chunks<T>;
+    fn chunks(self, size: usize) -> RangeChunks<T>;
 }
 
-impl RangeChunks<usize> for Range<usize> {
-    fn chunks(self, size: usize) -> Chunks<usize> {
-        Chunks::new(self, size)
+impl ChunksExt<usize> for Range<usize> {
+    fn chunks(self, size: usize) -> RangeChunks<usize> {
+        RangeChunks::new(self, size)
     }
 }

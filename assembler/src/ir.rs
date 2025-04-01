@@ -1,9 +1,12 @@
+use shared::RangeChunks;
 use thiserror::Error;
 
 use crate::{
     asm::section::Section,
     instruction::Instruction,
-    interner::StrId,
+    interner::{Interner, StrId},
+    lexer::{Lexeme, Lexemes},
+    parser::{ParserError, expect_token, grammar::RuleToken},
     token::{self, LiteralIntegerType},
 };
 
@@ -45,6 +48,72 @@ impl Exprs {
         }
     }
 
+    pub fn new(exprs: Vec<Expr>) -> Self {
+        Self { buffer: exprs }
+    }
+
+    pub fn build(
+        &mut self,
+        chunked_range: RangeChunks<usize>,
+        lexemes: &Lexemes,
+        source: &[u8],
+        str_tab: &mut Interner,
+    ) -> Result<(), ParserError> {
+        let vars_count = self.buffer.capacity().div_ceil(2);
+        let mut ops = Vec::<Expr>::with_capacity(vars_count - 1);
+        let mut buffer = Vec::<Op>::with_capacity(ops.capacity());
+
+        for r in Self::check(chunked_range, lexemes) {
+            let (var, op) = r?;
+            let slice = source.get(var.span().to_owned()).unwrap();
+            let mut variable = Variable::new(*var.token(), slice)?;
+            if let Variable::Symbol(ref mut str_id) = variable {
+                *str_id = str_tab.intern(std::str::from_utf8(slice).unwrap());
+            };
+            self.buffer.push(Expr::Var(variable));
+
+            let op = Op::from(*op.token());
+            while let Some(top) = buffer.last() {
+                if top.ge(&op) {
+                    let len = self.buffer.len();
+                    ops.push(Expr::Operator {
+                        op: buffer.pop().unwrap(),
+                        left: len - 1,
+                        right: len - 2,
+                    });
+                } else {
+                    break;
+                }
+            }
+
+            buffer.push(op);
+        }
+
+        self.buffer.append(&mut ops);
+
+        Ok(())
+    }
+
+    fn check(
+        chunked_range: RangeChunks<usize>,
+        lexemes: &Lexemes,
+    ) -> impl Iterator<Item = Result<(Lexeme<'_>, Lexeme<'_>), ParserError>> {
+        chunked_range.map(|chunk| -> Result<(_, _), _> {
+            Ok((
+                expect_token!(
+                    lexemes.get(*chunk.start()),
+                    token::symbol_or_numeric!(),
+                    RuleToken::SymbolOrNumeric
+                )?,
+                expect_token!(
+                    lexemes.get(*chunk.end()),
+                    token::operator!() | token::break_kind!(),
+                    RuleToken::OperatorOrBreak
+                )?,
+            ))
+        })
+    }
+
     pub fn len(&self) -> usize {
         self.buffer.len()
     }
@@ -57,6 +126,10 @@ impl Exprs {
         self.buffer.append(value);
     }
 }
+
+// pub struct ExprsBuilder {
+
+// }
 
 #[derive(Debug)]
 pub enum Variable {

@@ -1,8 +1,8 @@
 pub mod grammar;
 
-// use bumpalo::{Bump, collections::Vec as BumpVec};
+
 use grammar::{OperandRuleType, RuleToken};
-use shared::{EnumCount, RangeChunks};
+use shared::{ChunksExt, EnumCount};
 use std::{
     fmt::{Debug, Display},
     ops::Range,
@@ -19,18 +19,13 @@ use crate::{
     token::{self, IdentifierType, Token},
 };
 
-// #[derive(Debug)]
-// struct SymbolInfo {
-//     position: usize,
-//     is_global: bool,
+// #[derive(Debug, Error)]
+// enum Single {
+//     #[error("label")]
+//     Label,
+//     #[error("directive")]
+//     Directive,
 // }
-#[derive(Debug, Error)]
-enum Single {
-    #[error("label")]
-    Label,
-    #[error("directive")]
-    Directive,
-}
 
 fn on_invalid_grammar<'a>(found: &Option<String>) -> String {
     if let Some(v) = found {
@@ -52,8 +47,8 @@ pub enum ParserError {
         // expected: Token,
         found: Option<String>,
     },
-    #[error("Invalid line. Multiple {0}s encountered. Only 1 {0} is allowed")]
-    InvalidLine(Single),
+    // #[error("Invalid line. Multiple {0}s encountered. Only 1 {0} is allowed")]
+    // InvalidLine(Single),
     #[error("{0} is still work in progress. Stay tuned!")]
     UnimplementedFeature(RuntimeTodo),
     #[error("Duplicate label {0}")]
@@ -96,6 +91,7 @@ macro_rules! expect_token {
         }
     };
 }
+pub(crate) use expect_token;
 
 #[derive(Debug)]
 pub struct IR {
@@ -117,9 +113,8 @@ impl IR {
         self.nodes.push(node);
     }
 
-    #[cfg(test)]
-    fn interns(&self) -> &Interner {
-        &self.str_tab
+    pub fn str_tab_mut(&mut self) -> &mut Interner {
+        &mut self.str_tab
     }
 }
 
@@ -244,12 +239,8 @@ impl<'a> Parser<'a> {
     }
 
     pub fn parse(&mut self) -> Result<(), ParserError> {
-        // let mut vec = BumpVec::new_in(&self.arena);
-        // BumpVec<&dyn Debug>
-
         while let Some(token) = self.eat() {
             self.walk(*token)?;
-            // vec.push(value);
         }
 
         println!("{:?}", self.ir.str_tab);
@@ -280,11 +271,6 @@ impl<'a> Parser<'a> {
                         let data = Section::new(dir_type.into(), str_id);
                         self.ir.push(Node::Section(data));
                     }
-                    DirectiveType::Byte | DirectiveType::Half | DirectiveType::Word => {
-                        return Err(ParserError::UnimplementedFeature(RuntimeTodo::Dir(
-                            dir_type,
-                        )));
-                    }
                     DirectiveType::Ascii => {
                         let lexeme = expect_token!(
                             self.peek(),
@@ -298,88 +284,6 @@ impl<'a> Parser<'a> {
                         let box_str = unsafe { std::str::from_boxed_utf8_unchecked(slice.into()) };
 
                         self.ir.push(Node::String(box_str));
-                    }
-                    DirectiveType::Align | DirectiveType::Balign | DirectiveType::P2align => {
-                        return Err(ParserError::UnimplementedFeature(RuntimeTodo::Dir(
-                            dir_type,
-                        )));
-                    }
-                    DirectiveType::Set | DirectiveType::Equ => {
-                        let line_range = self.peek_line_indices();
-                        let indices_len = line_range.len();
-                        
-                        let mut range_chunks = line_range.chunks(2);
-                        let first_chunk = range_chunks.next().unwrap();
-
-                        let constant = expect_token!(
-                            self.lexemes.get(first_chunk.start),
-                            Token::Identifier(IdentifierType::Symbol),
-                            RuleToken::Symbol
-                        )?;
-                        expect_token!(self.lexemes.get(first_chunk.end-1), Token::Comma, RuleToken::Comma)?;
-
-                        // - 1 = exclude Eol/Eof
-                        let mut exprs = Exprs::with_capacity(indices_len - 1 );
-
-                        let vars_count = indices_len.div_ceil(2);
-                        // let mut exprs_vec = Vec::<Expr>::with_capacity(vars_count);
-                        let mut ops = Vec::<Expr>::with_capacity(vars_count - 1);
-                        let mut buffer = Vec::<Op>::with_capacity(ops.capacity());
-
-                        //exprs check
-                        for chunk in range_chunks {
-                            let var = expect_token!(
-                                self.lexemes.get(chunk.start),
-                                token::symbol_or_numeric!(),
-                                RuleToken::SymbolOrNumeric
-                            )?;
-
-                            let op = expect_token!(
-                                self.lexemes.get(chunk.end-1),
-                                token::operator!() | token::break_kind!(),
-                                RuleToken::OperatorOrBreak
-                            )?;
-
-                            let slice = self.source.get(var.span().to_owned()).unwrap();
-                            let mut variable = Variable::new(*var.token(), slice)?;
-                            if let Variable::Symbol(ref mut str_id) = variable {
-                                *str_id = self.ir.str_tab.intern(std::str::from_utf8(slice).unwrap());
-                            };
-                            exprs.push(Expr::Var(variable));
-                            
-                            let op = Op::from(*op.token());
-                            while let Some(top) = buffer.last() {
-                                if top.ge(&op) {
-                                    let len = exprs.len();
-                                    ops.push(Expr::Operator {
-                                        op:  buffer.pop().unwrap(),
-                                        left:  len - 1,
-                                        right:  len - 2,
-                                    });
-                                } else {
-                                    break;
-                                }
-                            }
-                            
-                            buffer.push(op);
-                        }
-
-                        exprs.append(&mut ops);
-                        println!("EXPRS: {:?}", exprs);
-
-                        let constant_str = std::str::from_utf8(self.source.get(constant.span().to_owned()).unwrap()).unwrap();
-                        let str_id =
-                            self.ir.str_tab.intern(constant_str);
-
-                        self.constants.insert(
-                            str_id,
-                            dir_type.into(),
-                            // TODO: Data for expression is not quite right still
-                            ConstantSymbol::new(exprs),
-                            constant_str,
-                        )?;
-
-                        self.advance_line();
                     }
                     DirectiveType::Global => {
                         let symbol = expect_token!(
@@ -397,6 +301,50 @@ impl<'a> Parser<'a> {
 
                         self.ir.push(Node::Global(str_id));
                         self.advance();
+                    }
+                    DirectiveType::Set | DirectiveType::Equ => {
+                        let line_range = self.peek_line_indices();
+                        let indices_len = line_range.len();
+                        
+                        let mut range_chunks = line_range.chunks(2);
+                        let first_chunk = range_chunks.next().unwrap();
+
+                        println!("{:?}", first_chunk);
+
+                        let constant = expect_token!(
+                            self.lexemes.get(*first_chunk.start()),
+                            Token::Identifier(IdentifierType::Symbol),
+                            RuleToken::Symbol
+                        )?;
+                        expect_token!(self.lexemes.get(*first_chunk.end()), Token::Comma, RuleToken::Comma)?;
+
+                        // - 1 = exclude Eol/Eof
+                        let mut exprs = Exprs::with_capacity(indices_len - 1 );
+                        exprs.build(range_chunks, &self.lexemes, &self.source, self.ir.str_tab_mut())?;
+                        println!("EXPRS: {:?}", exprs);
+
+                        let constant_str = std::str::from_utf8(self.source.get(constant.span().to_owned()).unwrap()).unwrap();
+                        let str_id =
+                            self.ir.str_tab.intern(constant_str);
+
+                        self.constants.insert(
+                            str_id,
+                            dir_type.into(),
+                            ConstantSymbol::new(exprs),
+                            constant_str,
+                        )?;
+
+                        self.advance_line();
+                    }
+                    DirectiveType::Byte | DirectiveType::Half | DirectiveType::Word => {
+                        return Err(ParserError::UnimplementedFeature(RuntimeTodo::Dir(
+                            dir_type,
+                        )));
+                    }
+                    DirectiveType::Align | DirectiveType::Balign | DirectiveType::P2align => {
+                        return Err(ParserError::UnimplementedFeature(RuntimeTodo::Dir(
+                            dir_type,
+                        )));
                     }
                     DirectiveType::Skip => {
                         return Err(ParserError::UnimplementedFeature(RuntimeTodo::Dir(
@@ -446,7 +394,7 @@ impl<'a> Parser<'a> {
                 if let Some(mismatch) = rule_sequence
                     .iter()
                     .zip(lexemes.by_ref())
-                    .filter(|(rule_token, lex)| lex.token().to_owned() != **rule_token)
+                    .filter(|(rule_token, lex)| *lex.token() != **rule_token)
                     .next()
                 {
                     let (rule_token, lexeme) = mismatch;
@@ -505,8 +453,7 @@ impl<'a> Parser<'a> {
                 remainder_range.end -= 1;
 
                 let range_iter =  remainder_range.step_by(OperandRuleType::noises_in_every());
-                //at most 3
-
+   
                 let mut operand_types = [Operand::None; OperandsIndex::VARIANT_COUNT];
                 for (i, op_idx) in range_iter.zip(0..OperandsIndex::VARIANT_COUNT + 1) {
                     let lexeme = self.lexemes.get_unchecked(i);
@@ -514,13 +461,8 @@ impl<'a> Parser<'a> {
                     let token = *lexeme.token();
 
                     let mut operand: Operand = (token, rule_ty, slice).try_into()?;
-                    match operand {
-                        Operand::Symbol(_) => {
-                            let str_id =
-                                self.ir.str_tab.intern(std::str::from_utf8(slice).unwrap());
-                            operand = Operand::Symbol(str_id);
-                        }
-                        _ => {}
+                    if let Operand::Symbol(ref mut str_id) = operand {
+                        *str_id = self.ir.str_tab.intern(std::str::from_utf8(slice).unwrap());
                     }
 
                     operand_types[op_idx] = operand;

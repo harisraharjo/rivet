@@ -125,7 +125,6 @@ impl<'a> TryFrom<(token::Token, OperandRuleType, SourceSlice<'a>)> for Operand {
             (Identifier(token::IdentifierType::Register(r)), _) => Ok(Self::Register(r)),
             (literal @ (LiteralDecimal | LiteralHex | LiteralBinary), R2I | RIR | RI) => {
                 //safety unwrap: guaranteed safe
-                // let slice = source.get(lexeme.span().to_owned()).unwrap();
                 let frst_byte = slice[0];
                 let int_ty = LiteralIntegerType::from(literal);
 

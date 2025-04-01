@@ -136,7 +136,8 @@ pub(crate) use literal_integer;
 /// Expand to `Token::LiteralDecimal | Token::LiteralHex | Token::LiteralBinary | Token::Identifier(IdentifierType::Symbol)`
 macro_rules! symbol_or_numeric {
     () => {
-        $crate::token::literal_integer!() | Token::Identifier(IdentifierType::Symbol)
+        $crate::token::literal_integer!()
+            | $crate::token::Token::Identifier($crate::token::IdentifierType::Symbol)
     };
 }
 pub(crate) use symbol_or_numeric;
