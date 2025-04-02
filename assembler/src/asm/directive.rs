@@ -46,7 +46,7 @@ pub enum DirectiveType {
     Data,
     Rodata,
     Bss,
-    // CustomSection,
+    CustomSection,
 
     // Allocation dir
     /// `symbol, size, align` -> emit common object to .bss section (local)

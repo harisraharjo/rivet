@@ -5,8 +5,8 @@ use thiserror::Error;
 
 use crate::{
     asm::{directive::DirectiveType, section::SectionType, symbol::SymbolType},
+    exprs::Exprs,
     interner::{Interner, StrId},
-    ir::Exprs,
 };
 
 #[derive(Error, Debug)]

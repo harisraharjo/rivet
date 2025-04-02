@@ -1,13 +1,9 @@
-use shared::RangeChunks;
 use thiserror::Error;
 
 use crate::{
-    asm::section::Section,
+    asm::section::{Section, SectionId, SectionTag, SectionType},
     instruction::Instruction,
     interner::{Interner, StrId},
-    lexer::{Lexeme, Lexemes},
-    parser::{ParserError, expect_token, grammar::RuleToken},
-    token::{self, LiteralIntegerType},
 };
 
 #[derive(Debug, Error)]
@@ -18,6 +14,60 @@ pub enum IRError {
     UnknownValue,
 }
 
+#[derive(Debug)]
+pub struct IR {
+    nodes: Vec<Node>,
+    str_tab: Interner,
+    sections: Sections,
+    instructions: Instructions,
+}
+
+impl IR {
+    pub fn new(cap: usize) -> Self {
+        Self {
+            nodes: Vec::new(),
+            str_tab: Interner::with_capacity(cap),
+            sections: Sections::new(),
+            instructions: Instructions::new(),
+        }
+    }
+    pub fn nodes(&self) -> &[Node] {
+        &self.nodes
+    }
+
+    pub fn alloc_str(&mut self, name: &str) -> StrId {
+        self.str_tab.intern(name)
+    }
+
+    pub fn add_global_symbol(&mut self, name: &str) {
+        let str_id = self.str_tab.intern(name);
+        self.nodes.push(Node::Global(str_id));
+    }
+
+    pub fn add_instruction(&mut self, ins: Instruction) {
+        let id = self.instructions.add(ins);
+        self.nodes.push(Node::Instruction(id));
+    }
+
+    pub fn add_section(&mut self, name: &str, ty: SectionType) {
+        let str_id = self.str_tab.intern(name);
+        let id = self.sections.switch(str_id, ty);
+        self.nodes.push(Node::Section(id));
+    }
+
+    pub fn push(&mut self, node: Node) {
+        self.nodes.push(node);
+    }
+
+    pub fn str_tab_mut(&mut self) -> &mut Interner {
+        &mut self.str_tab
+    }
+
+    pub fn sections_mut(&mut self) -> &mut Sections {
+        &mut self.sections
+    }
+}
+
 /// Represents data parsed into a section, using spans for strings.
 #[derive(Debug)]
 pub enum Node {
@@ -25,220 +75,72 @@ pub enum Node {
     Byte(u8),
     Half(u16),
     String(Box<str>),
-    Section(Section),
-    Instruction(Instruction),
-    // Label(Range<usize>),
+    Section(SectionId),
+    // TODO: separate Instruction into its own vec?
+    Instruction(InstructionId),
     Label(StrId),
     Global(StrId),
-    // Expr(Exprs),
     Align(u32), // New for .align, .p2align, .balign
     Skip(u32),
 }
 
-#[derive(Debug)]
-pub struct Exprs {
-    buffer: Vec<Expr>,
-}
-
-impl Exprs {
-    pub fn with_capacity(cap: usize) -> Exprs {
-        Exprs {
-            buffer: Vec::with_capacity(cap),
-            // ops: Vec::with_capacity(cap - 1),
-        }
-    }
-
-    pub fn new(exprs: Vec<Expr>) -> Self {
-        Self { buffer: exprs }
-    }
-
-    pub fn build(
-        &mut self,
-        chunked_range: RangeChunks<usize>,
-        lexemes: &Lexemes,
-        source: &[u8],
-        str_tab: &mut Interner,
-    ) -> Result<(), ParserError> {
-        let vars_count = self.buffer.capacity().div_ceil(2);
-        let mut ops = Vec::<Expr>::with_capacity(vars_count - 1);
-        let mut buffer = Vec::<Op>::with_capacity(ops.capacity());
-
-        for r in Self::check(chunked_range, lexemes) {
-            let (var, op) = r?;
-            let slice = source.get(var.span().to_owned()).unwrap();
-            let mut variable = Variable::new(*var.token(), slice)?;
-            if let Variable::Symbol(ref mut str_id) = variable {
-                *str_id = str_tab.intern(std::str::from_utf8(slice).unwrap());
-            };
-            self.buffer.push(Expr::Var(variable));
-
-            let op = Op::from(*op.token());
-            while let Some(top) = buffer.last() {
-                if top.ge(&op) {
-                    let len = self.buffer.len();
-                    ops.push(Expr::Operator {
-                        op: buffer.pop().unwrap(),
-                        left: len - 1,
-                        right: len - 2,
-                    });
-                } else {
-                    break;
-                }
-            }
-
-            buffer.push(op);
-        }
-
-        self.buffer.append(&mut ops);
-
-        Ok(())
-    }
-
-    fn check(
-        chunked_range: RangeChunks<usize>,
-        lexemes: &Lexemes,
-    ) -> impl Iterator<Item = Result<(Lexeme<'_>, Lexeme<'_>), ParserError>> {
-        chunked_range.map(|chunk| -> Result<(_, _), _> {
-            Ok((
-                expect_token!(
-                    lexemes.get(*chunk.start()),
-                    token::symbol_or_numeric!(),
-                    RuleToken::SymbolOrNumeric
-                )?,
-                expect_token!(
-                    lexemes.get(*chunk.end()),
-                    token::operator!() | token::break_kind!(),
-                    RuleToken::OperatorOrBreak
-                )?,
-            ))
-        })
-    }
-
-    pub fn len(&self) -> usize {
-        self.buffer.len()
-    }
-
-    pub fn push(&mut self, value: Expr) {
-        self.buffer.push(value);
-    }
-
-    pub fn append(&mut self, value: &mut Vec<Expr>) {
-        self.buffer.append(value);
-    }
-}
-
-// pub struct ExprsBuilder {
-
-// }
+use rustc_hash::FxHashMap;
 
 #[derive(Debug)]
-pub enum Variable {
-    Symbol(StrId),
-    U32(u32),
-    I32(i32),
+pub struct Sections {
+    map: FxHashMap<SectionTag, SectionId>,
+    vec: Vec<Section>,
 }
 
-impl Variable {
-    pub fn new(token: token::Token, slice: &[u8]) -> Result<Self, IRError> {
-        match token {
-            token::symbol!() => Ok(Self::Symbol(StrId::default())),
-            literal @ token::literal_integer!() => {
-                //safety unwrap: guaranteed safe
-                let frst_byte = slice[0];
-                let ty = LiteralIntegerType::from(literal);
-                let signed = LiteralIntegerType::is_signed(frst_byte);
-
-                let mut buffer = Vec::with_capacity(0);
-                let radix = std::str::from_utf8({
-                    let bytes = slice
-                        .get(LiteralIntegerType::prefix_len(frst_byte, ty as u8)..)
-                        .unwrap();
-
-                    if signed {
-                        buffer.reserve_exact(bytes.len() + 1);
-                        buffer.push(b'-');
-                        buffer.fill(Default::default());
-                        buffer[1..].copy_from_slice(bytes);
-                        buffer.as_slice()
-                    } else {
-                        bytes
-                    }
-                })
-                .unwrap();
-
-                let base = ty.base();
-                if signed {
-                    Ok(Self::I32(i32::from_str_radix(radix, base)?))
-                } else {
-                    Ok(Self::U32(u32::from_str_radix(radix, base)?))
-                }
-            }
-            _ => Err(IRError::UnknownValue),
+impl Sections {
+    pub fn new() -> Sections {
+        Sections {
+            map: FxHashMap::default(),
+            vec: Vec::with_capacity(SectionType::count()),
         }
+    }
+
+    pub fn switch(&mut self, str_id: StrId, ty: SectionType) -> SectionId {
+        let tag = SectionTag::new(str_id, ty);
+        if let Some(id) = self.map.get(&tag) {
+            return *id;
+        }
+        let id = self.generate_id();
+        self.insert(tag, id);
+        id
+    }
+
+    pub fn insert(&mut self, tag: SectionTag, id: SectionId) {
+        let section = Section::new(tag.clone(), id);
+        self.map.insert(tag, id);
+        self.vec.push(section);
+    }
+
+    pub fn lookup(&self, id: SectionId) -> &Section {
+        &self.vec[usize::from(id)]
+    }
+
+    ///Generate the next `id`
+    pub fn generate_id(&self) -> SectionId {
+        SectionId::new(self.map.len() as u8)
     }
 }
 
-/// Represents an expression parsed from lexemes.
-//16 bytes
 #[derive(Debug)]
-pub enum Expr {
-    Var(Variable),
-    Operator { op: Op, left: usize, right: usize },
+pub struct InstructionId(usize);
+
+#[derive(Debug)]
+pub struct Instructions {
+    vec: Vec<Instruction>,
 }
 
-/// Supported operators in expressions.
-#[derive(Debug, PartialEq, Eq)]
-pub enum Op {
-    Add,
-    Sub,
-    Mul,
-    Div,
-    None,
-}
+impl Instructions {
+    fn new() -> Instructions {
+        Instructions { vec: Vec::new() }
+    }
 
-impl Op {
-    const fn precedence(&self) -> u8 {
-        match self {
-            Op::Add => 1,
-            Op::Sub => 1,
-            Op::Mul => 2,
-            Op::Div => 2,
-            Op::None => 0,
-        }
+    pub fn add(&mut self, value: Instruction) -> InstructionId {
+        self.vec.push(value);
+        InstructionId(self.vec.len() - 1)
     }
 }
-
-impl PartialOrd for Op {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other)) // Delegate to Ord::cmp
-    }
-}
-
-impl Ord for Op {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.precedence().cmp(&other.precedence())
-    }
-}
-
-impl From<token::Token> for Op {
-    fn from(value: token::Token) -> Self {
-        match value {
-            token::Token::Negative => Self::Sub,
-            token::Token::Positive => Self::Add,
-            _ => Self::None,
-        }
-    }
-}
-
-// impl PartialEq for Op {
-//     fn eq(&self, other: &Self) -> bool {
-//         match (self, other) {
-//             (Op::Add, Op::Add) => true,
-//             (Op::Mul, Op::Mul) => true,
-//             // (Op::Number(n1), Op::Number(n2)) => n1 == n2,
-//             _ => false,
-//         }
-//     }
-// }
-
-// impl Eq for Op {}

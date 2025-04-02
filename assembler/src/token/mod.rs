@@ -161,10 +161,11 @@ pub(crate) use break_kind;
 /// Expand to `Token::Directive(DirectiveType::Text) | Token::Directive(DirectiveType::Data) | Token::Directive(DirectiveType::Rodata) | Token::Directive(DirectiveType::Bss)`
 macro_rules! section_dir {
     () => {
-        Token::Directive(DirectiveType::Text)
-            | Token::Directive(DirectiveType::Data)
-            | Token::Directive(DirectiveType::Rodata)
-            | Token::Directive(DirectiveType::Bss)
+        $crate::token::Token::Directive(DirectiveType::Text)
+            | $crate::token::Token::Directive(DirectiveType::Data)
+            | $crate::token::Token::Directive(DirectiveType::Rodata)
+            | $crate::token::Token::Directive(DirectiveType::Bss)
+            | $crate::token::Token::Directive(DirectiveType::CustomSection)
     };
 }
 pub(crate) use section_dir;

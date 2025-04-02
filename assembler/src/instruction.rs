@@ -19,6 +19,7 @@ pub enum PseudoMnemonic {
 }
 
 #[derive(Debug)]
+//13 bytes packed. 24 bytes total
 pub struct Instruction {
     mnemonic: isa::instruction::Mnemonic,
     operands: Operands,
@@ -46,6 +47,7 @@ pub(crate) enum OperandsIndex {
 }
 
 #[derive(Debug)]
+// 12 bytes
 /// `[dest, src1, src2]`
 pub struct Operands([Operand; OperandsIndex::VARIANT_COUNT]);
 
@@ -62,8 +64,8 @@ impl Operands {
         self.0.iter_mut()
     }
 
-    /// Copies all elements from `src` into `self`, using a memcpy. Partial copy is allowed as long as the length of `self` is longer than the `src`
-    pub fn copy_from_slice(&mut self, src: &[Operand]) {
+    /// Copies all elements from `src` into `self`, using a memcpy. Partial copy/overlapping is allowed as long as the length of `self` is longer than the `src`
+    pub fn memcpy(&mut self, src: &[Operand]) {
         assert!(src.len() <= self.0.len(), "Source slice length is too long",);
         // SAFETY: Basically using the underlying implementation of `copy_from_slice`
         unsafe {

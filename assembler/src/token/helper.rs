@@ -228,13 +228,13 @@ pub(super) fn on_directive(lex: &mut logos::Lexer<Token>) -> Result<DirectiveTyp
         );
     };
 
-    // // approve user defined section if and only if the prev token is `.section`
-    // if lex.extras.last_token == Token::Directive(DirectiveType::Section) {
-    //     return Ok(DirectiveType::CustomSection);
-    // }
+    // approve user defined section if and only if the prev token is `.section`
+    if lex.extras.last_token == Token::Directive(DirectiveType::Section) {
+        return Ok(DirectiveType::CustomSection);
+    }
 
     Err(LexingError::UnknownDirective(
-        String::from_utf8(slice.to_vec()).unwrap(),
+        std::str::from_utf8(slice).unwrap().to_owned(),
         lex.extras.cell.row,
     ))
 }

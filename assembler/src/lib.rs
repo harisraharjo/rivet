@@ -1,4 +1,5 @@
 mod asm;
+mod exprs;
 mod helper;
 mod instruction;
 mod interner;
@@ -9,6 +10,7 @@ mod symbol_table;
 mod token;
 
 use lexer::Lexer;
+use parser::Parser;
 // use parser::Parser;
 use symbol_table::SymbolTable;
 use thiserror::Error;
@@ -37,20 +39,7 @@ impl Assembler {
         let mut symbol_table = SymbolTable::new(source);
         let tokens = Lexer::new().tokenize(source)?;
 
-        // for (token, span) in tokens.symbols() {
-        //     symbol_table
-        //         .insert(
-        //             Default::default(),
-        //             Symbol::new(
-        //                 source.get(span.to_owned()).unwrap(),
-        //                 Default::default(),
-        //                 None,
-        //             ),
-        //         )
-        //         .unwrap()
-        // }
-
-        // let mut parser = Parser::new(source, tokens);
+        let mut parser = Parser::new(source, tokens).parse();
         // let data = parser.parse();
 
         Ok(())

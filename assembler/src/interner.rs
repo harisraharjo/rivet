@@ -1,8 +1,8 @@
 use bumpalo::Bump;
-//taken from https://matklad.github.io/2020/03/22/fast-simple-rust-interner.html
 use rustc_hash::FxHashMap;
 
 #[derive(Debug)]
+//taken from https://matklad.github.io/2020/03/22/fast-simple-rust-interner.html
 pub struct Interner {
     map: FxHashMap<&'static str, StrId>,
     vec: Vec<&'static str>,
