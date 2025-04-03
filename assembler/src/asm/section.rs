@@ -147,10 +147,6 @@ impl SectionTag {
     }
 }
 
-// impl Hash for Type {
-
-// }
-
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, Default)]
 pub struct SectionId(u8);
 

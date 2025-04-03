@@ -4,7 +4,7 @@ use crate::{
     interner::StrId,
     ir::IRError,
     lexer::{Lexeme, Lexemes},
-    parser::{ParserError, expect_token, grammar::RuleToken},
+    parser::{ParsingError, expect_token, grammar::RuleToken},
     token::{self},
 };
 
@@ -28,7 +28,7 @@ impl Exprs {
         source: &[u8],
         mut interner: impl FnMut(&str) -> StrId,
         // interner: fn(&str) -> StrId,
-    ) -> Result<(), ParserError> {
+    ) -> Result<(), ParsingError> {
         let vars_count = self.buffer.capacity().div_ceil(2);
         let mut ops = Vec::<Expr>::with_capacity(vars_count - 1);
         let mut buffer = Vec::<Op>::with_capacity(ops.capacity());
@@ -67,7 +67,7 @@ impl Exprs {
     fn check(
         chunked_range: RangeChunks<usize>,
         lexemes: &Lexemes,
-    ) -> impl Iterator<Item = Result<(Lexeme<'_>, Lexeme<'_>), ParserError>> {
+    ) -> impl Iterator<Item = Result<(Lexeme<'_>, Lexeme<'_>), ParsingError>> {
         chunked_range.map(|chunk| -> Result<(_, _), _> {
             Ok((
                 expect_token!(

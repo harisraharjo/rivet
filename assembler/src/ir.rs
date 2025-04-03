@@ -20,6 +20,7 @@ pub struct IR {
     str_tab: Interner,
     sections: Sections,
     instructions: Instructions,
+    last_section_id: SectionId,
 }
 
 impl IR {
@@ -29,6 +30,7 @@ impl IR {
             str_tab: Interner::with_capacity(cap),
             sections: Sections::new(),
             instructions: Instructions::new(),
+            last_section_id: SectionId::default(),
         }
     }
     pub fn nodes(&self) -> &[Node] {
@@ -37,11 +39,6 @@ impl IR {
 
     pub fn alloc_str(&mut self, name: &str) -> StrId {
         self.str_tab.intern(name)
-    }
-
-    pub fn add_global_symbol(&mut self, name: &str) {
-        let str_id = self.str_tab.intern(name);
-        self.nodes.push(Node::Global(str_id));
     }
 
     pub fn add_instruction(&mut self, ins: Instruction) {
@@ -53,10 +50,15 @@ impl IR {
         let str_id = self.str_tab.intern(name);
         let id = self.sections.switch(str_id, ty);
         self.nodes.push(Node::Section(id));
+        self.last_section_id = id;
     }
 
     pub fn push(&mut self, node: Node) {
         self.nodes.push(node);
+    }
+
+    pub fn str_tab(&self) -> &Interner {
+        &self.str_tab
     }
 
     pub fn str_tab_mut(&mut self) -> &mut Interner {
@@ -66,22 +68,37 @@ impl IR {
     pub fn sections_mut(&mut self) -> &mut Sections {
         &mut self.sections
     }
+
+    pub fn active_section(&self) -> SectionId {
+        self.last_section_id
+    }
+
+    pub(crate) fn print_ins(&self) {
+        println!("Instructions: {:?}", self.instructions);
+    }
+
+    pub(crate) fn print_nodes(&self) {
+        println!("Nodes: {:?}", self.nodes);
+    }
+
+    pub(crate) fn print_sections(&self) {
+        println!("Sect: {:?}", self.sections);
+    }
 }
 
 /// Represents data parsed into a section, using spans for strings.
 #[derive(Debug)]
 pub enum Node {
-    Word(u32),
-    Byte(u8),
-    Half(u16),
     String(Box<str>),
     Section(SectionId),
-    // TODO: separate Instruction into its own vec?
     Instruction(InstructionId),
     Label(StrId),
-    Global(StrId),
-    Align(u32), // New for .align, .p2align, .balign
-    Skip(u32),
+    // Global(StrId),
+    // Word(u32),
+    // Byte(u8),
+    // Half(u16),
+    // Align(u32), // New for .align, .p2align, .balign
+    // Skip(u32),
 }
 
 use rustc_hash::FxHashMap;
@@ -116,7 +133,7 @@ impl Sections {
         self.vec.push(section);
     }
 
-    pub fn lookup(&self, id: SectionId) -> &Section {
+    pub fn get(&self, id: SectionId) -> &Section {
         &self.vec[usize::from(id)]
     }
 
@@ -127,7 +144,7 @@ impl Sections {
 }
 
 #[derive(Debug)]
-pub struct InstructionId(usize);
+pub struct InstructionId(u32);
 
 #[derive(Debug)]
 pub struct Instructions {
@@ -141,6 +158,6 @@ impl Instructions {
 
     pub fn add(&mut self, value: Instruction) -> InstructionId {
         self.vec.push(value);
-        InstructionId(self.vec.len() - 1)
+        InstructionId((self.vec.len() - 1) as u32)
     }
 }
