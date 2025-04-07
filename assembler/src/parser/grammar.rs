@@ -9,14 +9,6 @@ use crate::{
     token::{self, IdentifierType, Token},
 };
 
-// #[derive(Error, Debug)]
-// pub enum RuleError {
-//     #[error("`{0}`")]
-//     InvalidInstructionSequence(RuleToken),
-//     #[error("directive|instruction|break")]
-//     InvalidLabelSequence,
-// }
-
 #[derive(EnumCount, Copy, Clone, Debug)]
 pub enum RuleToken {
     Register,

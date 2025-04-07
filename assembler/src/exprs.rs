@@ -44,16 +44,16 @@ impl Exprs {
 
             let op = Op::from(*op.token());
             while let Some(top) = buffer.last() {
-                if top.ge(&op) {
-                    let len = self.buffer.len();
-                    ops.push(Expr::Operator {
-                        op: buffer.pop().unwrap(),
-                        left: len - 1,
-                        right: len - 2,
-                    });
-                } else {
+                if !top.ge(&op) {
                     break;
                 }
+
+                let len = self.buffer.len();
+                ops.push(Expr::Operator {
+                    op: buffer.pop().unwrap(),
+                    left: len - 1,
+                    right: len - 2,
+                });
             }
 
             buffer.push(op);

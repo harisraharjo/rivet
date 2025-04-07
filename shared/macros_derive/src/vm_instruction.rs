@@ -30,15 +30,11 @@ fn extract_variant_fields(fields: &syn::Fields) -> Option<impl Iterator<Item = E
         syn::Fields::Named(fields) => {
             let f_iter = fields.named.iter().map(|f| {
                 let name = f.ident.to_owned().unwrap();
-                // let mut ty = String::new();
-                let ty = if let syn::Type::Path(type_path) = &f.ty {
-                    // ty = type_path.path.segments.last().unwrap().ident.to_string();
-                    type_path.to_owned()
-                } else {
+                let syn::Type::Path(type_path) = &f.ty else {
                     panic!("Only support owned Named types ")
                 };
 
-                (name, ty)
+                (name, type_path.to_owned())
             });
             Some(f_iter)
         }
@@ -133,12 +129,12 @@ pub(crate) fn isa2(input: proc_macro2::TokenStream) -> syn::Result<proc_macro2::
                     let opcode = isa[0] as u8;
                     isa[0] = 8; //change opcode value to bits it occupy
 
+                    let mut fields_data = (quote::quote!(), quote::quote!(), quote::quote!());
+                    if let Some(field_iter) = fields {
+                        fields_data = generate_fields(field_iter, isa);
+                    };
                     let (fields_names, raw_encoded_field_value, raw_decoded_field_value) =
-                        if let Some(field_iter) = fields {
-                            generate_fields(field_iter, isa)
-                        } else {
-                            (quote::quote!(), quote::quote!(), quote::quote!())
-                        };
+                        fields_data;
 
                     // encode
                     let encoded_field_value = quote::quote! {

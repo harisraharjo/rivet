@@ -204,15 +204,15 @@ pub(super) fn on_literal_integer<const TYPE: u8>(
         .unwrap();
 
     let callback = LiteralIntegerType::cb(TYPE);
-    if let Some(i) = target.iter().position(callback) {
-        return Err(LexingError::InvalidSuffix(
-            //safety: we read until the end so it's always safe
-            String::from_utf8(target.get(i..target.len()).unwrap().to_vec()).unwrap(),
-            lex.extras.cell.column,
-        ));
-    }
+    let Some(i) = target.iter().position(callback) else {
+        return Ok(());
+    };
 
-    Ok(())
+    Err(LexingError::InvalidSuffix(
+        //safety: we read until the end so it's always safe
+        String::from_utf8(target.get(i..target.len()).unwrap().to_vec()).unwrap(),
+        lex.extras.cell.column,
+    ))
 }
 
 pub(super) fn on_directive(lex: &mut logos::Lexer<Token>) -> Result<DirectiveType, LexingError> {

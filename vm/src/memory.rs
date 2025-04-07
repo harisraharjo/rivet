@@ -278,14 +278,14 @@ impl MemoryManager {
             return Err(MemoryError::OutOfBounds(vaddr));
         }
 
-        if let Some(region) = self.regions.get(vaddr) {
-            if region.allowed_to(permission) {
-                Ok(vaddr as usize)
-            } else {
-                Err(MemoryError::PermissionDenied(permission, vaddr))
-            }
+        let Some(region) = self.regions.get(vaddr) else {
+            return Err(MemoryError::InvalidAddress(vaddr));
+        };
+
+        if region.allowed_to(permission) {
+            Ok(vaddr as usize)
         } else {
-            Err(MemoryError::InvalidAddress(vaddr))
+            Err(MemoryError::PermissionDenied(permission, vaddr))
         }
     }
 

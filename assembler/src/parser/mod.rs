@@ -15,16 +15,16 @@ use crate::{
     interner::StrId,
     ir::{IR, IRError, Node},
     lexer::{Lexeme, Lexemes, LexemesSlice},
-    symbol_table::{ConstantSymbol, ConstantSymbols, SymbolError, SymbolTable},
+    symbol_table::{ConstantSymbol, SymbolError, SymbolTable},
     token::{self, IdentifierType, Token},
 };
 
 fn on_invalid_grammar<'a>(found: &Option<String>) -> String {
-    if let Some(v) = found {
-        format!(" found {v}")
-    } else {
-        Default::default()
-    }
+    let Some(v) = found else {
+        return Default::default();
+    };
+
+    format!(" found {v}")
 }
 
 #[derive(Error, Debug)]
@@ -260,13 +260,11 @@ impl<'a> Parser<'a> {
                         expect_token!(self.peek_n(2), token::break_kind!(), RuleToken::Break)?;
 
                         let slice = self.source.get(symbol.span().to_owned()).unwrap();
-                        let str_id = self.ir.alloc_str(std::str::from_utf8(slice).unwrap());
+                        let name_str = std::str::from_utf8(slice).unwrap();
+                        let str_id = self.ir.alloc_str(name_str);
 
-                        self.symtab.declare_global(
-                            self.ir.active_section(),
-                            str_id,
-                            &self.ir.str_tab().lookup(str_id),
-                        );
+                        self.symtab
+                            .declare_global(self.ir.active_section(), str_id, name_str)?;
 
                         self.advance();
                     }
@@ -304,7 +302,7 @@ impl<'a> Parser<'a> {
                         )
                         .unwrap();
                         let str_id = self.ir.alloc_str(constant_str);
-                        // TODO: Re-check
+
                         self.symtab.insert_constant(
                             dir_type.into(),
                             ConstantSymbol::new(str_id, exprs),
@@ -352,7 +350,10 @@ impl<'a> Parser<'a> {
                 )?;
 
                 let slice = self.current_source();
-                let str_id = self.ir.alloc_str(std::str::from_utf8(slice).unwrap());
+                let name_str = std::str::from_utf8(slice).unwrap();
+                let str_id = self.ir.alloc_str(name_str);
+                self.symtab
+                    .insert(self.ir.active_section(), str_id, name_str)?;
 
                 self.ir.push(Node::Label(str_id));
             }
@@ -365,8 +366,7 @@ impl<'a> Parser<'a> {
                 if let Some(mismatch) = rule_sequence
                     .iter()
                     .zip(lexemes.by_ref())
-                    .filter(|(rule_token, lex)| *lex.token() != **rule_token)
-                    .next()
+                    .find(|(rule_token, lex)| *lex.token() != **rule_token)
                 {
                     let (rule_token, lexeme) = mismatch;
 
@@ -449,12 +449,7 @@ impl<'a> Parser<'a> {
             token::break_kind!() => {
                 println!("=== BREAK ===");
             }
-            t @ _ => {
-                // println!(
-                //     "Unknown Token: {:?} -> {:?}",
-                //     t,
-                //     std::str::from_utf8(self.current_source())
-                // );
+            _ => {
                 return Err(ParsingError::SyntaxError);
             }
         }
@@ -523,14 +518,13 @@ mod test {
         // Align: Pad to the specified boundary (e.g., .align 2 → 4 bytes).
         // Skip: Add uninitialized bytes.
         // let name = String::from_utf8_lossy(&self.source[span.clone()]).to_string();
-        // symbols.symbols.iter().find(|s| s.0 == name).map(|s| s.1)
 
         let source = raw_source.as_bytes();
 
         // let mut symbol_table = SymbolTable::new();
         let lexemes = lex.tokenize(source).unwrap();
 
-        let mut parser = Parser::new(source, lexemes);
+        let parser = Parser::new(source, lexemes);
         assert!(match parser.parse() {
             Ok(_) => true,
             Err(e) => panic!("{e}"),
@@ -552,7 +546,7 @@ mod test {
         // let mut symbol_table = SymbolTable::new();
         let lexemes = lex.tokenize(source).unwrap();
 
-        let mut parser = Parser::new(source, lexemes);
+        let parser = Parser::new(source, lexemes);
         assert!(match parser.parse() {
             Ok(parsed_data) => {
                 println!("Parsed Data: {:?}", parsed_data);

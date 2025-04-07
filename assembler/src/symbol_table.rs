@@ -7,7 +7,7 @@ use thiserror::Error;
 use crate::{
     asm::{directive::DirectiveType, section::SectionId, symbol::SymbolType},
     exprs::Exprs,
-    interner::{Interner, StrId},
+    interner::StrId,
 };
 
 #[derive(Error, Debug)]
@@ -69,15 +69,16 @@ pub struct ConstantSymbols {
 }
 
 impl ConstantSymbols {
-    pub fn try_push<'a>(
+    fn try_push<'a>(
         &mut self,
         ty: ConstantSymbolDir,
         value: ConstantSymbol,
         name: &str,
     ) -> Result<(), SymbolError> {
-        if ty == ConstantSymbolDir::Equ && self.data.iter().any(|s| s.name == value.name) {
-            return Err(SymbolError::DuplicateSymbol(name.to_owned()));
+        if ty == ConstantSymbolDir::Equ {
+            self.data.iter().dupe_check(value.name, name)?;
         }
+
         self.data.push(value);
         Ok(())
     }
@@ -122,22 +123,26 @@ pub struct GlobalSymbol {
     index: (Key, SymTabIdx),
 }
 
+#[derive(Debug)]
+pub struct SymbolName(StrId);
+impl From<StrId> for SymbolName {
+    fn from(value: StrId) -> Self {
+        Self(value)
+    }
+}
+
 pub trait SymbolKind {
     fn name(&self) -> StrId;
 }
 
 pub trait DupeCheck<T> {
-    fn dupe_check<'a>(
-        mut self,
-        // mut symbols: impl Iterator<Item = &'a Symbol>,
-        name: StrId,
-        error_str: &str,
-    ) -> Result<(), SymbolError>
+    /// Check duplicate
+    fn dupe_check<'a>(mut self, name: StrId, error_str: &str) -> Result<(), SymbolError>
     where
         Self: Iterator<Item = &'a T> + Sized,
         T: SymbolKind + 'a,
     {
-        if self.find(|s| s.name() == name).is_some() {
+        if self.any(|s| s.name() == name) {
             return Err(SymbolError::DuplicateSymbol(error_str.to_owned()));
         }
 
@@ -156,12 +161,22 @@ impl SymbolKind for GlobalSymbol {
         self.name
     }
 }
+impl SymbolKind for ConstantSymbol {
+    fn name(&self) -> StrId {
+        self.name
+    }
+}
+impl SymbolKind for SymbolName {
+    fn name(&self) -> StrId {
+        self.0
+    }
+}
 
 #[derive(Debug)]
 pub struct SymbolTable {
     locals: FxHashMap<Key, Vec<Symbol>>,
     globals: Vec<GlobalSymbol>,
-    pending_globals: Vec<StrId>,
+    pending_globals: Vec<SymbolName>,
     constants: ConstantSymbols,
 }
 
@@ -178,16 +193,20 @@ impl SymbolTable {
     pub fn insert(
         &mut self,
         section: Key,
-        mut value: Symbol,
+        name: StrId,
         error_str: &str,
     ) -> Result<(), SymbolError> {
-        let name = value.name();
+        let mut value = Symbol::new(name, Default::default(), None, Default::default());
         self.globals.iter().dupe_check(name, error_str)?;
 
         let locals = self.locals.entry(section).or_insert_with(Vec::new);
         locals.as_slice().iter().dupe_check(name, error_str)?;
 
-        let pending = self.pending_globals.iter().find(|p| **p == name).is_some();
+        let pending = self
+            .pending_globals
+            .iter()
+            .dupe_check(name, error_str)
+            .is_err();
         if pending {
             value.visibility = Visibility::Global;
             self.globals.push(GlobalSymbol {
@@ -209,29 +228,28 @@ impl SymbolTable {
         error_str: &str,
     ) -> Result<(), SymbolError> {
         self.globals.iter().dupe_check(name, error_str)?;
+
         let locals = self.locals.get_mut(&section);
         match locals {
             Some(locals) => {
-                let mut locals_iter_mut = locals
+                let local = locals
                     .iter_mut()
                     .enumerate()
                     .rev()
-                    .filter(|(_, s)| s.name == name);
+                    .find(|(_, s)| s.name == name);
 
-                if let Some((id, symbol)) = locals_iter_mut.next() {
+                if let Some((id, symbol)) = local {
                     symbol.visibility = Visibility::Global;
                     self.globals.push(GlobalSymbol {
                         name,
                         index: (section, id),
                     });
-
-                    return Ok(());
                 }
             }
-            None => {}
+            None => {
+                self.pending_globals.push(name.into());
+            }
         }
-
-        self.pending_globals.push(name);
 
         Ok(())
     }
@@ -253,21 +271,22 @@ impl SymbolTable {
         self.globals.as_slice()
     }
 
-    pub fn pending_globals(&self) -> &[StrId] {
+    pub fn pending_globals(&self) -> &[SymbolName] {
         self.pending_globals.as_slice()
     }
 
-    // pub fn get(&self, name: StrId) -> i32 {
-    //     //   // Prefer local symbol in current section, then global
-    //     //     if let Some(local) = symbols.iter().find(|s| s.name == *name && s.section == current_section && s.visibility == SymbolVisibility::Local) {
-    //     //         Some(local.offset)
-    //     //     } else if let Some(global) = symbols.iter().find(|s| s.name == *name && s.visibility == SymbolVisibility::Global) {
-    //     //         Some(global.offset)
-    //     //     } else {
-    //     //         None // Unresolved, needs relocation
-    //     //     }
-    //     1
-    // }
+    pub fn get(&self, name: StrId) -> i32 {
+        // TODO: Label take precedence over constant
+        //   // Prefer local symbol in current section, then global
+        //     if let Some(local) = symbols.iter().find(|s| s.name == *name && s.section == current_section && s.visibility == SymbolVisibility::Local) {
+        //         Some(local.offset)
+        //     } else if let Some(global) = symbols.iter().find(|s| s.name == *name && s.visibility == SymbolVisibility::Global) {
+        //         Some(global.offset)
+        //     } else {
+        //         None // Unresolved, needs relocation
+        //     }
+        1
+    }
 
     // #[cfg(test)]
     // pub fn contains_key(&self, name: &[u8], section: Key) -> bool {
