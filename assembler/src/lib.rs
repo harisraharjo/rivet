@@ -43,6 +43,7 @@ impl Assembler {
         let mut symbol_table = SymbolTable::new();
         let lexemes = Lexer::new().tokenize(source)?;
         let mut parsed_data = Parser::new(source, lexemes).parse()?;
+        // println!("P")
 
         // let layout = Layout::new(parser.);
 

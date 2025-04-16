@@ -115,7 +115,7 @@ impl<'a> Parser<'a> {
             self.walk(*token)?;
         }
 
-        self.ir.print_sections();
+        // self.ir.print_sections();
         self.reset();
 
         let parsed = ParsedData {
@@ -349,8 +349,7 @@ impl<'a> Parser<'a> {
                     RuleToken::InstructionOrDir
                 )?;
 
-                let slice = self.current_source();
-                let name_str = std::str::from_utf8(slice).unwrap();
+                let name_str = std::str::from_utf8(self.current_source()).unwrap();
                 let str_id = self.ir.alloc_str(name_str);
                 self.symtab
                     .insert(self.ir.active_section(), str_id, name_str)?;
@@ -489,6 +488,9 @@ mod test {
         let raw_source = r#"
         .section .text
         .set symbol1, 1 + 2 - 3
+        .set symdupe, 1
+        symdupe:
+            .global MY_GLOBAL
         main:
             .global main
             addi x5, x6, my_symbol
@@ -526,7 +528,10 @@ mod test {
 
         let parser = Parser::new(source, lexemes);
         assert!(match parser.parse() {
-            Ok(_) => true,
+            Ok(parsed_data) => {
+                println!("Symtab: {:?}", parsed_data.symtab);
+                true
+            }
             Err(e) => panic!("{e}"),
         })
     }

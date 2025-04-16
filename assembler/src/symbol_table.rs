@@ -87,7 +87,7 @@ impl ConstantSymbols {
 #[derive(Debug, PartialEq, Eq)]
 pub struct Symbol {
     name: StrId,
-    visibility: Visibility,
+    vis: Visibility,
     value: Option<u32>,
     ty: SymbolType,
 }
@@ -95,13 +95,13 @@ pub struct Symbol {
 impl Symbol {
     pub fn new(
         name: StrId,
-        visibility: Visibility,
+        vis: Visibility,
         value: Option<u32>,
         // offset: Option<u32>,
         ty: SymbolType,
     ) -> Self {
         Self {
-            visibility,
+            vis,
             // offset,
             name,
             value,
@@ -196,8 +196,8 @@ impl SymbolTable {
         name: StrId,
         error_str: &str,
     ) -> Result<(), SymbolError> {
-        let mut value = Symbol::new(name, Default::default(), None, Default::default());
         self.globals.iter().dupe_check(name, error_str)?;
+        let mut value = Symbol::new(name, Default::default(), None, Default::default());
 
         let locals = self.locals.entry(section).or_insert_with(Vec::new);
         locals.as_slice().iter().dupe_check(name, error_str)?;
@@ -208,7 +208,7 @@ impl SymbolTable {
             .dupe_check(name, error_str)
             .is_err();
         if pending {
-            value.visibility = Visibility::Global;
+            value.vis = Visibility::Global;
             self.globals.push(GlobalSymbol {
                 name,
                 index: (section, locals.len()),
@@ -228,6 +228,7 @@ impl SymbolTable {
         error_str: &str,
     ) -> Result<(), SymbolError> {
         self.globals.iter().dupe_check(name, error_str)?;
+        println!("GLOBALIZED: {:?}", name);
 
         let locals = self.locals.get_mut(&section);
         match locals {
@@ -239,17 +240,19 @@ impl SymbolTable {
                     .find(|(_, s)| s.name == name);
 
                 if let Some((id, symbol)) = local {
-                    symbol.visibility = Visibility::Global;
+                    symbol.vis = Visibility::Global;
                     self.globals.push(GlobalSymbol {
                         name,
                         index: (section, id),
                     });
+
+                    return Ok(());
                 }
             }
-            None => {
-                self.pending_globals.push(name.into());
-            }
+            None => {}
         }
+
+        self.pending_globals.push(name.into());
 
         Ok(())
     }
