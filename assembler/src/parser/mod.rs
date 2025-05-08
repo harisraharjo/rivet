@@ -490,7 +490,7 @@ mod test {
         .set symbol1, 1 + 2 - 3
         .set symdupe, 1
         symdupe:
-            .global MY_GLOBAL
+            .global MY_PENDING_GLOBAL
         main:
             .global main
             addi x5, x6, my_symbol
@@ -537,12 +537,14 @@ mod test {
     }
 
     #[test]
-    fn t_parser_global() {
+    fn t_p_global() {
         let lex = Lexer::new();
 
         let raw_source = r#"
         .section .text
-        // .set symbol1, 1 + 1
+        .global MY_PENDING_GLOBAL
+        MY_PENDING_GLOBAL:
+        // MY_PENDING_GLOBAL:
         main:
             .global main"#;
 
