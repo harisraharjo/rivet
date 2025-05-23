@@ -1,6 +1,6 @@
-use std::fmt::Debug;
+use std::{collections::HashSet, fmt::Debug};
 
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use thiserror::Error;
 
@@ -47,7 +47,7 @@ impl From<DirectiveType> for ConstantSymbolDir {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Hash, PartialEq, Eq)]
 pub struct ConstantSymbol {
     name: StrId,
     resolved: bool,
@@ -65,21 +65,30 @@ impl ConstantSymbol {
 
 #[derive(Debug, Default)]
 pub struct ConstantSymbols {
-    data: Vec<ConstantSymbol>,
+    data: FxHashSet<ConstantSymbol>,
 }
 
 impl ConstantSymbols {
-    fn try_push<'a>(
+    // fn new() -> Self {
+    //     Self {
+    //         data: FxHashSet::default(),
+    //     }
+    // }
+
+    fn insert(
         &mut self,
         ty: ConstantSymbolDir,
         value: ConstantSymbol,
         name: &str,
     ) -> Result<(), SymbolError> {
         if ty == ConstantSymbolDir::Equ {
-            self.data.iter().dupe_check(value.name, name)?;
+            let has_dupe = self.data.contains(&value);
+            if has_dupe {
+                return Err(SymbolError::DuplicateSymbol(name.to_owned()));
+            }
         }
 
-        self.data.push(value);
+        self.data.insert(value);
         Ok(())
     }
 }
@@ -197,11 +206,6 @@ impl SymbolKind for GlobalSymbol {
         self.name
     }
 }
-impl SymbolKind for ConstantSymbol {
-    fn name(&self) -> StrId {
-        self.name
-    }
-}
 impl SymbolKind for SymbolName {
     fn name(&self) -> StrId {
         self.0
@@ -286,7 +290,7 @@ impl SymbolTable {
         value: ConstantSymbol,
         name: &str,
     ) -> Result<(), SymbolError> {
-        self.constants.try_push(ty, value, name)
+        self.constants.insert(ty, value, name)
     }
 
     pub fn locals(&self) -> &FxHashMap<SectionId, Vec<Symbol>> {

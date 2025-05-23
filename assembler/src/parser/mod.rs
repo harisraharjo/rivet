@@ -295,7 +295,6 @@ impl<'a> Parser<'a> {
                             &self.source,
                             |name| -> StrId { self.ir.alloc_str(name) },
                         )?;
-                        // println!("EXPRS: {:?}", exprs);
 
                         let constant_str = std::str::from_utf8(
                             self.source.get(constant.span().to_owned()).unwrap(),
@@ -463,14 +462,14 @@ pub enum RuntimeTodo {
     // #[errortra]
     Dir(DirectiveType),
     // #[error("symbol")]
-    Symbol,
+    // Symbol,
 }
 
 impl Display for RuntimeTodo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             RuntimeTodo::Dir(directive_type) => Display::fmt(directive_type, f),
-            RuntimeTodo::Symbol => write!(f, "{}", "symbol"),
+            // RuntimeTodo::Symbol => write!(f, "{}", "symbol"),
         }
     }
 }
