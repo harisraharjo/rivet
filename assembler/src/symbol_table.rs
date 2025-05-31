@@ -47,48 +47,44 @@ impl From<DirectiveType> for ConstantSymbolDir {
     }
 }
 
-#[derive(Debug, Default, Hash, PartialEq, Eq)]
+#[derive(Debug, Default)]
 pub struct ConstantSymbol {
-    name: StrId,
+    name_id: StrId,
     resolved: bool,
+    exprs: Exprs,
 }
 
 impl ConstantSymbol {
-    pub fn new(name: StrId, value: Exprs) -> ConstantSymbol {
+    pub fn new(name_id: StrId, value: Exprs) -> ConstantSymbol {
         // TODO: finish constantsymbol
         ConstantSymbol {
             resolved: false,
-            name,
+            name_id,
+            exprs: value,
         }
     }
 }
 
 #[derive(Debug, Default)]
 pub struct ConstantSymbols {
-    data: FxHashSet<ConstantSymbol>,
+    constants: FxHashMap<StrId, ConstantSymbol>,
 }
 
 impl ConstantSymbols {
-    // fn new() -> Self {
-    //     Self {
-    //         data: FxHashSet::default(),
-    //     }
-    // }
-
     fn insert(
         &mut self,
         ty: ConstantSymbolDir,
-        value: ConstantSymbol,
+        constant: ConstantSymbol,
         name: &str,
     ) -> Result<(), SymbolError> {
         if ty == ConstantSymbolDir::Equ {
-            let has_dupe = self.data.contains(&value);
+            let has_dupe = self.constants.contains_key(&constant.name_id);
             if has_dupe {
                 return Err(SymbolError::DuplicateSymbol(name.to_owned()));
             }
         }
 
-        self.data.insert(value);
+        self.constants.insert(constant.name_id, constant);
         Ok(())
     }
 }
@@ -287,10 +283,12 @@ impl SymbolTable {
     pub fn insert_constant(
         &mut self,
         ty: ConstantSymbolDir,
-        value: ConstantSymbol,
+        str_id: StrId,
+        value: Exprs,
         name: &str,
     ) -> Result<(), SymbolError> {
-        self.constants.insert(ty, value, name)
+        self.constants
+            .insert(ty, ConstantSymbol::new(str_id, value), name)
     }
 
     pub fn locals(&self) -> &FxHashMap<SectionId, Vec<Symbol>> {

@@ -8,7 +8,7 @@ use crate::{
     token::{self},
 };
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Exprs {
     buffer: Vec<Expr>,
 }

@@ -304,7 +304,8 @@ impl<'a> Parser<'a> {
 
                         self.symtab.insert_constant(
                             dir_type.into(),
-                            ConstantSymbol::new(str_id, exprs),
+                            str_id,
+                            exprs,
                             constant_str,
                         )?;
 
