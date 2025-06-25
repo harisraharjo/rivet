@@ -286,8 +286,8 @@ impl<'a> Parser<'a> {
                             RuleToken::Comma
                         )?;
 
-                        // - 1 = exclude Eol/Eof
-                        let mut exprs = Exprs::with_capacity(indices_len - 1);
+                        let cap_without_eol = indices_len - 1;
+                        let mut exprs = Exprs::new(cap_without_eol);
                         // TODO: Doesn't feel right. Refactor this `exprs.build(..)`
                         exprs.build(
                             range_chunks,
@@ -300,8 +300,8 @@ impl<'a> Parser<'a> {
                             self.source.get(constant.span().to_owned()).unwrap(),
                         )
                         .unwrap();
-                        let str_id = self.ir.alloc_str(constant_str);
 
+                        let str_id = self.ir.alloc_str(constant_str);
                         self.symtab.insert_constant(
                             dir_type.into(),
                             str_id,

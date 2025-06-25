@@ -332,8 +332,7 @@ mod test {
         // let mut test_spans = Vec::new();
 
         let source = raw_source.as_bytes();
-        let tokens = lex.tokenize(source).unwrap();
-        // TODO: this guaranteed works but change the test.
-        assert!(true);
+        let tokens_result = lex.tokenize(source);
+        assert!(tokens_result.is_err());
     }
 }

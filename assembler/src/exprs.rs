@@ -8,13 +8,14 @@ use crate::{
     token::{self},
 };
 
+/// Expression Builder
 #[derive(Debug, Default)]
 pub struct Exprs {
     buffer: Vec<Expr>,
 }
 
 impl Exprs {
-    pub fn with_capacity(cap: usize) -> Exprs {
+    pub fn new(cap: usize) -> Exprs {
         Exprs {
             buffer: Vec::with_capacity(cap),
             // ops: Vec::with_capacity(cap - 1),
@@ -27,16 +28,16 @@ impl Exprs {
         lexemes: &Lexemes,
         source: &[u8],
         mut interner: impl FnMut(&str) -> StrId,
-        // interner: fn(&str) -> StrId,
     ) -> Result<(), ParsingError> {
         let vars_count = self.buffer.capacity().div_ceil(2);
         let mut ops = Vec::<Expr>::with_capacity(vars_count - 1);
         let mut buffer = Vec::<Op>::with_capacity(ops.capacity());
 
-        for r in Self::check(chunked_range, lexemes) {
-            let (var, op) = r?;
+        for result in Self::check(chunked_range, lexemes) {
+            let (var, op) = result?;
             let slice = source.get(var.span().to_owned()).unwrap();
             let mut variable = Variable::new(*var.token(), slice)?;
+
             if let Variable::Symbol(ref mut str_id) = variable {
                 *str_id = interner(std::str::from_utf8(slice).unwrap());
             };

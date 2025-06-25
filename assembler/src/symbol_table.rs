@@ -1,6 +1,6 @@
-use std::{collections::HashSet, fmt::Debug};
+use std::fmt::Debug;
 
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashMap;
 
 use thiserror::Error;
 
@@ -77,11 +77,8 @@ impl ConstantSymbols {
         constant: ConstantSymbol,
         name: &str,
     ) -> Result<(), SymbolError> {
-        if ty == ConstantSymbolDir::Equ {
-            let has_dupe = self.constants.contains_key(&constant.name_id);
-            if has_dupe {
-                return Err(SymbolError::DuplicateSymbol(name.to_owned()));
-            }
+        if ty == ConstantSymbolDir::Equ && self.constants.contains_key(&constant.name_id) {
+            return Err(SymbolError::DuplicateSymbol(name.to_owned()));
         }
 
         self.constants.insert(constant.name_id, constant);

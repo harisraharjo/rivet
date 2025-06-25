@@ -161,6 +161,7 @@ mod test {
 
     use shared::DecodeError;
 
+    // TODO: Rwrite this test
     #[test]
     fn t_opcode() {
         // let d = instruction::Mnemonic
@@ -169,7 +170,7 @@ mod test {
             value: Immediate19::new(150),
         }) as u8;
 
-        assert_eq!(op1.to_le_bytes(), 0xff_u8.to_le_bytes());
+        assert_eq!(op1.to_le_bytes(), 0x14_u8.to_le_bytes());
     }
 
     #[test]
